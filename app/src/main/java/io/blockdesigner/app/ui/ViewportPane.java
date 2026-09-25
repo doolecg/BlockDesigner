@@ -75,6 +75,7 @@ public final class ViewportPane extends StackPane {
     private final Hotbar hotbar;
     private final javafx.scene.control.Button settingsButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.SLIDERS));
     private atlantafx.base.controls.Popover settingsPopover;
+    private final javafx.scene.control.Button keysButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.COMMAND));
     private final FadeTransition toastFade = new FadeTransition(Duration.millis(900), toast);
     private final PauseTransition toastHold = new PauseTransition(Duration.millis(900));
     private final PauseTransition nudgeSeal = new PauseTransition(Duration.millis(650));
@@ -102,7 +103,6 @@ public final class ViewportPane extends StackPane {
     // Minecraft-style hold-to-repeat place/break
     private Action holdAction;
     private MouseButton holdButton;
-    private boolean holdActed;
     private long holdNext;
     private String holdMergeKey;
     private int holdCounter;
@@ -160,6 +160,12 @@ public final class ViewportPane extends StackPane {
         settingsButton.setOnAction(e -> toggleSettings());
         StackPane.setAlignment(settingsButton, Pos.TOP_RIGHT);
         StackPane.setMargin(settingsButton, new javafx.geometry.Insets(10, 12, 0, 0));
+        keysButton.getStyleClass().addAll("flat", "viewport-settings-button");
+        keysButton.setTooltip(new javafx.scene.control.Tooltip("Keyboard shortcuts (Alt+K)"));
+        keysButton.setFocusTraversable(false);
+        keysButton.setOnAction(e -> toggleShortcuts());
+        StackPane.setAlignment(keysButton, Pos.TOP_RIGHT);
+        StackPane.setMargin(keysButton, new javafx.geometry.Insets(52, 12, 0, 0));
         StackPane.setAlignment(hud, Pos.TOP_LEFT);
         StackPane.setMargin(hud, new javafx.geometry.Insets(12, 0, 0, 12));
         javafx.scene.shape.Rectangle ch = new javafx.scene.shape.Rectangle(18, 2), cv = new javafx.scene.shape.Rectangle(2, 18);
@@ -176,7 +182,7 @@ public final class ViewportPane extends StackPane {
         hotbar = new Hotbar(ws);
         StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 14, 0));
-        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, settingsButton, shortcuts);
+        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, settingsButton, keysButton, shortcuts);
         updateHotbarVisibility();
         applyViewSettings();
         toastFade.setFromValue(1);
@@ -581,8 +587,8 @@ public final class ViewportPane extends StackPane {
                 clickSelect(e.isShiftDown(), e.isShortcutDown());
             } else if (mode == ToolKind.BUILD) {
                 switch (e.getButton()) {
-                    case PRIMARY -> startHold(Action.BREAK, true);
-                    case SECONDARY -> startHold(Action.PLACE, true);
+                    case PRIMARY -> startHold(Action.BREAK);
+                    case SECONDARY -> startHold(Action.PLACE);
                     case MIDDLE -> pickBlock();
                     default -> {
                     }
@@ -592,11 +598,10 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (e.getButton() == MouseButton.SECONDARY && mode == ToolKind.BUILD && placing.isEmpty()) {
-            // Right button also orbits: place on a quick click or after holding still; dragging orbits instead.
-            startHold(Action.PLACE, false);
+            startHold(Action.PLACE);
             return;
         }
-        if (e.getButton() != MouseButton.PRIMARY || e.isAltDown()) return;
+        if (e.getButton() != MouseButton.PRIMARY) return;
 
         if (!placing.isEmpty()) {
             commitPlacement();
@@ -605,12 +610,12 @@ public final class ViewportPane extends StackPane {
         updateHover(e.getX(), e.getY());
         switch (mode) {
             case VIEW -> {
-                // Left-drag orbits (see onDrag).
+                // Looking only: the camera is on the middle button (see onDrag).
             }
             case SELECT -> {
                 // Selection happens on release: a click selects one block, a drag draws a marquee.
             }
-            case BUILD -> startHold(Action.BREAK, true);
+            case BUILD -> startHold(Action.BREAK);
         }
     }
 
@@ -621,24 +626,17 @@ public final class ViewportPane extends StackPane {
         }
         double dx = e.getX() - lastX, dy = e.getY() - lastY;
         dragDistance += Math.abs(dx) + Math.abs(dy);
-        boolean orbit = dragButton == MouseButton.SECONDARY
-                || (dragButton == MouseButton.PRIMARY && (e.isAltDown() || ws.toolProperty().get() == ToolKind.VIEW));
-        if (orbit) {
-            lastX = e.getX();
-            lastY = e.getY();
-            if (dragDistance > CLICK_SLOP) {
-                if (holdAction == Action.PLACE && holdButton == MouseButton.SECONDARY) stopHold();
-                float k = (float) (0.008 * ws.settings().orbitSensitivity);
-                camera.orbit((float) dx * k, (float) dy * k);
-                requestRedraw();
-            }
-            return;
-        }
+        // Blender-style: middle-drag orbits, Shift+middle-drag pans. A middle click without dragging picks the block.
         if (dragButton == MouseButton.MIDDLE) {
             lastX = e.getX();
             lastY = e.getY();
             if (dragDistance > CLICK_SLOP) {
-                camera.pan((float) (dx / getHeight()), (float) (dy / getHeight()));
+                if (e.isShiftDown()) {
+                    camera.pan((float) (dx / getHeight()), (float) (dy / getHeight()));
+                } else {
+                    float k = (float) (0.008 * ws.settings().orbitSensitivity);
+                    camera.orbit((float) dx * k, (float) dy * k);
+                }
                 requestRedraw();
             }
             return;
@@ -658,8 +656,6 @@ public final class ViewportPane extends StackPane {
     private void onRelease(MouseEvent e) {
         boolean click = dragDistance <= CLICK_SLOP;
         if (holdButton == e.getButton()) {
-            // A quick right-click with the Build tool places once (the hold never got past its initial delay).
-            if (holdAction == Action.PLACE && !holdActed && click && !fly) doAction(Action.PLACE);
             stopHold();
         }
         if (fly) {
@@ -667,7 +663,7 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (e.getButton() == MouseButton.MIDDLE && click) pickBlock();
-        if (e.getButton() == MouseButton.PRIMARY && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty() && !e.isAltDown()) {
+        if (e.getButton() == MouseButton.PRIMARY && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
             if (marquee.isVisible()) {
                 marqueeSelect(Math.min(pressX, e.getX()), Math.min(pressY, e.getY()), Math.max(pressX, e.getX()), Math.max(pressY, e.getY()),
                         e.isShiftDown(), e.isShortcutDown());
@@ -853,15 +849,12 @@ public final class ViewportPane extends StackPane {
 
     // ---- place / break with repeat delays ---------------------------------------------------------------------
 
-    private void startHold(Action a, boolean immediate) {
+    /** Acts once now, then repeats from the frame loop while the button stays down. */
+    private void startHold(Action a) {
         holdAction = a;
         holdButton = dragButton;
-        holdActed = false;
         holdMergeKey = "hold-" + (++holdCounter);
-        if (immediate) {
-            doAction(a);
-            holdActed = true;
-        }
+        doAction(a);
         holdNext = System.nanoTime() + delayNanos(a);
     }
 
@@ -884,7 +877,6 @@ public final class ViewportPane extends StackPane {
         if (now < holdNext) return;
         updateHover(aimX(), aimY());
         doAction(holdAction);
-        holdActed = true;
         holdNext = now + delayNanos(holdAction);
     }
 

@@ -584,6 +584,18 @@
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.8), 2, 0.6, 0, 0);
 }
 
+.closed-tabs-bar {
+    -fx-padding: 8 2 8 2;
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-muted;
+    -fx-border-width: 0 0 0 1;
+}
+
+.closed-tab {
+    -fx-padding: 5 10 5 10;
+    -fx-font-size: 11.5px;
+}
+
 .resource-tracker-icon {
     -fx-icon-size: 40;
     -fx-icon-color: -bd-accent;

@@ -74,7 +74,10 @@ public final class MainWindow {
     private final BorderPane rightPanel = new BorderPane();
     private final javafx.scene.control.TabPane sideTabs = new javafx.scene.control.TabPane();
     private final javafx.scene.control.Tab assistantTab = new javafx.scene.control.Tab("Assistant");
-    private final ToggleButton assistantToggle = new ToggleButton(null, new FontIcon(Feather.MESSAGE_SQUARE));
+    private final javafx.scene.control.Tab resourcesTab = new javafx.scene.control.Tab("Resource Tracker");
+    /** Thin bar on the right edge listing closed side tabs; click one to reopen it. */
+    private final javafx.scene.layout.VBox closedTabsBar = new javafx.scene.layout.VBox(4);
+    private SplitPane mainSplit;
     private final BorderPane centerColumn = new BorderPane();
 
     public MainWindow(Stage stage, Workspace ws) {
@@ -113,12 +116,16 @@ public final class MainWindow {
 
         centerColumn.setCenter(center);
         SplitPane main = new SplitPane(left, centerColumn, rightPanel);
+        mainSplit = main;
         main.setDividerPositions(0.2, 0.76);
         SplitPane.setResizableWithParent(left, false);
         SplitPane.setResizableWithParent(rightPanel, false);
 
         root.setTop(topBar());
         root.setCenter(main);
+        closedTabsBar.getStyleClass().add("closed-tabs-bar");
+        closedTabsBar.setAlignment(Pos.TOP_CENTER);
+        root.setRight(closedTabsBar);
         root.setBottom(statusBar());
         root.getStyleClass().add("app-root");
 
@@ -159,32 +166,59 @@ public final class MainWindow {
 
     /** Right-hand panel: the assistant (set by the app once the AI module is wired) plus the Resource Tracker tab. */
     public void setRightPanel(javafx.scene.Node node) {
-        // The Assistant tab can be closed (the top-bar chat button reopens it); the Resource Tracker stays.
+        // Both tabs can be closed; closed tabs wait in the bar on the right edge. With none open the panel folds away.
         assistantTab.setContent(node);
         assistantTab.setGraphic(new FontIcon(Feather.MESSAGE_SQUARE));
-        assistantTab.setOnClosed(e -> {
-            ws.settings().showAssistant = false;
-            assistantToggle.setSelected(false);
-        });
-        javafx.scene.control.Tab resources = new javafx.scene.control.Tab("Resource Tracker", new ResourceTrackerPanel());
-        resources.setGraphic(new FontIcon(Feather.PACKAGE));
-        resources.setClosable(false);
-        sideTabs.getTabs().setAll(resources);
-        sideTabs.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.SELECTED_TAB);
+        resourcesTab.setContent(new ResourceTrackerPanel());
+        resourcesTab.setGraphic(new FontIcon(Feather.PACKAGE));
+        sideTabs.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.ALL_TABS);
         sideTabs.getStyleClass().add("side-tabs");
         rightPanel.setCenter(sideTabs);
-        showAssistant(ws.settings().showAssistant);
+        if (ws.settings().showAssistant) sideTabs.getTabs().add(assistantTab);
+        if (ws.settings().showResources) sideTabs.getTabs().add(resourcesTab);
+        sideTabs.getTabs().addListener((javafx.collections.ListChangeListener<javafx.scene.control.Tab>) c -> sideTabsChanged());
+        sideTabsChanged();
     }
 
-    private void showAssistant(boolean show) {
-        ws.settings().showAssistant = show;
-        assistantToggle.setSelected(show);
-        if (show) {
-            if (!sideTabs.getTabs().contains(assistantTab)) sideTabs.getTabs().addFirst(assistantTab);
-            sideTabs.getSelectionModel().select(assistantTab);
-        } else {
-            sideTabs.getTabs().remove(assistantTab);
+    private void reopenTab(javafx.scene.control.Tab tab) {
+        if (!sideTabs.getTabs().contains(tab)) {
+            // Keep the original order: Assistant first.
+            if (tab == assistantTab) sideTabs.getTabs().addFirst(tab);
+            else sideTabs.getTabs().add(tab);
         }
+        sideTabs.getSelectionModel().select(tab);
+    }
+
+    /** Syncs settings, the closed-tabs bar and whether the right panel is shown at all. */
+    private void sideTabsChanged() {
+        boolean assistant = sideTabs.getTabs().contains(assistantTab), resources = sideTabs.getTabs().contains(resourcesTab);
+        ws.settings().showAssistant = assistant;
+        ws.settings().showResources = resources;
+
+        closedTabsBar.getChildren().clear();
+        if (!assistant) closedTabsBar.getChildren().add(closedTabButton(assistantTab, Feather.MESSAGE_SQUARE));
+        if (!resources) closedTabsBar.getChildren().add(closedTabButton(resourcesTab, Feather.PACKAGE));
+        boolean anyClosed = !closedTabsBar.getChildren().isEmpty();
+        closedTabsBar.setVisible(anyClosed);
+        closedTabsBar.setManaged(anyClosed);
+
+        boolean anyOpen = assistant || resources;
+        if (anyOpen && !mainSplit.getItems().contains(rightPanel)) {
+            mainSplit.getItems().add(rightPanel);
+            mainSplit.setDividerPosition(1, 0.76);
+        } else if (!anyOpen) {
+            mainSplit.getItems().remove(rightPanel);
+        }
+    }
+
+    /** A vertical tab (icon plus rotated title) that reopens a closed side tab. */
+    private javafx.scene.Node closedTabButton(javafx.scene.control.Tab tab, Feather icon) {
+        Button b = new Button(tab.getText(), new FontIcon(icon));
+        b.getStyleClass().addAll("flat", "closed-tab");
+        b.setTooltip(new Tooltip("Open " + tab.getText()));
+        b.setRotate(90);
+        b.setOnAction(e -> reopenTab(tab));
+        return new javafx.scene.Group(b);
     }
 
     /** Strip under the viewport (the iteration timeline). */
@@ -253,16 +287,13 @@ public final class MainWindow {
         undo.setDisable(true);
         redo.setDisable(true);
 
-        assistantToggle.getStyleClass().addAll("flat", "icon-toggle");
-        assistantToggle.setTooltip(new Tooltip("Show / hide the AI assistant tab"));
-        assistantToggle.setOnAction(e -> showAssistant(assistantToggle.isSelected()));
         Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark", () -> ws.darkProperty().set(!ws.darkProperty().get()));
         Button assets = LayersPanel.iconButton(Feather.SETTINGS, "Minecraft assets & mods", () -> startAssetLoading(true));
         assetBadge.getStyleClass().add("badge");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, assistantToggle, theme, assetBadge, assets, imp, export);
+        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, theme, assetBadge, assets, imp, export);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("top-bar");
         return bar;

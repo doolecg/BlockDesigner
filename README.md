@@ -29,7 +29,8 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
   - Slice view: PgUp/PgDn step through Y levels. By default each level shows with everything below it; Insert switches to showing a single level.
   - Imports appear as a ghost that follows the cursor. Click to place, R to rotate, Esc to cancel.
 - **Tools**
-  - Three modes: View (V) only looks around (left- or right-drag orbits); Select (Q) never edits: click a block to select it or drag a marquee (Shift adds, Ctrl removes, Delete removes the selected blocks, Esc clears); Build (B, which toggles back to the previous mode and also works while flying in creative mode) works like Minecraft: left-click breaks, right-click places (hold to repeat), middle-click picks the block.
+  - Camera: middle-drag orbits, Shift+middle-drag pans, wheel zooms.
+  - Three modes: View (V) only looks around; Select (Q) never edits: click a block to select it or drag a marquee (Shift adds, Ctrl removes, Delete removes the selected blocks, Esc clears); Build (B, which toggles back to the previous mode and also works while flying in creative mode) works like Minecraft: left-click breaks, right-click places (hold to repeat), middle-click picks the block.
   - Undo and redo cover every action.
 - **Assistant**
   - Uses Claude (default model: Claude Opus 5) or any OpenAI-compatible server (OpenAI, Ollama, LM Studio).
