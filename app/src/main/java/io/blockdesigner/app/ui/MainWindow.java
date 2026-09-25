@@ -683,8 +683,13 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
+            // Numpad: Blender's view keys (front, right, top, ortho…), with or without Ctrl.
+            if ((e.getCode().isKeypadKey() || e.getCode() == KeyCode.DECIMAL) && !e.isAltDown() && viewport.numpad(e)) {
+                e.consume();
+                return;
+            }
             if (e.isShortcutDown() || e.isAltDown()) return;
-            if (e.getCode().isDigitKey() && e.getCode() != KeyCode.DIGIT0 && e.getCode() != KeyCode.NUMPAD0) {
+            if (e.getCode().isDigitKey() && !e.getCode().isKeypadKey() && e.getCode() != KeyCode.DIGIT0) {
                 // 1-9 hold a hotbar slot, like Minecraft.
                 String name = e.getCode().getName();
                 ws.selectHotbarSlot(name.charAt(name.length() - 1) - '1');
@@ -701,6 +706,11 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
+            if (e.getCode() == KeyCode.P || e.getCode() == KeyCode.O) {
+                viewport.setOrtho(e.getCode() == KeyCode.O);
+                e.consume();
+                return;
+            }
             if (e.getCode() == KeyCode.B) {
                 ws.toggleBuild();
                 e.consume();
@@ -709,6 +719,8 @@ public final class MainWindow {
             ToolKind t = switch (e.getCode()) {
                 case V -> ToolKind.VIEW;
                 case Q -> ToolKind.SELECT;
+                case G -> ToolKind.MOVE;
+                case E -> ToolKind.ROTATE;
                 default -> null;
             };
             if (t != null) {

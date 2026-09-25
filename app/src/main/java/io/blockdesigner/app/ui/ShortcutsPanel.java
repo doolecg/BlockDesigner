@@ -14,21 +14,30 @@ import javafx.scene.layout.VBox;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
-/** Keyboard and mouse reference card shown over the viewport (Alt+K, or from the viewport settings). */
+/** Keyboard and mouse reference, shown in a side popover from the viewport's ⌘ button (Alt+K). */
 final class ShortcutsPanel extends VBox {
     private static final String[][][] SECTIONS = {
             {{"Modes"},
                     {"V", "View mode: look around only"},
                     {"Q", "Select mode"},
                     {"B", "Build mode on / off (also while flying)"},
+                    {"G / E", "Move / Rotate tool (gizmos for the selected layers)"},
                     {"Esc", "Clear selection, then back to Select"}},
             {{"Camera"},
                     {"Middle-drag", "Orbit around the point under the mouse"},
                     {"Shift+middle-drag", "Pan"},
                     {"Middle-click", "Pick block (no drag)"},
                     {"Wheel", "Zoom"},
-                    {"F / Shift+F", "Frame active layer / everything"},
-                    {"C", "Fly (creative flight) on / off"}},
+                    {"F / Shift+F", "Frame the selected blocks (or else the active layer) / everything"},
+                    {"C", "Fly (creative flight) on / off"},
+                    {"View cube", "Click a face for that view (again: opposite side), drag to orbit"},
+                    {"Numpad 1 / 3 / 7", "Front / right / top (Ctrl: back / left / bottom)"},
+                    {"P / O", "Perspective / orthographic"},
+                    {"Numpad 5", "Toggle perspective / orthographic"},
+                    {"Alt+middle-drag", "Swing to the next ortho view that way (left, right, top, bottom…)"},
+                    {"Numpad 9", "Opposite side"},
+                    {"Numpad 2 4 6 8", "Orbit 15°"},
+                    {"Numpad .", "Frame active layer"}},
             {{"Flying"},
                     {"WASD", "Move (W/S follow where you look)"},
                     {"Space / Shift", "Up / down"},
@@ -38,14 +47,22 @@ final class ShortcutsPanel extends VBox {
                     {"Reach", "5 blocks, like creative mode"}},
             {{"Build mode"},
                     {"Left-click", "Break (hold to repeat)"},
-                    {"Right-click", "Place (hold to repeat)"},
+                    {"Right-click", "Place (hold to repeat); stairs, slabs, logs, doors, torches… orient like Minecraft"},
                     {"Middle-click", "Pick block into the hotbar"}},
             {{"Select mode"},
                     {"Click", "Select a block (empty space clears)"},
                     {"Drag", "Marquee select"},
                     {"Shift / Ctrl", "Add to / remove from the selection"},
+                    {"T", "Select by type, with layer and property filters"},
                     {"Delete", "Delete the selected blocks"},
-                    {"Right-click", "Menu: delete, replace, copy to layer, select all, hide, lock"}},
+                    {"Right-click", "Menu: delete, replace, select by type, copy to layer, hide, lock"}},
+            {{"Move & Rotate tools"},
+                    {"Drag an arrow", "Move along that axis"},
+                    {"Drag a square", "Move in that plane"},
+                    {"Drag the centre", "Move freely in the view plane"},
+                    {"Drag a ring", "Turn about that axis in 90° steps"},
+                    {"Click a layer", "Select it (Shift adds)"},
+                    {"Esc / right-click", "Cancel the drag"}},
             {{"Hotbar"},
                     {"1 - 9", "Hold a slot"},
                     {"Middle-click", "Record the block under the cursor"},
@@ -74,30 +91,28 @@ final class ShortcutsPanel extends VBox {
                     {"Alt+K", "This list"}},
     };
 
-    ShortcutsPanel(Runnable close) {
-        getStyleClass().add("shortcuts-panel");
-        setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
-        setSpacing(8);
+    private final ScrollPane scroll;
 
-        Label title = new Label("Keyboard shortcuts");
-        title.getStyleClass().add("shortcuts-title");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button x = new Button(null, new FontIcon(Feather.X));
-        x.getStyleClass().add("flat");
-        x.setOnAction(e -> close.run());
-        HBox header = new HBox(title, spacer, x);
-        header.setAlignment(Pos.CENTER_LEFT);
+    ShortcutsPanel() {
+        getStyleClass().add("shortcuts-panel");
+        setSpacing(8);
 
         // Two columns of sections.
         VBox left = new VBox(10), right = new VBox(10);
         for (int i = 0; i < SECTIONS.length; i++) (i < (SECTIONS.length + 1) / 2 ? left : right).getChildren().add(section(SECTIONS[i]));
         HBox columns = new HBox(28, left, right);
-        ScrollPane scroll = new ScrollPane(columns);
+        scroll = new ScrollPane(columns);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("edge-to-edge");
         scroll.setMaxHeight(560);
-        getChildren().addAll(header, scroll);
+        getChildren().add(scroll);
+    }
+
+    /** Scrolls the list by a wheel delta (for wheel events that land outside the card). */
+    void scroll(double deltaY) {
+        double extra = scroll.getContent().getBoundsInLocal().getHeight() - scroll.getViewportBounds().getHeight();
+        if (extra <= 0) return;
+        scroll.setVvalue(Math.clamp(scroll.getVvalue() - deltaY / extra, scroll.getVmin(), scroll.getVmax()));
     }
 
     private static VBox section(String[][] rows) {

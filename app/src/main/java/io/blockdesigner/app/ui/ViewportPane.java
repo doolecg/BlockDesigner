@@ -9,6 +9,7 @@ import io.blockdesigner.core.model.BlockState;
 import io.blockdesigner.core.model.Box;
 import io.blockdesigner.core.model.Layer;
 import io.blockdesigner.core.model.Scene;
+import io.blockdesigner.core.place.BlockPlacement;
 import io.blockdesigner.core.transform.BlockTransformer;
 import io.blockdesigner.core.transform.Tilt;
 import io.blockdesigner.core.transform.Transform;
@@ -70,12 +71,25 @@ public final class ViewportPane extends StackPane {
     private final Camera camera = new Camera();
     private final ImageView view = new ImageView();
     private final Label toast = new Label();
-    private final ShortcutsPanel shortcuts = new ShortcutsPanel(() -> showShortcuts(false));
+    private final ShortcutsPanel shortcuts = new ShortcutsPanel();
+    private atlantafx.base.controls.Popover shortcutsPopover, selectByTypePopover;
+    private final ViewCube viewCube = new ViewCube(this::snapView, this::cubeOrbit, this::toggleOrtho);
+    // Blender's auto perspective: an axis view switched to ortho by itself goes back to perspective on orbiting.
+    private boolean autoOrtho;
+    // Alt+middle-drag: mouse travel toward the next view step
+    private boolean viewSwing;
+    private double swingX, swingY;
+    private static final double SWING_PX = 60;
+    // Smooth view changes: from / to angles and when it started (-1 when idle)
+    private float animYaw0, animPitch0, animYaw1, animPitch1;
+    private long animStart = -1;
+    private static final double VIEW_ANIM_MS = 220;
     private final Label sliceBadge = new Label();
     private final Hotbar hotbar;
     private final javafx.scene.control.Button settingsButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.SLIDERS));
     private atlantafx.base.controls.Popover settingsPopover;
     private final javafx.scene.control.Button keysButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.COMMAND));
+    private final javafx.scene.control.Button filterButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.FILTER));
     private final FadeTransition toastFade = new FadeTransition(Duration.millis(900), toast);
     private final PauseTransition toastHold = new PauseTransition(Duration.millis(900));
     private final PauseTransition nudgeSeal = new PauseTransition(Duration.millis(650));
@@ -127,6 +141,11 @@ public final class ViewportPane extends StackPane {
     private static final int SEL_OUTLINE_LIMIT = 4000;
     private final javafx.scene.control.ContextMenu contextMenu = new javafx.scene.control.ContextMenu();
 
+    // Move / Rotate tools: the gizmo overlay, the handle under the mouse and the drag in progress
+    private final Gizmo gizmo = new Gizmo();
+    private Gizmo.Handle gizmoHot;
+    private GizmoDrag gizmoDrag;
+
     /** World point the middle-drag orbits around (the block or ground under the cursor when it was pressed). */
     private Vector3f orbitPivot;
 
@@ -146,19 +165,19 @@ public final class ViewportPane extends StackPane {
         setFocusTraversable(true);
         view.setPreserveRatio(false);
         view.setManaged(false);
-        getChildren().add(view);
+        getChildren().addAll(view, gizmo);
 
         toast.getStyleClass().add("viewport-toast");
         toast.setOpacity(0);
         toast.setMouseTransparent(true);
         StackPane.setAlignment(toast, Pos.TOP_CENTER);
-        shortcuts.setVisible(false);
-        StackPane.setAlignment(shortcuts, Pos.CENTER);
+        StackPane.setAlignment(viewCube, Pos.TOP_RIGHT);
+        StackPane.setMargin(viewCube, new javafx.geometry.Insets(6, 56, 0, 0));
         sliceBadge.getStyleClass().add("viewport-badge");
         sliceBadge.setMouseTransparent(true);
         sliceBadge.setVisible(false);
         StackPane.setAlignment(sliceBadge, Pos.TOP_RIGHT);
-        StackPane.setMargin(sliceBadge, new javafx.geometry.Insets(14, 58, 0, 0));
+        StackPane.setMargin(sliceBadge, new javafx.geometry.Insets(14, 176, 0, 0));
         settingsButton.getStyleClass().addAll("flat", "viewport-settings-button");
         settingsButton.setTooltip(new javafx.scene.control.Tooltip("Viewport settings: field of view, clipping, fog, overlays, controls"));
         settingsButton.setFocusTraversable(false);
@@ -171,6 +190,12 @@ public final class ViewportPane extends StackPane {
         keysButton.setOnAction(e -> toggleShortcuts());
         StackPane.setAlignment(keysButton, Pos.TOP_RIGHT);
         StackPane.setMargin(keysButton, new javafx.geometry.Insets(52, 12, 0, 0));
+        filterButton.getStyleClass().addAll("flat", "viewport-settings-button");
+        filterButton.setTooltip(new javafx.scene.control.Tooltip("Select by type (T): select blocks by type, layer and properties"));
+        filterButton.setFocusTraversable(false);
+        filterButton.setOnAction(e -> openSelectByType(null));
+        StackPane.setAlignment(filterButton, Pos.TOP_RIGHT);
+        StackPane.setMargin(filterButton, new javafx.geometry.Insets(94, 12, 0, 0));
         StackPane.setAlignment(hud, Pos.TOP_LEFT);
         StackPane.setMargin(hud, new javafx.geometry.Insets(12, 0, 0, 12));
         javafx.scene.shape.Rectangle ch = new javafx.scene.shape.Rectangle(18, 2), cv = new javafx.scene.shape.Rectangle(2, 18);
@@ -187,7 +212,7 @@ public final class ViewportPane extends StackPane {
         hotbar = new Hotbar(ws);
         StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 14, 0));
-        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, settingsButton, keysButton, shortcuts);
+        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, viewCube, settingsButton, keysButton, filterButton);
         updateHotbarVisibility();
         applyViewSettings();
         toastFade.setFromValue(1);
@@ -210,6 +235,8 @@ public final class ViewportPane extends StackPane {
                 case BUILD -> "Build mode · left break · right place · middle pick · B to leave";
                 case SELECT -> "Select mode";
                 case VIEW -> "View mode";
+                case MOVE -> "Move · drag an arrow, square or the centre · G";
+                case ROTATE -> "Rotate · drag a ring to turn 90° · E";
             });
         });
         ws.editor().undoStack().addListener(this::requestRedraw);
@@ -286,6 +313,7 @@ public final class ViewportPane extends StackPane {
         double dt = lastPulse == 0 ? 0 : Math.min(0.1, (nowNs - lastPulse) / 1e9);
         lastPulse = nowNs;
         flyStep(dt);
+        viewAnimStep();
         holdStep();
         if (sceneRenderer != null) sceneRenderer.sync();
         double scale = getScene() != null && getScene().getWindow() != null ? getScene().getWindow().getOutputScaleX() : 1;
@@ -326,8 +354,9 @@ public final class ViewportPane extends StackPane {
         float aspect = w / (float) h;
         float[] vp = new float[16];
         camera.viewProjection(aspect).get(vp);
-        Vector3f eye = camera.eye();
+        Vector3f eye = camera.viewEye();
         Layer active = ws.activeLayerProperty().get();
+        viewCube.update(camera);
         List<FrameRequest.LayerDraw> draws = sceneRenderer.layerDraws(active == null ? null : active.id());
         List<FrameRequest.Line> lines = new ArrayList<>();
 
@@ -360,13 +389,15 @@ public final class ViewportPane extends StackPane {
             }
         }
 
+        updateGizmo();
+
         Optional<Box> sb = ws.scene().worldBounds();
         float gridY = sliceY != null ? sliceY : sb.map(b -> (float) b.minY()).orElse(0f);
         float[] gc = sb.map(b -> new float[]{(b.minX() + b.maxX()) / 2f, (b.minZ() + b.maxZ()) / 2f}).orElse(new float[]{0, 0});
         return new FrameRequest(w, h, vp, new float[]{eye.x, eye.y, eye.z}, draws, lines,
                 ws.darkProperty().get() ? FrameRequest.Theme.DARK : FrameRequest.Theme.LIGHT,
                 ws.settings().showGrid, gridY, gc, ++sequence,
-                ws.settings().fog ? (float) ws.settings().fogDistance : Float.POSITIVE_INFINITY);
+                ws.settings().fog && !camera.orthoActive() ? (float) ws.settings().fogDistance : Float.POSITIVE_INFINITY);
     }
 
     /** Renders the current scene from the given camera for screenshots (AI vision, thumbnails). */
@@ -465,6 +496,30 @@ public final class ViewportPane extends StackPane {
         });
     }
 
+    /** Frames the selected blocks (world bounds across every layer they are in). */
+    private void frameBlockSelection() {
+        int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE;
+        int x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
+        for (var en : blockSel.entrySet()) {
+            Layer l = ws.scene().find(en.getKey()).orElse(null);
+            if (l == null) continue;
+            for (long packed : en.getValue()) {
+                BlockPos p = l.toWorld(BlockPos.unpack(packed));
+                x0 = Math.min(x0, p.x());
+                y0 = Math.min(y0, p.y());
+                z0 = Math.min(z0, p.z());
+                x1 = Math.max(x1, p.x());
+                y1 = Math.max(y1, p.y());
+                z1 = Math.max(z1, p.z());
+            }
+        }
+        if (x0 > x1) return;
+        camera.frame(x0, y0, z0, x1 + 1, y1 + 1, z1 + 1);
+        requestRedraw();
+        int n = selectedBlockCount();
+        showToast(String.format("Framed %,d selected block%s", n, n == 1 ? "" : "s"));
+    }
+
     public void frameLayer(Layer l) {
         l.worldBounds().ifPresent(b -> {
             camera.frame(b.minX(), b.minY(), b.minZ(), b.maxX() + 1, b.maxY() + 1, b.maxZ() + 1);
@@ -482,8 +537,17 @@ public final class ViewportPane extends StackPane {
         addEventHandler(MouseEvent.MOUSE_DRAGGED, this::onDrag);
         addEventHandler(MouseEvent.MOUSE_RELEASED, this::onRelease);
         addEventHandler(MouseEvent.MOUSE_MOVED, e -> {
-            if (fly) flyLook(e);
-            else updateHover(e.getX(), e.getY());
+            if (fly) {
+                flyLook(e);
+                return;
+            }
+            updateHover(e.getX(), e.getY());
+            Gizmo.Handle h = gizmo.hit(e.getX(), e.getY());
+            if (!java.util.Objects.equals(h, gizmoHot)) {
+                gizmoHot = h;
+                setCursor(h != null ? Cursor.HAND : Cursor.DEFAULT);
+                requestRedraw();
+            }
         });
         addEventHandler(MouseEvent.MOUSE_EXITED, e -> {
             if (fly) return;
@@ -521,7 +585,7 @@ public final class ViewportPane extends StackPane {
 
     private Optional<Picker.Hit> pick(double x, double y) {
         Vector3f[] r = ray(x, y);
-        return Picker.pick(ws.scene(), r[0], r[1], fly ? CREATIVE_REACH : 2000, l -> !l.locked() && !placing.contains(l),
+        return Picker.pick(ws.scene(), r[0], r[1], fly ? CREATIVE_REACH : 10000, l -> !l.locked() && !placing.contains(l),
                 sliceMin(), sliceMax());
     }
 
@@ -603,8 +667,23 @@ public final class ViewportPane extends StackPane {
             return;
         }
         contextMenu.hide();
+        if (gizmoDrag != null) {
+            // Blender: right-click (or Esc) during a drag cancels it.
+            if (e.getButton() == MouseButton.SECONDARY) cancelGizmoDrag();
+            return;
+        }
+        if (e.getButton() == MouseButton.PRIMARY && isGizmoTool() && placing.isEmpty()) {
+            Gizmo.Handle h = gizmo.hit(e.getX(), e.getY());
+            if (h != null) {
+                beginGizmoDrag(h, e.getX(), e.getY());
+                return;
+            }
+        }
         if (e.getButton() == MouseButton.MIDDLE) {
-            orbitPivot = pivotUnder(e.getX(), e.getY());
+            // Alt+middle-drag swings between axis views (see onDrag) instead of orbiting.
+            viewSwing = e.isAltDown();
+            swingX = swingY = 0;
+            orbitPivot = viewSwing ? null : pivotUnder(e.getX(), e.getY());
             return;
         }
         if (e.getButton() == MouseButton.SECONDARY && mode == ToolKind.BUILD && placing.isEmpty()) {
@@ -626,6 +705,9 @@ public final class ViewportPane extends StackPane {
                 // Selection happens on release: a click selects one block, a drag draws a marquee.
             }
             case BUILD -> startHold(Action.BREAK);
+            case MOVE, ROTATE -> {
+                // A click on a layer selects it on release (see onRelease).
+            }
         }
     }
 
@@ -640,10 +722,13 @@ public final class ViewportPane extends StackPane {
         if (dragButton == MouseButton.MIDDLE) {
             lastX = e.getX();
             lastY = e.getY();
-            if (dragDistance > CLICK_SLOP) {
+            if (viewSwing) {
+                swingView(dx, dy);
+            } else if (dragDistance > CLICK_SLOP) {
                 if (e.isShiftDown()) {
                     camera.pan((float) (dx / getHeight()), (float) (dy / getHeight()));
                 } else {
+                    leaveAutoOrtho();
                     float k = (float) (0.008 * ws.settings().orbitSensitivity);
                     if (orbitPivot != null) camera.orbitAround(orbitPivot, (float) dx * k, (float) dy * k);
                     else camera.orbit((float) dx * k, (float) dy * k);
@@ -653,6 +738,10 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (dragButton != MouseButton.PRIMARY) return;
+        if (gizmoDrag != null) {
+            dragGizmo(e.getX(), e.getY());
+            return;
+        }
         updateHover(e.getX(), e.getY());
         if (ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty() && dragDistance > CLICK_SLOP) {
             marquee.setX(Math.min(pressX, e.getX()));
@@ -672,6 +761,26 @@ public final class ViewportPane extends StackPane {
         if (fly) {
             e.consume();
             return;
+        }
+        if (gizmoDrag != null) {
+            if (e.getButton() == MouseButton.PRIMARY) endGizmoDrag();
+            dragButton = null;
+            return;
+        }
+        if (e.getButton() == MouseButton.PRIMARY && click && isGizmoTool() && placing.isEmpty()) {
+            // Move / Rotate tools: clicking a layer selects it (Shift adds or removes), so its gizmo appears.
+            updateHover(e.getX(), e.getY());
+            if (hover != null) {
+                Layer l = hover.layer();
+                if (e.isShiftDown()) {
+                    if (ws.selectedLayers().contains(l) && ws.selectedLayers().size() > 1) ws.selectedLayers().remove(l);
+                    else if (!ws.selectedLayers().contains(l)) ws.selectedLayers().add(l);
+                    ws.scene().setActive(l);
+                } else {
+                    selectOnly(l);
+                }
+                requestRedraw();
+            }
         }
         if (e.getButton() == MouseButton.MIDDLE && click) pickBlock();
         if (e.getButton() == MouseButton.SECONDARY && click && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
@@ -693,6 +802,12 @@ public final class ViewportPane extends StackPane {
     }
 
     private void onScroll(ScrollEvent e) {
+        // While the shortcuts are open the wheel scrolls only them, wherever the mouse is.
+        if (shortcutsShowing()) {
+            shortcuts.scroll(e.getDeltaY());
+            e.consume();
+            return;
+        }
         // Windows reports Shift+wheel as horizontal scrolling.
         double delta = e.getDeltaY() != 0 ? e.getDeltaY() : e.getDeltaX();
         if (delta == 0) return;
@@ -753,8 +868,14 @@ public final class ViewportPane extends StackPane {
             case PAGE_UP -> stepSlice(1);
             case PAGE_DOWN -> stepSlice(-1);
             case INSERT -> toggleSingleSlice();
+            case T -> {
+                if (e.isShortcutDown() || e.isAltDown() || !placing.isEmpty()) return;
+                Layer hl = hover != null ? hover.layer() : null;
+                openSelectByType(hl == null ? null : BlockTransformer.defaults().apply(hl.structure().get(hover.local()), hl.transform()));
+            }
             case ESCAPE -> {
-                if (shortcuts.isVisible()) showShortcuts(false);
+                if (gizmoDrag != null) cancelGizmoDrag();
+                else if (shortcutsShowing()) showShortcuts(false);
                 else if (fly) setFly(false);
                 else if (!placing.isEmpty()) cancelPlacement();
                 else if (!blockSel.isEmpty()) clearBlockSelection();
@@ -769,9 +890,12 @@ public final class ViewportPane extends StackPane {
                 else return;
             }
             case F -> {
+                // F frames the selected blocks if there are any, otherwise the active layer; Shift+F frames everything.
                 setFly(false);
                 Layer a = ws.activeLayerProperty().get();
-                if (a != null && !e.isShiftDown()) frameLayer(a);
+                if (e.isShiftDown()) frameAll();
+                else if (!blockSel.isEmpty()) frameBlockSelection();
+                else if (a != null) frameLayer(a);
                 else frameAll();
             }
             case ENTER -> {
@@ -904,6 +1028,16 @@ public final class ViewportPane extends StackPane {
                 Layer l = hover.layer();
                 try (SceneEditor.BlockSession s = ws.editor().edit(l, "Break block", key)) {
                     s.set(hover.local().x(), hover.local().y(), hover.local().z(), BlockState.AIR);
+                    // Neighbouring fences, walls, panes and stairs let go of the broken block.
+                    Transform t = l.transform();
+                    var updates = BlockPlacement.reconnect(List.of(hover.world()), p -> {
+                        BlockPos lp = l.toLocal(p);
+                        return BlockTransformer.defaults().apply(s.get(lp.x(), lp.y(), lp.z()), t);
+                    });
+                    for (var en : updates.entrySet()) {
+                        BlockPos lp = l.toLocal(en.getKey());
+                        s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(en.getValue(), t.inverse()));
+                    }
                 }
             }
             case PLACE -> {
@@ -918,16 +1052,42 @@ public final class ViewportPane extends StackPane {
                     showToast("Active layer is locked");
                     return;
                 }
-                if (fly && insideCamera(world)) return;
-                BlockPos local = l.toLocal(world);
-                if (!l.structure().get(local).isAir()) return;
-                BlockState st = BlockTransformer.defaults().apply(ws.blockToPlace(), l.transform().inverse());
+                java.util.Map<BlockPos, BlockState> edits = placementFor(l, world);
+                if (edits.isEmpty()) return;
+                if (fly && edits.keySet().stream().anyMatch(this::insideCamera)) return;
                 try (SceneEditor.BlockSession s = ws.editor().edit(l, "Place block", key)) {
-                    s.set(local.x(), local.y(), local.z(), st);
+                    for (var en : edits.entrySet()) {
+                        BlockPos local = l.toLocal(en.getKey());
+                        s.set(local.x(), local.y(), local.z(), BlockTransformer.defaults().apply(en.getValue(), l.transform().inverse()));
+                    }
                 }
             }
         }
         updateHover(aimX(), aimY());
+    }
+
+    /**
+     * The world blocks to set for placing the held block at {@code world} in layer {@code l}, oriented the way
+     * Minecraft would from the aimed face, the point on it and the look direction (see {@link BlockPlacement}).
+     */
+    private java.util.Map<BlockPos, BlockState> placementFor(Layer l, BlockPos world) {
+        Vector3f[] r = ray(aimX(), aimY());
+        Vector3f dir = new Vector3f(r[1]).normalize();
+        BlockPlacement.Context ctx;
+        if (hover != null) {
+            Vector3f hit = new Vector3f(dir).mul(hover.distance()).add(r[0]);
+            // Only a block of the same layer can be clicked into (a slab doubling up).
+            BlockPos clicked = hover.layer() == l ? hover.world() : null;
+            ctx = new BlockPlacement.Context(world, clicked, BlockPlacement.Dir.of(hover.normal()), hit.x, hit.y, hit.z, dir.x, dir.y, dir.z);
+        } else {
+            ctx = new BlockPlacement.Context(world, null, BlockPlacement.Dir.UP, world.x() + 0.5, world.y(), world.z() + 0.5, dir.x, dir.y, dir.z);
+        }
+        BlockAssets assets = ws.assets();
+        BlockPlacement.Blocks blocks = assets == null ? BlockPlacement.Blocks.NONE
+                : id -> assets.registry().get(id).map(i -> new BlockPlacement.Info(i.defaultState(), i.properties())).orElse(null);
+        Transform t = l.transform();
+        return BlockPlacement.place(ws.blockToPlace(), ctx,
+                p -> BlockTransformer.defaults().apply(l.structure().get(l.toLocal(p)), t), blocks);
     }
 
     private boolean insideCamera(BlockPos p) {
@@ -1137,6 +1297,17 @@ public final class ViewportPane extends StackPane {
 
         if (hover != null) {
             contextMenu.getItems().add(item("Pick block to hotbar", "Middle-click", this::pickBlock));
+            Layer hl = hover.layer();
+            BlockState type = BlockTransformer.defaults().apply(hl.structure().get(hover.local()), hl.transform());
+            String typeName = BlockInfoHud.pretty(type.path());
+            javafx.scene.control.Menu byType = new javafx.scene.control.Menu("Select by type");
+            byType.getItems().addAll(
+                    item("All " + typeName + " in " + hl.name(), null, () -> quickSelectType(type, false, List.of(hl))),
+                    item("All " + typeName + " in visible layers", null, () -> quickSelectType(type, false, typeLayers(SelectByTypePanel.Scope.VISIBLE))),
+                    item("Same exact state in " + hl.name(), null, () -> quickSelectType(type, true, List.of(hl))),
+                    new javafx.scene.control.SeparatorMenuItem(),
+                    item("More options…", "T", () -> openSelectByType(type)));
+            contextMenu.getItems().add(byType);
         }
         if (n > 0) {
             contextMenu.getItems().addAll(
@@ -1149,6 +1320,7 @@ public final class ViewportPane extends StackPane {
             if (!contextMenu.getItems().isEmpty()) contextMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
             contextMenu.getItems().addAll(
                     item("Select all in " + layer.name(), null, () -> selectAllIn(layer)),
+                    item("Select by type…", "T", () -> openSelectByType(null)),
                     item("Frame " + layer.name(), "F", () -> frameLayer(layer)),
                     item("Hide " + layer.name(), null, () -> ws.editor().modifyLayer(layer, "Hide " + layer.name(), null, x -> x.setVisible(false))),
                     item(layer.locked() ? "Unlock " + layer.name() : "Lock " + layer.name(), null,
@@ -1223,6 +1395,465 @@ public final class ViewportPane extends StackPane {
         ws.scene().setActive(made.getLast());
         ws.selectedLayers().setAll(made);
         showToast(made.size() == 1 ? "Copied to " + made.getFirst().name() : "Copied to " + made.size() + " new layers");
+    }
+
+    // ---- view cube, axis views and projection ------------------------------------------------------------------
+
+    /**
+     * Turns to an axis view, Blender-style: going there switches to orthographic (auto perspective) and picking the
+     * view you are already in flips to the opposite one.
+     */
+    public void snapView(ViewCube.View v) {
+        if (fly) setFly(false);
+        if (ViewCube.View.of(camera) == v && animStart < 0) v = v.opposite();
+        if (!camera.isOrtho()) {
+            camera.setOrtho(true);
+            autoOrtho = true;
+        }
+        animateTo(v.yaw, v.pitch);
+        showToast(v.label + " · " + (v == ViewCube.View.FRONT ? "looking north" : v == ViewCube.View.BACK ? "looking south"
+                : v == ViewCube.View.RIGHT ? "looking west" : v == ViewCube.View.LEFT ? "looking east"
+                : v == ViewCube.View.TOP ? "looking down, north up" : "looking up") + (camera.isOrtho() ? " · Ortho" : ""));
+    }
+
+    /**
+     * Alt+middle-drag: each {@value #SWING_PX} px of travel swings the camera a quarter turn that way and snaps to the
+     * nearest axis view in ortho. Dragging left brings you round to the view from the left, up to the view from above.
+     */
+    private void swingView(double dx, double dy) {
+        swingX += dx;
+        swingY += dy;
+        if (Math.max(Math.abs(swingX), Math.abs(swingY)) < SWING_PX) return;
+        Vector3f f;
+        if (Math.abs(swingX) >= Math.abs(swingY)) f = swingX < 0 ? camera.right() : camera.right().negate();
+        else f = swingY < 0 ? camera.up().negate() : camera.up();
+        swingX = swingY = 0;
+        ViewCube.View v = viewLookingAlong(f);
+        if (fly) setFly(false);
+        if (!camera.isOrtho()) {
+            camera.setOrtho(true);
+            autoOrtho = true;
+        }
+        animateTo(v.yaw, v.pitch);
+        showToast(v.label + " · Ortho");
+    }
+
+    /** The axis view whose look direction is closest to {@code f}. */
+    private static ViewCube.View viewLookingAlong(Vector3f f) {
+        float ax = Math.abs(f.x), ay = Math.abs(f.y), az = Math.abs(f.z);
+        if (ay >= ax && ay >= az) return f.y < 0 ? ViewCube.View.TOP : ViewCube.View.BOTTOM;
+        if (ax >= az) return f.x < 0 ? ViewCube.View.RIGHT : ViewCube.View.LEFT;
+        return f.z < 0 ? ViewCube.View.FRONT : ViewCube.View.BACK;
+    }
+
+    /** P / O: perspective or orthographic. */
+    public void setOrtho(boolean ortho) {
+        if (fly) setFly(false);
+        autoOrtho = false;
+        if (camera.isOrtho() == ortho) {
+            showToast(ortho ? "Already orthographic" : "Already perspective");
+            return;
+        }
+        camera.setOrtho(ortho);
+        showToast(ortho ? "Orthographic" : "Perspective");
+        requestRedraw();
+    }
+
+    /** Numpad 9: the opposite side of the current view. */
+    private void oppositeView() {
+        if (fly) setFly(false);
+        animateTo(camera.yaw() + (float) Math.PI, -camera.pitch());
+    }
+
+    /** Numpad 5 or the cube's button: perspective ↔ orthographic. */
+    public void toggleOrtho() {
+        if (fly) setFly(false);
+        camera.setOrtho(!camera.isOrtho());
+        autoOrtho = false;
+        showToast(camera.isOrtho() ? "Orthographic" : "Perspective");
+        requestRedraw();
+    }
+
+    private void leaveAutoOrtho() {
+        if (!autoOrtho) return;
+        camera.setOrtho(false);
+        autoOrtho = false;
+    }
+
+    /** Dragging the cube orbits the view. */
+    private void cubeOrbit(double dx, double dy) {
+        if (fly) setFly(false);
+        leaveAutoOrtho();
+        animStart = -1;
+        float k = (float) (0.008 * ws.settings().orbitSensitivity);
+        camera.orbit((float) dx * k, (float) dy * k);
+        requestRedraw();
+    }
+
+    private void animateTo(float yaw, float pitch) {
+        animYaw0 = camera.yaw();
+        animPitch0 = camera.pitch();
+        // Shortest way round.
+        animYaw1 = animYaw0 + (float) Math.IEEEremainder(yaw - animYaw0, 2 * Math.PI);
+        animPitch1 = pitch;
+        animStart = System.nanoTime();
+        requestRedraw();
+    }
+
+    private void viewAnimStep() {
+        if (animStart < 0) return;
+        double t = Math.min(1, (System.nanoTime() - animStart) / 1e6 / VIEW_ANIM_MS);
+        double e = 1 - Math.pow(1 - t, 3);
+        camera.setAngles((float) (animYaw0 + (animYaw1 - animYaw0) * e), (float) (animPitch0 + (animPitch1 - animPitch0) * e));
+        if (t >= 1) {
+            // Land exactly on the view so the cube recognises it (and keep the yaw tidy).
+            camera.setAngles((float) Math.IEEEremainder(animYaw1, 2 * Math.PI), animPitch1);
+            animStart = -1;
+        }
+        requestRedraw();
+    }
+
+    /**
+     * Blender's numpad views: 1 front, 3 right, 7 top (Ctrl for back, left, bottom), 9 the opposite side, 5
+     * perspective / orthographic, 2 4 6 8 orbit in 15° steps, . frames the active layer. Returns whether it was used.
+     */
+    public boolean numpad(KeyEvent e) {
+        boolean ctrl = e.isShortcutDown();
+        float step = (float) Math.toRadians(15);
+        switch (e.getCode()) {
+            case NUMPAD1 -> snapView(ctrl ? ViewCube.View.BACK : ViewCube.View.FRONT);
+            case NUMPAD3 -> snapView(ctrl ? ViewCube.View.LEFT : ViewCube.View.RIGHT);
+            case NUMPAD7 -> snapView(ctrl ? ViewCube.View.BOTTOM : ViewCube.View.TOP);
+            case NUMPAD9 -> oppositeView();
+            case NUMPAD5 -> toggleOrtho();
+            case NUMPAD4, NUMPAD6, NUMPAD8, NUMPAD2 -> {
+                if (fly) setFly(false);
+                leaveAutoOrtho();
+                animStart = -1;
+                KeyCode k = e.getCode();
+                camera.orbit(k == KeyCode.NUMPAD4 ? -step : k == KeyCode.NUMPAD6 ? step : 0,
+                        k == KeyCode.NUMPAD8 ? -step : k == KeyCode.NUMPAD2 ? step : 0);
+                requestRedraw();
+            }
+            case DECIMAL -> {
+                Layer a = ws.activeLayerProperty().get();
+                if (a != null) frameLayer(a);
+                else frameAll();
+            }
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ---- move / rotate gizmos --------------------------------------------------------------------------------
+
+    /**
+     * A gizmo drag: the layers it moves, the pivot it started from, and how much has been applied so far (whole blocks
+     * per axis for Move, quarter turns for Rotate). The whole drag is one undo group.
+     */
+    private static final class GizmoDrag {
+        Gizmo.Handle handle;
+        List<Layer> layers;
+        Vector3f pivot;
+        // Move: axis parameter or plane point where the drag started, and the offset applied so far
+        float startT;
+        Vector3f startHit;
+        final int[] applied = new int[3];
+        // Rotate: unwrapped screen angle and quarter turns applied so far
+        double lastAngle, angle;
+        int turns;
+        boolean changed;
+    }
+
+    private boolean isGizmoTool() {
+        ToolKind t = ws.toolProperty().get();
+        return t == ToolKind.MOVE || t == ToolKind.ROTATE;
+    }
+
+    private List<Layer> gizmoTargets() {
+        return ws.nudgeTargets().stream().filter(l -> l.visible() && !l.locked() && l.worldBounds().isPresent()).toList();
+    }
+
+    /** Centre of the layers' combined world bounds. */
+    private static Vector3f boundsCenter(List<Layer> layers) {
+        Box u = null;
+        for (Layer l : layers) {
+            Box b = l.worldBounds().orElse(null);
+            if (b == null) continue;
+            u = u == null ? b : new Box(Math.min(u.minX(), b.minX()), Math.min(u.minY(), b.minY()), Math.min(u.minZ(), b.minZ()),
+                    Math.max(u.maxX(), b.maxX()), Math.max(u.maxY(), b.maxY()), Math.max(u.maxZ(), b.maxZ()));
+        }
+        if (u == null) return null;
+        return new Vector3f((u.minX() + u.maxX() + 1) / 2f, (u.minY() + u.maxY() + 1) / 2f, (u.minZ() + u.maxZ() + 1) / 2f);
+    }
+
+    private void updateGizmo() {
+        Gizmo.Mode mode = !isGizmoTool() || fly || !placing.isEmpty() ? null
+                : ws.toolProperty().get() == ToolKind.MOVE ? Gizmo.Mode.MOVE : Gizmo.Mode.ROTATE;
+        Vector3f pivot = null;
+        if (mode != null) {
+            // Rotation turns about a fixed point; a move carries the gizmo along with the layers.
+            pivot = gizmoDrag != null && mode == Gizmo.Mode.ROTATE ? gizmoDrag.pivot : boundsCenter(gizmoTargets());
+        }
+        gizmo.update(mode, pivot, camera, getWidth(), getHeight(), gizmoHot, gizmoDrag == null ? null : gizmoDrag.handle);
+    }
+
+    private void beginGizmoDrag(Gizmo.Handle h, double x, double y) {
+        List<Layer> layers = gizmoTargets();
+        Vector3f pivot = boundsCenter(layers);
+        if (pivot == null) {
+            showToast(ws.nudgeTargets().isEmpty() ? "Select a layer first" : "Layer is locked");
+            return;
+        }
+        GizmoDrag d = new GizmoDrag();
+        d.handle = h;
+        d.layers = layers;
+        d.pivot = pivot;
+        Vector3f[] r = ray(x, y);
+        switch (h.kind()) {
+            case AXIS -> d.startT = axisParam(r, pivot, Gizmo.AXES[h.axis()]);
+            case PLANE, FREE -> {
+                d.startHit = planeHit(r, pivot, h.kind() == Gizmo.Kind.FREE ? camera.forward() : Gizmo.AXES[h.axis()]);
+                if (d.startHit == null) return;
+            }
+            case RING -> d.lastAngle = screenAngle(x, y);
+        }
+        gizmoDrag = d;
+        ws.editor().undoStack().beginGroup(h.kind() == Gizmo.Kind.RING ? "Rotate layers" : layers.size() == 1 ? "Move " + layers.getFirst().name() : "Move layers");
+        requestRedraw();
+    }
+
+    private void dragGizmo(double x, double y) {
+        GizmoDrag d = gizmoDrag;
+        Vector3f[] r = ray(x, y);
+        if (d.handle.kind() == Gizmo.Kind.RING) {
+            double a = screenAngle(x, y), da = a - d.lastAngle;
+            if (da > Math.PI) da -= 2 * Math.PI;
+            if (da < -Math.PI) da += 2 * Math.PI;
+            d.angle += da;
+            d.lastAngle = a;
+            // Anticlockwise on screen is a right-handed turn when the axis points at the viewer.
+            Vector3f axis = Gizmo.AXES[d.handle.axis()];
+            double signed = Math.toDegrees(d.angle) * (axis.dot(new Vector3f(camera.eye()).sub(d.pivot)) >= 0 ? 1 : -1);
+            int turns = (int) Math.round(signed / 90);
+            while (d.turns < turns) {
+                turnGroup(d, 1);
+                d.turns++;
+            }
+            while (d.turns > turns) {
+                turnGroup(d, -1);
+                d.turns--;
+            }
+            showToast("Rotate " + Gizmo.axisName(d.handle.axis()) + " " + Math.round(signed) + "° → " + (d.turns * 90) + "°");
+            requestRedraw();
+            return;
+        }
+        int[] want = new int[3];
+        switch (d.handle.kind()) {
+            case AXIS -> want[d.handle.axis()] = Math.round(axisParam(r, d.pivot, Gizmo.AXES[d.handle.axis()]) - d.startT);
+            case PLANE, FREE -> {
+                boolean free = d.handle.kind() == Gizmo.Kind.FREE;
+                Vector3f hit = planeHit(r, d.pivot, free ? camera.forward() : Gizmo.AXES[d.handle.axis()]);
+                if (hit == null) return;
+                Vector3f diff = hit.sub(d.startHit);
+                float[] c = {diff.x, diff.y, diff.z};
+                for (int i = 0; i < 3; i++) if (free || i != d.handle.axis()) want[i] = Math.round(c[i]);
+            }
+            default -> {
+            }
+        }
+        int dx = want[0] - d.applied[0], dy = want[1] - d.applied[1], dz = want[2] - d.applied[2];
+        if (dx == 0 && dy == 0 && dz == 0) return;
+        ws.editor().nudge(d.layers, dx, dy, dz, "gizmo-move");
+        System.arraycopy(want, 0, d.applied, 0, 3);
+        d.changed = true;
+        showToast("Δ " + fmt(want[0]) + ", " + fmt(want[1]) + ", " + fmt(want[2]));
+        requestRedraw();
+    }
+
+    /**
+     * One right-handed quarter turn ({@code sign} ±1) of every dragged layer about the drag's pivot: each layer turns
+     * about its own middle (Y through its transform, X/Z by rewriting blocks), then shifts so its middle orbits the pivot.
+     */
+    private void turnGroup(GizmoDrag d, int sign) {
+        int axis = d.handle.axis();
+        for (Layer l : d.layers) {
+            Optional<Box> lb = l.structure().bounds(), wb0 = l.worldBounds();
+            if (lb.isEmpty() || wb0.isEmpty()) continue;
+            Vector3f c0 = boxCenter(wb0.get());
+            // Transform.rotation(1) is clockwise from above, the opposite of right-handed about +Y.
+            if (axis == 1) spinLayer(l, lb.get(), -sign);
+            else tipLayer(l, lb.get(), sign, axis == 0 ? new BlockPos(0, 0, -1) : new BlockPos(1, 0, 0));
+            Vector3f rel = new Vector3f(c0).sub(d.pivot), turned = quarterTurn(rel, axis, sign).add(d.pivot);
+            Vector3f c1 = boxCenter(l.worldBounds().orElse(wb0.get()));
+            int mx = Math.round(turned.x - c1.x), my = Math.round(turned.y - c1.y), mz = Math.round(turned.z - c1.z);
+            if (mx != 0 || my != 0 || mz != 0) ws.editor().nudge(List.of(l), mx, my, mz, null);
+        }
+        d.changed = true;
+    }
+
+    /** Right-handed 90° turn about a world axis, {@code sign} times (±1). */
+    private static Vector3f quarterTurn(Vector3f v, int axis, int sign) {
+        return switch (axis) {
+            case 0 -> sign > 0 ? new Vector3f(v.x, -v.z, v.y) : new Vector3f(v.x, v.z, -v.y);
+            case 1 -> sign > 0 ? new Vector3f(v.z, v.y, -v.x) : new Vector3f(-v.z, v.y, v.x);
+            default -> sign > 0 ? new Vector3f(-v.y, v.x, v.z) : new Vector3f(v.y, -v.x, v.z);
+        };
+    }
+
+    private static Vector3f boxCenter(Box b) {
+        return new Vector3f((b.minX() + b.maxX() + 1) / 2f, (b.minY() + b.maxY() + 1) / 2f, (b.minZ() + b.maxZ() + 1) / 2f);
+    }
+
+    private void endGizmoDrag() {
+        gizmoDrag = null;
+        ws.editor().undoStack().endGroup();
+        requestRedraw();
+    }
+
+    private void cancelGizmoDrag() {
+        boolean changed = gizmoDrag.changed;
+        gizmoDrag = null;
+        ws.editor().undoStack().endGroup();
+        if (changed) ws.editor().undoStack().undo();
+        showToast("Cancelled");
+        requestRedraw();
+    }
+
+    /** Where along the axis line through {@code p} the mouse ray passes closest. */
+    private static float axisParam(Vector3f[] ray, Vector3f p, Vector3f axis) {
+        Vector3f w0 = new Vector3f(p).sub(ray[0]);
+        float b = axis.dot(ray[1]), denom = 1 - b * b;
+        if (Math.abs(denom) < 1e-4f) return 0;
+        return (b * ray[1].dot(w0) - axis.dot(w0)) / denom;
+    }
+
+    /** The mouse ray's hit on the plane through {@code p} with normal {@code n}, or null when (nearly) parallel. */
+    private static Vector3f planeHit(Vector3f[] ray, Vector3f p, Vector3f n) {
+        float denom = n.dot(ray[1]);
+        if (Math.abs(denom) < 1e-4f) return null;
+        float t = n.dot(new Vector3f(p).sub(ray[0])) / denom;
+        return t < 0 ? null : new Vector3f(ray[1]).mul(t).add(ray[0]);
+    }
+
+    /** Anticlockwise screen angle of the mouse around the gizmo centre. */
+    private double screenAngle(double x, double y) {
+        double[] c = gizmo.center();
+        return c == null ? 0 : Math.atan2(-(y - c[1]), x - c[0]);
+    }
+
+    // ---- select by type -------------------------------------------------------------------------------------
+
+    private interface TypeVisitor {
+        /** A non-air block of {@code l} (packed layer-local position) with its world-facing state. */
+        void visit(Layer l, long packed, BlockState world);
+    }
+
+    /** Layers a scope searches: visible, unlocked and not being placed, like the marquee. */
+    private List<Layer> typeLayers(SelectByTypePanel.Scope scope) {
+        Layer active = ws.activeLayerProperty().get();
+        List<Layer> from = switch (scope) {
+            case ACTIVE -> active == null ? List.of() : List.of(active);
+            case SELECTED -> ws.selectedLayers().isEmpty() && active != null ? List.of(active) : List.copyOf(ws.selectedLayers());
+            case VISIBLE -> ws.scene().layers();
+            case SELECTION -> ws.scene().layers().stream().filter(l -> blockSel.containsKey(l.id())).toList();
+        };
+        return from.stream().filter(l -> l.visible() && !l.locked() && !placing.contains(l)).toList();
+    }
+
+    /** Visits the blocks of the layers (only already-selected ones when {@code withinSelection}) inside the world Y range. */
+    private void forEachTypeCandidate(List<Layer> layers, boolean withinSelection, int lo, int hi, TypeVisitor v) {
+        for (Layer l : layers) {
+            // States are interned, so each distinct state is turned to world-facing once per layer.
+            java.util.Map<BlockState, BlockState> world = new java.util.HashMap<>();
+            Transform t = l.transform();
+            int base = l.offset().y();
+            if (withinSelection) {
+                java.util.Set<Long> set = blockSel.get(l.id());
+                if (set == null) continue;
+                for (long packed : set) {
+                    BlockPos p = BlockPos.unpack(packed);
+                    if (p.y() + base < lo || p.y() + base > hi) continue;
+                    BlockState st = l.structure().get(p);
+                    if (!st.isAir()) v.visit(l, packed, world.computeIfAbsent(st, s -> BlockTransformer.defaults().apply(s, t)));
+                }
+            } else {
+                l.structure().forEachBlock((x, y, z, st) -> {
+                    if (y + base < lo || y + base > hi || st.isAir()) return;
+                    v.visit(l, BlockPos.pack(x, y, z), world.computeIfAbsent(st, s -> BlockTransformer.defaults().apply(s, t)));
+                });
+            }
+        }
+    }
+
+    private void forEachTypeCandidate(SelectByTypePanel.Query q, TypeVisitor v) {
+        forEachTypeCandidate(typeLayers(q.scope()), q.scope() == SelectByTypePanel.Scope.SELECTION,
+                q.slice() ? sliceMin() : Integer.MIN_VALUE, q.slice() ? sliceMax() : Integer.MAX_VALUE, v);
+    }
+
+    /** Opens the Select by type dialog (T), with {@code preselect}'s block (world-facing) ticked if given. */
+    public void openSelectByType(BlockState preselect) {
+        if (!placing.isEmpty()) return;
+        setFly(false);
+        ws.toolProperty().set(ToolKind.SELECT);
+        SelectByTypePanel.Scope scope = ws.selectedLayers().size() > 1 ? SelectByTypePanel.Scope.SELECTED : SelectByTypePanel.Scope.VISIBLE;
+        if (selectByTypePopover != null && selectByTypePopover.isShowing()) selectByTypePopover.hide();
+        SelectByTypePanel panel = new SelectByTypePanel(ws.assets(), scope, !blockSel.isEmpty(), sliceY != null, preselect, q -> {
+            java.util.Map<String, Long> counts = new java.util.HashMap<>();
+            forEachTypeCandidate(q, (l, packed, st) -> {
+                if (q.matches(st)) counts.merge(q.key(st), 1L, Long::sum);
+            });
+            return counts;
+        }, this::applySelectByType, () -> {
+            if (selectByTypePopover != null) selectByTypePopover.hide();
+            requestFocus();
+        });
+        selectByTypePopover = SidePopover.create("Select by type", panel);
+        SidePopover.show(selectByTypePopover, filterButton);
+    }
+
+    private void applySelectByType(SelectByTypePanel.Options o) {
+        SelectByTypePanel.Query q = o.query();
+        java.util.Map<String, java.util.Set<Long>> found = new java.util.LinkedHashMap<>();
+        forEachTypeCandidate(q, (l, packed, st) -> {
+            if (q.matches(st) && o.keys().contains(q.key(st))) found.computeIfAbsent(l.id(), k -> new java.util.HashSet<>()).add(packed);
+        });
+        applyTypeSelection(found, o.mode());
+    }
+
+    /** Selects every block with {@code type}'s id (or exactly its state) in the layers, replacing the selection. */
+    private void quickSelectType(BlockState type, boolean exact, List<Layer> layers) {
+        java.util.Map<String, java.util.Set<Long>> found = new java.util.LinkedHashMap<>();
+        forEachTypeCandidate(layers.stream().filter(l -> l.visible() && !l.locked() && !placing.contains(l)).toList(), false,
+                sliceMin(), sliceMax(), (l, packed, st) -> {
+                    if (exact ? st == type : st.name().equals(type.name())) found.computeIfAbsent(l.id(), k -> new java.util.HashSet<>()).add(packed);
+                });
+        applyTypeSelection(found, SelectByTypePanel.Mode.REPLACE);
+    }
+
+    private void applyTypeSelection(java.util.Map<String, java.util.Set<Long>> found, SelectByTypePanel.Mode mode) {
+        switch (mode) {
+            case REPLACE -> {
+                blockSel.clear();
+                blockSel.putAll(found);
+            }
+            case ADD -> found.forEach((id, set) -> blockSel.computeIfAbsent(id, k -> new java.util.HashSet<>()).addAll(set));
+            case REMOVE -> found.forEach((id, set) -> {
+                java.util.Set<Long> cur = blockSel.get(id);
+                if (cur == null) return;
+                cur.removeAll(set);
+                if (cur.isEmpty()) blockSel.remove(id);
+            });
+        }
+        List<Layer> touched = ws.scene().layers().stream().filter(l -> blockSel.containsKey(l.id())).toList();
+        if (!touched.isEmpty()) {
+            ws.selectedLayers().setAll(touched);
+            Layer active = ws.activeLayerProperty().get();
+            if (active == null || !touched.contains(active)) ws.scene().setActive(touched.getLast());
+        }
+        selectionChanged();
     }
 
     // ---- selection ------------------------------------------------------------------------------------------
@@ -1466,7 +2097,7 @@ public final class ViewportPane extends StackPane {
             settingsPopover.hide();
             showShortcuts(true);
         });
-        settingsPopover.show(settingsButton);
+        SidePopover.show(settingsPopover, settingsButton);
     }
 
     /** The hotbar shows in Build mode. */
@@ -1476,13 +2107,21 @@ public final class ViewportPane extends StackPane {
 
     /** Alt+K: the keyboard shortcuts card over the viewport. */
     public void toggleShortcuts() {
-        showShortcuts(!shortcuts.isVisible());
+        showShortcuts(!shortcutsShowing());
+    }
+
+    private boolean shortcutsShowing() {
+        return shortcutsPopover != null && shortcutsPopover.isShowing();
     }
 
     private void showShortcuts(boolean show) {
-        if (show) setFly(false);
-        shortcuts.setVisible(show);
-        requestFocus();
+        if (!show) {
+            if (shortcutsPopover != null) shortcutsPopover.hide();
+            return;
+        }
+        setFly(false);
+        if (shortcutsPopover == null) shortcutsPopover = SidePopover.create("Keyboard shortcuts", shortcuts);
+        SidePopover.show(shortcutsPopover, keysButton);
     }
 
     /** Applies overlay visibility from the settings (called when they change). */

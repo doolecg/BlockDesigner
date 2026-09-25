@@ -22,6 +22,32 @@ class CameraTest {
         assertThat(c.eye().distance(pivot)).isGreaterThan(0);
     }
 
+    @Test
+    void orthographicKeepsTheFramingAtTheTarget() {
+        Camera c = new Camera();
+        c.setTarget(0, 0, 0);
+        c.setDistance(40);
+        Vector3f p = new Vector3f(c.right()).mul(5);
+        float persp = screen(c, p)[0];
+        c.setOrtho(true);
+        assertThat(screen(c, p)[0]).isCloseTo(persp, within(1e-3f));
+        // No perspective shrink: a point far behind the target lands in the same place.
+        Vector3f behind = new Vector3f(p).add(c.forward().mul(30));
+        assertThat(screen(c, behind)[0]).isCloseTo(persp, within(1e-3f));
+    }
+
+    @Test
+    void straightDownIsStableWithNorthUp() {
+        Camera c = new Camera();
+        c.setAngles(0, (float) (Math.PI / 2));
+        assertThat(c.forward().y).isCloseTo(-1, within(1e-5f));
+        assertThat(c.up().z).isCloseTo(-1, within(1e-5f));
+        assertThat(c.right().x).isCloseTo(1, within(1e-5f));
+        float[] v = new float[16];
+        c.viewProjection(1).get(v);
+        for (float f : v) assertThat(Float.isNaN(f)).isFalse();
+    }
+
     private static float[] screen(Camera c, Vector3f p) {
         Vector4f v = new Vector4f(p, 1).mul(c.viewProjection(16 / 9f));
         return new float[]{v.x / v.w, v.y / v.w};

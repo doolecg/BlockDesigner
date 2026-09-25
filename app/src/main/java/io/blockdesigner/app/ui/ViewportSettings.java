@@ -28,11 +28,7 @@ final class ViewportSettings {
     }
 
     static Popover popover(Settings s, Runnable changed, Runnable showShortcuts) {
-        Popover p = new Popover();
-        p.setTitle("Viewport");
-        p.setHeaderAlwaysVisible(true);
-        p.setDetachable(false);
-        p.setArrowLocation(Popover.ArrowLocation.TOP_RIGHT);
+        Popover p = SidePopover.create("Viewport", null);
         p.setContentNode(content(s, changed, showShortcuts, p));
         p.setOnHidden(e -> s.save());
         return p;

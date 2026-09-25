@@ -30,6 +30,8 @@ public final class ToolDock extends VBox {
         add(ws, group, ToolKind.VIEW, Feather.EYE, "View mode (V): look around, no editing");
         add(ws, group, ToolKind.SELECT, Feather.MOUSE_POINTER, "Select mode (Q): click to select layers, drag to slide them");
         add(ws, group, ToolKind.BUILD, Feather.TOOL, "Build mode (B toggles, also while flying): left break, right place, middle pick");
+        add(ws, group, ToolKind.MOVE, Feather.MOVE, "Move (G): drag an arrow, a plane square or the centre to move the selected layers");
+        add(ws, group, ToolKind.ROTATE, Feather.ROTATE_CW, "Rotate (E): drag a ring to turn the selected layers in 90° steps");
         getChildren().add(new Separator());
         flyToggle.getStyleClass().addAll("flat", "tool-button");
         flyToggle.setTooltip(new Tooltip("Creative flight (C): WASD, Space/Shift, mouse look"));

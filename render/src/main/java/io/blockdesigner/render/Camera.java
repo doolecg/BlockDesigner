@@ -4,8 +4,14 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-/** An orbit camera around a target point. Yaw 0 looks north (-Z); pitch is positive when looking down. */
+/**
+ * An orbit camera around a target point. Yaw 0 looks north (-Z); pitch is positive when looking down. It can be
+ * orthographic (not while flying): the visible height then matches what perspective shows at the target, so switching
+ * keeps the framing, and zooming changes that height.
+ */
 public final class Camera {
+    /** How far behind the target an orthographic view is rendered from, so nothing in front of it is clipped. */
+    private static final float ORTHO_BACK = 1000;
     private final Vector3f target = new Vector3f();
     private float yaw = (float) Math.toRadians(-135 + 180);
     private float pitch = (float) Math.toRadians(30);
@@ -14,6 +20,7 @@ public final class Camera {
     private float clipEnd = 4000;
     /** In fly mode {@link #target} is the eye position and the camera looks along {@link #forward()}. */
     private boolean fly;
+    private boolean ortho;
 
     public Vector3f target() {
         return new Vector3f(target);
@@ -54,6 +61,26 @@ public final class Camera {
         clipEnd = Math.max(16f, blocks);
     }
 
+    /** Whether orthographic is chosen (it only applies while orbiting, not flying). */
+    public boolean isOrtho() {
+        return ortho;
+    }
+
+    public void setOrtho(boolean ortho) {
+        this.ortho = ortho;
+    }
+
+    /** Orthographic right now. */
+    public boolean orthoActive() {
+        return ortho && !fly;
+    }
+
+    /** World units per screen pixel at {@code p}, for a viewport {@code heightPx} tall. */
+    public float unitsPerPixel(Vector3f p, float heightPx) {
+        float depth = orthoActive() ? distance : Math.max(0.05f, new Vector3f(p).sub(eye()).dot(forward()));
+        return (float) (2 * depth * Math.tan(Math.toRadians(fovDeg / 2)) / heightPx);
+    }
+
     public boolean isFly() {
         return fly;
     }
@@ -82,7 +109,7 @@ public final class Camera {
 
     public void setAngles(float yawRad, float pitchRad) {
         yaw = yawRad;
-        pitch = Math.clamp(pitchRad, (float) Math.toRadians(-89), (float) Math.toRadians(89));
+        pitch = Math.clamp(pitchRad, (float) (-Math.PI / 2), (float) (Math.PI / 2));
     }
 
     public void orbit(float dYaw, float dPitch) {
@@ -121,8 +148,9 @@ public final class Camera {
         return new Vector3f((float) Math.sin(yaw) * cp, -(float) Math.sin(pitch), -(float) Math.cos(yaw) * cp).normalize();
     }
 
+    /** Screen right; from the yaw alone, so it stays defined looking straight up or down. */
     public Vector3f right() {
-        return forward().cross(0, 1, 0, new Vector3f()).normalize();
+        return new Vector3f((float) Math.cos(yaw), 0, (float) Math.sin(yaw));
     }
 
     public Vector3f up() {
@@ -134,12 +162,21 @@ public final class Camera {
         return new Vector3f(target).sub(forward().mul(distance));
     }
 
+    /** Where the view is rendered from: the eye, or for orthographic a point far behind the target. */
+    public Vector3f viewEye() {
+        return orthoActive() ? new Vector3f(target).sub(forward().mul(ORTHO_BACK)) : eye();
+    }
+
     public Matrix4f view() {
-        Vector3f eye = eye();
-        return new Matrix4f().lookAt(eye, new Vector3f(eye).add(forward()), new Vector3f(0, 1, 0));
+        Vector3f eye = viewEye();
+        return new Matrix4f().lookAt(eye, new Vector3f(eye).add(forward()), up());
     }
 
     public Matrix4f projection(float aspect) {
+        if (orthoActive()) {
+            float h = distance * (float) Math.tan(Math.toRadians(fovDeg / 2));
+            return new Matrix4f().ortho(-h * aspect, h * aspect, -h, h, 1f, ORTHO_BACK + clipEnd);
+        }
         float near = fly ? 0.05f : Math.max(0.05f, distance / 500f);
         return new Matrix4f().perspective((float) Math.toRadians(fovDeg), aspect, near, Math.max(clipEnd, fly ? 0 : distance * 2));
     }
@@ -185,7 +222,7 @@ public final class Camera {
 
     /** The horizontal world axis closest to "forward" (away from the viewer), as {dx, dz}. */
     public int[] screenForwardAxis() {
-        Vector3f f = forward();
+        Vector3f f = flatForward();
         if (Math.abs(f.x) > Math.abs(f.z)) return new int[]{(int) Math.signum(f.x), 0};
         return new int[]{0, f.z == 0 ? -1 : (int) Math.signum(f.z)};
     }
@@ -199,6 +236,7 @@ public final class Camera {
         fovDeg = o.fovDeg;
         clipEnd = o.clipEnd;
         fly = o.fly;
+        ortho = o.ortho;
     }
 
     public Camera copy() {
@@ -210,6 +248,7 @@ public final class Camera {
         c.fovDeg = fovDeg;
         c.clipEnd = clipEnd;
         c.fly = fly;
+        c.ortho = ortho;
         return c;
     }
 }

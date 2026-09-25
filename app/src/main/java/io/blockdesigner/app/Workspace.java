@@ -22,8 +22,11 @@ import java.nio.file.Path;
  * Touch only from the JavaFX thread.
  */
 public final class Workspace {
-    /** Viewport modes: look around only, select and slide layers, or build Minecraft-style (left break, right place). */
-    public enum ToolKind { VIEW, SELECT, BUILD }
+    /**
+     * Viewport modes: look around only, select and slide layers, build Minecraft-style (left break, right place), or
+     * move / rotate the selected layers with Blender-style gizmos.
+     */
+    public enum ToolKind { VIEW, SELECT, BUILD, MOVE, ROTATE }
 
     public static final int HOTBAR_SIZE = 9;
 
