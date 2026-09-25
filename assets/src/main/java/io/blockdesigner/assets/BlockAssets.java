@@ -1,0 +1,188 @@
+package io.blockdesigner.assets;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.blockdesigner.assets.model.BakedModel;
+import io.blockdesigner.assets.model.BlockStateDefinition;
+import io.blockdesigner.assets.model.ModelBaker;
+import io.blockdesigner.assets.model.ModelLoader;
+import io.blockdesigner.core.model.BlockState;
+import io.blockdesigner.core.version.McVersion;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Everything needed to draw blocks for one game version plus mods/resource packs: the block registry, the stitched
+ * texture atlas and a cache of baked models per block state. Thread-safe for reads.
+ */
+public final class BlockAssets implements Closeable {
+    private static final Pattern BLOCKSTATE_PATH = Pattern.compile("assets/([a-z0-9_.-]+)/blockstates/([a-z0-9_./-]+)\\.json");
+    private static final Set<String> HIDDEN = Set.of("minecraft:air", "minecraft:cave_air", "minecraft:void_air", "minecraft:moving_piston");
+
+    private final McVersion version;
+    private final AssetStack stack;
+    private final Map<String, BlockStateDefinition> definitions;
+    private final BlockRegistry registry;
+    private final ModelLoader loader;
+    private final TextureAtlas atlas;
+    private final ModelBaker baker;
+    private final Map<BlockState, BakedModel> cache = new ConcurrentHashMap<>();
+
+    private BlockAssets(McVersion version, AssetStack stack, Map<String, BlockStateDefinition> definitions, BlockRegistry registry,
+                        ModelLoader loader, TextureAtlas atlas) {
+        this.version = version;
+        this.stack = stack;
+        this.definitions = definitions;
+        this.registry = registry;
+        this.loader = loader;
+        this.atlas = atlas;
+        this.baker = new ModelBaker(atlas, BlockTints.defaults());
+    }
+
+    /** Opens a game jar plus optional mod jars and resource packs (packs take priority over mods, mods over the game). */
+    public static BlockAssets open(Path gameJar, List<Path> mods, List<Path> resourcePacks, Consumer<String> progress) throws IOException {
+        List<AssetSource> sources = new ArrayList<>();
+        for (Path p : resourcePacks) sources.add(AssetSource.open(p));
+        for (Path p : mods) {
+            try {
+                sources.addAll(AssetSource.openWithNested(p));
+            } catch (IOException e) {
+                // A broken mod jar shouldn't stop the rest from loading.
+                System.err.println("Skipping unreadable mod " + p.getFileName() + ": " + e.getMessage());
+            }
+        }
+        sources.add(AssetSource.open(gameJar));
+        McVersion version;
+        try {
+            version = McVersion.fromClientJar(gameJar);
+        } catch (IOException e) {
+            version = McVersion.latestKnown();
+        }
+        return load(version, new AssetStack(sources), progress);
+    }
+
+    public static BlockAssets load(McVersion version, AssetStack stack, Consumer<String> progress) {
+        Consumer<String> log = progress == null ? s -> {
+        } : progress;
+        ObjectMapper json = new ObjectMapper();
+
+        log.accept("Reading block states…");
+        Map<String, BlockStateDefinition> defs = new LinkedHashMap<>();
+        for (String path : stack.list("assets/")) {
+            Matcher m = BLOCKSTATE_PATH.matcher(path);
+            if (!m.matches()) continue;
+            String id = m.group(1) + ":" + m.group(2);
+            if (defs.containsKey(id)) continue;
+            stack.read(path).ifPresent(bytes -> {
+                try {
+                    defs.put(id, BlockStateDefinition.parse(json.readTree(bytes)));
+                } catch (IOException | RuntimeException ignored) {
+                    // malformed blockstate file: skip block
+                }
+            });
+        }
+
+        Map<String, BlockRegistry.BlockInfo> infos = new HashMap<>();
+        defs.forEach((id, d) -> {
+            if (HIDDEN.contains(id)) return;
+            Map<String, List<String>> props = new LinkedHashMap<>();
+            d.properties().forEach((k, v) -> props.put(k, List.copyOf(v)));
+            infos.put(id, new BlockRegistry.BlockInfo(id, props, BlockState.of(id, d.defaultProperties())));
+        });
+
+        log.accept("Resolving " + defs.size() + " block models…");
+        ModelLoader loader = new ModelLoader(stack);
+        Set<String> textures = new LinkedHashSet<>(FallbackModels.extraTextures());
+        for (BlockStateDefinition d : defs.values()) {
+            for (String model : d.allModels()) {
+                loader.resolve(model).ifPresent(rm -> {
+                    rm.elements().forEach(e -> e.faces().values().forEach(f -> {
+                        String t = rm.resolve(f.texture());
+                        if (t != null) textures.add(t);
+                    }));
+                    rm.particle().ifPresent(textures::add);
+                });
+            }
+        }
+
+        log.accept("Stitching " + textures.size() + " textures…");
+        TextureAtlas atlas = TextureAtlas.build(stack, textures);
+        log.accept("Ready: " + infos.size() + " blocks, atlas " + atlas.width() + "×" + atlas.height());
+        return new BlockAssets(version, stack, defs, new BlockRegistry(infos), loader, atlas);
+    }
+
+    public McVersion version() {
+        return version;
+    }
+
+    public BlockRegistry registry() {
+        return registry;
+    }
+
+    public TextureAtlas atlas() {
+        return atlas;
+    }
+
+    public AssetStack assetStack() {
+        return stack;
+    }
+
+    /** Baked model for a state; never null (falls back to approximations or a missing-texture cube). */
+    public BakedModel model(BlockState state) {
+        if (state.isAir()) return BakedModel.EMPTY;
+        BakedModel m = cache.get(state);
+        if (m != null) return m;
+        return cache.computeIfAbsent(state, this::bakeUncached);
+    }
+
+    private BakedModel bakeUncached(BlockState state) {
+        BlockStateDefinition def = definitions.get(state.name());
+        if (def == null) return FallbackModels.missing(state, baker);
+        List<ModelBaker.Placed> parts = new ArrayList<>();
+        Optional<String> particle = Optional.empty();
+        for (BlockStateDefinition.ModelRef ref : def.select(registry.complete(state))) {
+            Optional<ModelLoader.ResolvedModel> rm = loader.resolve(ref.model());
+            if (rm.isEmpty()) continue;
+            if (particle.isEmpty()) particle = rm.get().particle();
+            if (!rm.get().elements().isEmpty()) parts.add(new ModelBaker.Placed(rm.get(), ref.x(), ref.y(), ref.uvlock()));
+        }
+        if (!parts.isEmpty()) return baker.bake(state, parts);
+        return FallbackModels.bake(state, particle, baker).orElseGet(() -> FallbackModels.missing(state, baker));
+    }
+
+    /** Average RGB of the block's most visible texture (top face if present), for previews and colour matching. */
+    public int averageColor(BlockState state) {
+        BakedModel m = model(state);
+        int best = 0x808080;
+        for (var q : m.quads()) {
+            best = multiply(q.sprite().averageRgb(), q.tint());
+            if (q.face() == Dir.UP) return best;
+        }
+        return best;
+    }
+
+    private static int multiply(int a, int b) {
+        int r = ((a >> 16) & 255) * ((b >> 16) & 255) / 255;
+        int g = ((a >> 8) & 255) * ((b >> 8) & 255) / 255;
+        int bl = (a & 255) * (b & 255) / 255;
+        return r << 16 | g << 8 | bl;
+    }
+
+    @Override
+    public void close() throws IOException {
+        stack.close();
+    }
+}

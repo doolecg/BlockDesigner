@@ -1,0 +1,11 @@
+{
+  "_comment": "Fallback version table. When a client jar is available its version.json is authoritative (see VersionProfile.fromClientJar).",
+  "versions": [
+    { "id": "1.20.1", "dataVersion": 3465, "dataPackMajor": 15, "dataPackMinor": 0, "javaVersion": 17 },
+    { "id": "1.20.4", "dataVersion": 3700, "dataPackMajor": 26, "dataPackMinor": 0, "javaVersion": 17 },
+    { "id": "1.21.1", "dataVersion": 3955, "dataPackMajor": 48, "dataPackMinor": 0, "javaVersion": 21 },
+    { "id": "1.21.4", "dataVersion": 4189, "dataPackMajor": 61, "dataPackMinor": 0, "javaVersion": 21 },
+    { "id": "26.2", "dataVersion": 4903, "dataPackMajor": 107, "dataPackMinor": 1, "javaVersion": 25 },
+    { "id": "26.3", "dataVersion": 5023, "dataPackMajor": 121, "dataPackMinor": 0, "javaVersion": 25 }
+  ]
+}

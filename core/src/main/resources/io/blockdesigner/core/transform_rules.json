@@ -1,0 +1,17 @@
+{
+  "_comment": "State-aware rotation/mirroring rules. Direction values rotate clockwise north->east->south->west. Add mod-specific properties here.",
+  "direction_properties": ["facing", "horizontal_facing", "hopper_facing", "vertical_direction"],
+  "axis_properties": ["axis", "horizontal_axis"],
+  "rotation16_properties": ["rotation"],
+  "side_keys": ["north", "east", "south", "west"],
+  "direction_token_properties": {
+    "orientation": { "blocks": ["*"] },
+    "shape": { "blocks": ["*rail*"] }
+  },
+  "mirror_value_swaps": {
+    "hinge": { "left": "right", "right": "left" },
+    "shape": { "inner_left": "inner_right", "inner_right": "inner_left", "outer_left": "outer_right", "outer_right": "outer_left" },
+    "type": { "left": "right", "right": "left" }
+  },
+  "rotation_boolean_toggles": ["axis_along_first"]
+}

@@ -1,0 +1,14 @@
+{
+  "_comment": "Fixed colours (plains biome) for faces with a tintindex. Patterns are block ids with * wildcards; first match wins.",
+  "tints": [
+    { "color": "#80A755", "blocks": ["minecraft:birch_leaves"] },
+    { "color": "#619961", "blocks": ["minecraft:spruce_leaves"] },
+    { "color": "#3F76E4", "blocks": ["minecraft:water", "minecraft:water_cauldron", "minecraft:bubble_column"] },
+    { "color": "#208030", "blocks": ["minecraft:lily_pad"] },
+    { "color": "#E0C71C", "blocks": ["minecraft:attached_pumpkin_stem", "minecraft:attached_melon_stem"] },
+    { "color": "#9DBF3A", "blocks": ["minecraft:pumpkin_stem", "minecraft:melon_stem"] },
+    { "color": "#77AB2F", "blocks": ["minecraft:oak_leaves", "minecraft:jungle_leaves", "minecraft:acacia_leaves", "minecraft:dark_oak_leaves", "minecraft:mangrove_leaves", "minecraft:vine", "minecraft:leaf_litter", "*:*leaves*"] },
+    { "color": "#91BD59", "blocks": ["minecraft:grass_block", "minecraft:short_grass", "minecraft:grass", "minecraft:tall_grass", "minecraft:fern", "minecraft:large_fern", "minecraft:potted_fern", "minecraft:sugar_cane", "minecraft:bush", "minecraft:*grass*"] }
+  ],
+  "default": "#FFFFFF"
+}
