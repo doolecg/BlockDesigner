@@ -39,7 +39,7 @@ application {
 // ./gradlew :app:installer  -> dist/BlockDesigner-<v>.exe setup (Start menu + desktop shortcut, .bdproj association).
 //                              Needs the WiX Toolset: unzip WiX 3.14 binaries into tools/wix3, or have WiX on PATH.
 
-val packageVersion = "0.2.0"
+val packageVersion = "0.3.0"
 val jdkBin = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(26) }
     .map { it.metadata.installationPath.dir("bin") }
 val jpackageExe = jdkBin.map { it.file("jpackage.exe").asFile.absolutePath }

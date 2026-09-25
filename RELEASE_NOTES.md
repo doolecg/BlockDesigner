@@ -1,3 +1,86 @@
+# BlockDesigner 0.3.0
+
+This release adds sculpting brushes (smooth, erode, raise, flatten and more) and the Eraser. WorldEdit now works like Minecraft's chat: press T, type `/set stone`, and it replaces what's already there across all your layers.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.3.0.exe** | You want a normal install: Start menu entry, optional desktop shortcut, and `.bdproj` projects that open with a double-click. Installs for your user only, so no admin is needed. |
+| **BlockDesigner-0.3.0-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. Settings stay in a `data` folder next to the exe. |
+
+The requirements haven't changed: 64-bit Windows 10 or 11, OpenGL 3.3, and Minecraft: Java Edition installed.
+
+## Changed controls
+- **T opens the command line**, like Minecraft's chat. **Select by type** moved from T to **Alt+T**; the filter button still opens it.
+- **Commands take one slash:** `/set stone` (`//set` still works).
+
+## New
+
+### Brushes
+- **Brush (U)**, with ten modes picked with **Alt+1 … Alt+0**. Alt isn't a flight key, so they work while flying too.
+
+  | Key | Mode | What it does |
+  |---|---|---|
+  | Alt+1 | Draw | Adds blocks with the held block (a random hotbar pick per block in shuffle mode) |
+  | Alt+2 | Erase | Removes blocks |
+  | Alt+3 | Smooth | Rounds things off. On top of the ground it smooths the heightmap (hills round off, pits fill in, grass stays on top); on a side face it rounds shapes in 3D |
+  | Alt+4 | Erode | Wears away exposed corners and edges |
+  | Alt+5 | Fill | Plugs pits and crevices |
+  | Alt+6 | Pinch | Pulls material in to sharpen ridges (Ctrl: pushes out) |
+  | Alt+7 | Raise | Builds a hill with a soft falloff |
+  | Alt+8 | Lower | Sinks the ground the same way |
+  | Alt+9 | Flatten | Levels to the height you click and closes holes |
+  | Alt+0 | Slope | A ramp rising from where the stroke started (Ctrl: cuts down) |
+
+- **Right-drag smooths**, in any mode and while flying.
+- **Shift+right-click** (or the brush bar's mode button) opens the brush settings: modes, size, strength and shape.
+- **Size, strength and shape:** `-`/`=` change the size (1–16) and `,`/`.` the strength (1–5). The shape can be a sphere or a cube.
+- **While painting** (not flying): Shift smooths and Ctrl inverts the mode (Draw↔Erase, Raise↔Lower, Erode↔Fill).
+- **Strokes are smooth:**
+  - The brush aims at the surface as it was when the stroke began, so it glides along it instead of catching on its own new blocks.
+  - Fast drags are filled in along the path.
+  - Sculpt modes keep working while you hold still, like an airbrush.
+  - The pace is set by **Brush speed** in viewport settings (default 8 dabs a second).
+- **Brushes never build into the camera:** they stop short of it instead of growing past it.
+- **The outline under the cursor** is green for adding, red for removing and blue for reshaping. Terrain brushes show a ring on the ground.
+- Each stroke is one undo step, and fences, walls, redstone, rails and stairs reconnect as you paint.
+
+### Eraser
+- **Eraser (X):** drag to remove blocks from every visible, unlocked layer, sized and shaped like the brush.
+
+### WorldEdit
+- **The command line works like Minecraft's chat:**
+  - T (or `/`) opens it bottom-left with `/` already typed.
+  - Recent commands and their results show above the input.
+  - Tab completes commands and block names, and matching blocks are listed while you type one.
+- **Commands work on what you see:** every visible, unlocked layer, merged. `/set` replaces the blocks already there, whichever layer they're in; empty cells go into the active layer.
+- **Connections:** fences, walls, redstone, rails and stairs now join up with what commands build.
+- **New commands:**
+  - `/smooth [passes]` smooths the terrain surface in the region.
+  - `/naturalize` puts grass on top, then three dirt, then stone.
+  - `/hollow [thickness] [pattern]` hollows out shapes, keeping a shell.
+  - `/center <pattern>` marks the middle of the region.
+
+### New shortcuts
+
+| Area | Keys |
+|---|---|
+| Tools | U brush · X eraser |
+| Brush | Alt+1…0 modes · right-drag smooth · Shift+right-click settings · - / = size · , / . strength · Shift+drag smooth · Ctrl+drag invert |
+| Commands | T or / opens the command line · Tab completes · ↑ ↓ history |
+| Selecting | Alt+T select by type |
+
+## Known issues
+- **Security warning:** the installer and exe still aren't code-signed, so Windows SmartScreen may warn on first run. Click **More info → Run anyway**.
+- **Existing blocks:** fences, walls, redstone and rails in imported schematics keep the shapes they were saved with until you place or break next to them. Deleting or replacing a selection doesn't update neighbours.
+- **Across layers:** connections, stair corners and the sculpt brushes only look at blocks in the same layer.
+- **Eraser tool:** picking a mode in the brush popup has no effect there; switch to the Brush (U) first.
+- **Block selections and the WorldEdit region** aren't saved in projects yet.
+- **Special blocks:** chests, beds and other blocks Minecraft draws with a special renderer still show as simple boxes.
+
+---
+
 # BlockDesigner 0.2.0
 
 Blocks now go down the way Minecraft places them, with the game's own names. This release also adds WorldEdit-style commands, Blender-style Move and Rotate gizmos, a view cube with an orthographic camera, and sounds and particles.
@@ -39,41 +122,10 @@ The requirements are the same as 0.1.0: 64-bit Windows 10 or 11, OpenGL 3.3, and
 
 ### WorldEdit
 - In Select mode, left-click sets pos1 and right-click sets pos2. The box between them is drawn and its blocks become the selection. Esc clears it.
-- **Press T (or `/`)** to open the command line, like Minecraft's chat.
-  - It opens bottom-left with `/` already typed. Commands take one slash (`/set stone`); `//set` works too.
-  - Recent commands and their results show above the input.
-  - It shows each command's usage as you type, and lists matching blocks while you type a block name.
-  - Tab completes commands and block names, and ↑/↓ recalls earlier commands.
-- **Commands:** `/set`, `/replace`, `/walls`, `/faces`, `/overlay`, `/smooth`, `/naturalize`, `/hollow`, `/center`, `/copy`, `/cut`, `/paste`, `/rotate`, `/flip`, `/move`, `/stack`, `/expand`, `/contract`, `/shift`, `/outset`, `/inset`, `/line`, `/sphere`, `/cyl`, `/pyramid` (with hollow versions), `/count`, `/distr`, `/size`, `/undo` and `/redo`.
-- **Mixes and directions:** blocks can be mixed (`/set 70%stone,30%andesite`) or taken from your hand (`/set hand`). Directions accept `up`, `north`, `left` or `me`.
-- **Commands work on what you see:** every visible, unlocked layer, merged. `/set` replaces the blocks already there, whichever layer they're in, and empty cells go into the active layer.
-- Fences, walls, redstone, rails and stairs join up with what a command builds, and each command is one undo step.
-- `/paste` and the shapes work from pos1.
-
-### Brushes
-- **Brush (U), with ten modes, picked with Alt+1 … Alt+0:** Draw, Erase, Smooth, Erode, Fill, Pinch, Raise, Lower, Flatten, Slope.
-  - Draw and Erase add and remove blocks.
-  - Smooth rounds things off:
-    - On top of the ground it smooths the terrain's heightmap, so hills round off and pits fill in, and grass stays on top.
-    - On a side face it rounds shapes in 3D.
-  - Erode wears away exposed corners and edges.
-  - Fill plugs pits and crevices.
-  - Pinch pulls material in to sharpen ridges.
-  - Raise and Lower build hills or sink ground with a soft falloff.
-  - Flatten levels ground to the height you click.
-  - Slope builds a ramp up from where the stroke started.
-- **Right-drag smooths**, in any mode and while flying.
-- **Shift+right-click** opens the brush settings (modes, size, strength, shape); the brush bar's mode button opens them too.
-- `-`/`=` change the size and `,`/`.` the strength.
-- **While painting** (not flying): Shift smooths and Ctrl inverts the mode (Draw↔Erase, Raise↔Lower, Erode↔Fill, Pinch pushes out, Slope cuts down).
-- **Strokes are smooth:**
-  - The brush aims at the surface as it was when the stroke began, so it glides along it instead of catching on its own new blocks.
-  - Fast drags are filled in along the path.
-  - The sculpt modes keep working while you hold still.
-  - The pace is set by **Brush speed** in viewport settings (default 8 dabs a second).
-  - Brushes never build into the camera: they stop short of it instead of growing past it.
-- **Eraser (X):** drag to remove blocks from every visible, unlocked layer.
-- The outline under the cursor is green for adding, red for removing and blue for reshaping. Each stroke is one undo step, and neighbours reconnect as you paint.
+- **Press `/`** (or the terminal button) for a command bar. It shows each command's usage as you type; Tab completes and ↑/↓ recalls earlier commands.
+- **Commands:** `//set`, `//replace`, `//walls`, `//faces`, `//overlay`, `//copy`, `//cut`, `//paste`, `//rotate`, `//flip`, `//move`, `//stack`, `//expand`, `//contract`, `//shift`, `//outset`, `//inset`, `//line`, `//sphere`, `//cyl`, `//pyramid` (with hollow versions), `//count`, `//distr`, `//size`, `//undo` and `//redo`.
+- **Mixes and directions:** blocks can be mixed (`//set 70%stone,30%andesite`) or taken from your hand (`//set hand`). Directions accept `up`, `north`, `left` or `me`.
+- **Where commands work:** they edit the active layer, and each command is one undo step. `//paste` and the shapes work from pos1.
 
 ### Move and Rotate gizmos
 - **Move (G):** Blender-style handles. Drag an arrow to move along an axis, a square to move in a plane, or the centre to move freely. Moves snap to whole blocks.
@@ -91,7 +143,7 @@ The requirements are the same as 0.1.0: 64-bit Windows 10 or 11, OpenGL 3.3, and
 - **Flight momentum:** flying glides to a stop instead of halting. You can turn it off in viewport settings.
 
 ### Selecting
-- **Select by type (Alt+T, or the filter button):** pick block types or exact states to select. You can filter by layer, properties (`half=top`, `facing=north|south`) and slice level, and replace, add to or remove from the selection.
+- **Select by type (T, or the filter button):** pick block types or exact states to select. You can filter by layer, properties (`half=top`, `facing=north|south`) and slice level, and replace, add to or remove from the selection.
 
 ### Feel
 - **Sounds:** a place thud and a break thud, with a slightly different pitch on every other click. Volume and on/off are in viewport settings.
@@ -109,7 +161,6 @@ The requirements are the same as 0.1.0: 64-bit Windows 10 or 11, OpenGL 3.3, and
 | Layers | `[` / `]` layer below / above · Ctrl+Shift+N new layer · Ctrl+D duplicate · Ctrl+M merge · F2 rename · Shift+Delete delete |
 | Layer toggles | H hide/show · Alt+H show all · Shift+H ghost · L lock |
 | Selection | Ctrl+A select all in active layer · Alt+A deselect · Ctrl+J copy to new layer · Ctrl+R fill with held block |
-| Tools | U brush · X eraser · Alt+1…0 brush modes · Shift+right-click brush settings · - / = size · , / . strength · T or / commands · Alt+T select by type |
 | View | N viewport settings · Alt+G grid · Home frame everything · F1 shortcuts · F11 full screen |
 
 Everything is listed in the shortcuts panel (Alt+K or F1).
@@ -125,8 +176,8 @@ Everything is listed in the shortcuts panel (Alt+K or F1).
 
 ## Known issues
 - **Security warning:** the installer and exe still aren't code-signed, so Windows SmartScreen may warn on first run. Click **More info → Run anyway**.
-- **Existing blocks:** fences, walls, redstone and rails in imported schematics keep the shapes they were saved with until you place or break next to them. Deleting or replacing a selection doesn't update neighbours.
-- **Across layers:** connections, stair corners and the sculpt brushes only look at blocks in the same layer.
+- **Existing blocks:** fences, walls, redstone and rails in imported schematics keep the shapes they were saved with until you place or break next to them. Deleting or replacing a selection, and WorldEdit commands, don't update neighbours.
+- **Across layers:** connections and stair corners only look at blocks in the same layer.
 - **Block selections and the WorldEdit region** aren't saved in projects yet.
 - **Special blocks:** chests, beds and other blocks Minecraft draws with a special renderer still show as simple boxes.
 
