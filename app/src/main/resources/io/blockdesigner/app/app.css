@@ -349,10 +349,24 @@
     -fx-font-weight: bold;
 }
 
-.viewport-hint {
-    -fx-text-fill: rgba(220, 228, 245, 0.55);
-    -fx-font-size: 11px;
-    -fx-padding: 8 14 10 14;
+.shortcuts-panel {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 14;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 14;
+    -fx-padding: 12 18 16 18;
+    -fx-effect: dropshadow(gaussian, -bd-shadow, 30, 0.25, 0, 8);
+}
+
+.shortcuts-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.shortcut-key {
+    -fx-font-family: monospace;
+    -fx-font-size: 11.5px;
+    -fx-font-weight: bold;
 }
 
 .loading-overlay {
@@ -568,4 +582,20 @@
 .crosshair-bar {
     -fx-fill: rgba(255, 255, 255, 0.9);
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.8), 2, 0.6, 0, 0);
+}
+
+.resource-tracker-icon {
+    -fx-icon-size: 40;
+    -fx-icon-color: -bd-accent;
+}
+
+.resource-tracker-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.resource-tracker-body {
+    -fx-text-alignment: center;
+    -fx-opacity: 0.7;
+    -fx-max-width: 260;
 }

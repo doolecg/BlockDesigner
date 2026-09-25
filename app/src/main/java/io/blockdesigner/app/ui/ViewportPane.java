@@ -70,7 +70,7 @@ public final class ViewportPane extends StackPane {
     private final Camera camera = new Camera();
     private final ImageView view = new ImageView();
     private final Label toast = new Label();
-    private final Label hint = new Label();
+    private final ShortcutsPanel shortcuts = new ShortcutsPanel(() -> showShortcuts(false));
     private final Label sliceBadge = new Label();
     private final Hotbar hotbar;
     private final javafx.scene.control.Button settingsButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.SLIDERS));
@@ -147,9 +147,8 @@ public final class ViewportPane extends StackPane {
         toast.setOpacity(0);
         toast.setMouseTransparent(true);
         StackPane.setAlignment(toast, Pos.TOP_CENTER);
-        hint.getStyleClass().add("viewport-hint");
-        hint.setMouseTransparent(true);
-        StackPane.setAlignment(hint, Pos.BOTTOM_LEFT);
+        shortcuts.setVisible(false);
+        StackPane.setAlignment(shortcuts, Pos.CENTER);
         sliceBadge.getStyleClass().add("viewport-badge");
         sliceBadge.setMouseTransparent(true);
         sliceBadge.setVisible(false);
@@ -176,8 +175,8 @@ public final class ViewportPane extends StackPane {
         marquee.setVisible(false);
         hotbar = new Hotbar(ws);
         StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
-        StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 38, 0));
-        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hint, hotbar, settingsButton);
+        StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 14, 0));
+        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, settingsButton, shortcuts);
         updateHotbarVisibility();
         applyViewSettings();
         toastFade.setFromValue(1);
@@ -195,7 +194,6 @@ public final class ViewportPane extends StackPane {
         ws.selectedLayers().addListener((javafx.collections.ListChangeListener<Layer>) c -> requestRedraw());
         ws.toolProperty().addListener((o, a, b) -> {
             updateHotbarVisibility();
-            updateHint();
             requestRedraw();
             showToast(switch (b) {
                 case BUILD -> "Build mode · left break · right place · middle pick · B to leave";
@@ -229,7 +227,6 @@ public final class ViewportPane extends StackPane {
         });
 
         installInput();
-        updateHint();
 
         new AnimationTimer() {
             @Override
@@ -746,7 +743,8 @@ public final class ViewportPane extends StackPane {
             case PAGE_DOWN -> stepSlice(-1);
             case INSERT -> toggleSingleSlice();
             case ESCAPE -> {
-                if (fly) setFly(false);
+                if (shortcuts.isVisible()) showShortcuts(false);
+                else if (fly) setFly(false);
                 else if (!placing.isEmpty()) cancelPlacement();
                 else if (!blockSel.isEmpty()) clearBlockSelection();
                 else ws.toolProperty().set(ToolKind.SELECT);
@@ -800,8 +798,6 @@ public final class ViewportPane extends StackPane {
             showToast("Orbit camera");
         }
         flyChanged.forEach(Runnable::run);
-        updateHotbarVisibility();
-        updateHint();
         updateHover(aimX(), aimY());
         requestRedraw();
     }
@@ -1343,19 +1339,32 @@ public final class ViewportPane extends StackPane {
         settingsPopover = ViewportSettings.popover(ws.settings(), () -> {
             applyViewSettings();
             requestRedraw();
+        }, () -> {
+            settingsPopover.hide();
+            showShortcuts(true);
         });
         settingsPopover.show(settingsButton);
     }
 
-    /** The hotbar shows in Select and Build (it is also the drop target for palette drags) and while flying. */
+    /** The hotbar shows in Build mode. */
     private void updateHotbarVisibility() {
-        hotbar.setVisible(fly || ws.toolProperty().get() != ToolKind.VIEW);
+        hotbar.setVisible(ws.toolProperty().get() == ToolKind.BUILD);
+    }
+
+    /** Alt+K: the keyboard shortcuts card over the viewport. */
+    public void toggleShortcuts() {
+        showShortcuts(!shortcuts.isVisible());
+    }
+
+    private void showShortcuts(boolean show) {
+        if (show) setFly(false);
+        shortcuts.setVisible(show);
+        requestFocus();
     }
 
     /** Applies overlay visibility from the settings (called when they change). */
     private void applyViewSettings() {
         hud.setVisible(ws.settings().showHud);
-        hint.setVisible(ws.settings().showHints);
     }
 
     // ---- feedback -------------------------------------------------------------------------------------------
@@ -1376,23 +1385,5 @@ public final class ViewportPane extends StackPane {
         toastFade.stop();
         toast.setOpacity(1);
         toastHold.playFromStart();
-    }
-
-    private void updateHint() {
-        if (fly) {
-            String mode = switch (ws.toolProperty().get()) {
-                case BUILD -> "Building · left break · right place · middle pick · B stop building";
-                case SELECT -> "Selecting · left-click select · B build";
-                case VIEW -> "B build";
-            };
-            hint.setText("Flying    ·    WASD move · Space/Shift up/down · Ctrl sprint · wheel/1-9 hotbar · " + mode + " · C/Esc stop flying");
-            return;
-        }
-        String tool = switch (ws.toolProperty().get()) {
-            case VIEW -> "View · Left- or right-drag orbit";
-            case SELECT -> "Select · Click a block · Drag a marquee · Shift add · Ctrl remove · Delete removes blocks · Esc clears";
-            case BUILD -> "Build · Left-click break · Right-click place (hold to repeat) · Middle-click pick";
-        };
-        hint.setText(tool + "    ·    Right-drag orbit · Middle-drag pan · Middle-click pick · Wheel zoom · Ctrl+wheel move along hovered face · Shift/Ctrl+Shift+wheel move layer · Alt+wheel over a layer spins (top) or flips (side) · PgUp/PgDn slice · Ins single slice · C fly · F frame");
     }
 }

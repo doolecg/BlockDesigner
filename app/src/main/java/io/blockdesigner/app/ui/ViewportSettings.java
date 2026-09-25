@@ -27,18 +27,18 @@ final class ViewportSettings {
     private ViewportSettings() {
     }
 
-    static Popover popover(Settings s, Runnable changed) {
+    static Popover popover(Settings s, Runnable changed, Runnable showShortcuts) {
         Popover p = new Popover();
         p.setTitle("Viewport");
         p.setHeaderAlwaysVisible(true);
         p.setDetachable(false);
         p.setArrowLocation(Popover.ArrowLocation.TOP_RIGHT);
-        p.setContentNode(content(s, changed, p));
+        p.setContentNode(content(s, changed, showShortcuts, p));
         p.setOnHidden(e -> s.save());
         return p;
     }
 
-    private static Node content(Settings s, Runnable changed, Popover p) {
+    private static Node content(Settings s, Runnable changed, Runnable showShortcuts, Popover p) {
         GridPane g = new GridPane();
         g.setHgap(10);
         g.setVgap(4);
@@ -62,7 +62,6 @@ final class ViewportSettings {
         rows.check("Ground grid", () -> s.showGrid, v -> s.showGrid = v);
         rows.check("Layer outlines", () -> s.showOutlines, v -> s.showOutlines = v);
         rows.check("Block info", () -> s.showHud, v -> s.showHud = v);
-        rows.check("Hint bar", () -> s.showHints, v -> s.showHints = v);
 
         rows.section("Navigation");
         rows.slider("Orbit sensitivity", 0.2, 3, () -> s.orbitSensitivity, v -> s.orbitSensitivity = v, v -> String.format("%.2f×", v));
@@ -82,10 +81,15 @@ final class ViewportSettings {
         reset.setOnAction(e -> {
             s.resetViewport();
             changed.run();
-            p.setContentNode(content(s, changed, p));
+            p.setContentNode(content(s, changed, showShortcuts, p));
         });
-        HBox footer = new HBox(reset);
-        footer.setAlignment(Pos.CENTER_RIGHT);
+        Button keys = new Button("Keyboard shortcuts  (Alt+K)", new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.COMMAND));
+        keys.getStyleClass().add("flat");
+        keys.setOnAction(e -> showShortcuts.run());
+        javafx.scene.layout.Region gap = new javafx.scene.layout.Region();
+        HBox.setHgrow(gap, Priority.ALWAYS);
+        HBox footer = new HBox(keys, gap, reset);
+        footer.setAlignment(Pos.CENTER_LEFT);
 
         VBox box = new VBox(6, g, footer);
         box.getStyleClass().add("viewport-settings");

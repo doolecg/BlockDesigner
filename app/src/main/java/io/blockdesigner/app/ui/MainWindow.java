@@ -72,6 +72,9 @@ public final class MainWindow {
     private final Label statusRight = new Label();
     private McInstallLocator.Result scan;
     private final BorderPane rightPanel = new BorderPane();
+    private final javafx.scene.control.TabPane sideTabs = new javafx.scene.control.TabPane();
+    private final javafx.scene.control.Tab assistantTab = new javafx.scene.control.Tab("Assistant");
+    private final ToggleButton assistantToggle = new ToggleButton(null, new FontIcon(Feather.MESSAGE_SQUARE));
     private final BorderPane centerColumn = new BorderPane();
 
     public MainWindow(Stage stage, Workspace ws) {
@@ -154,9 +157,34 @@ public final class MainWindow {
         });
     }
 
-    /** Right-hand panel content (the assistant); set by the app once the AI module is wired. */
+    /** Right-hand panel: the assistant (set by the app once the AI module is wired) plus the Resource Tracker tab. */
     public void setRightPanel(javafx.scene.Node node) {
-        rightPanel.setCenter(node);
+        // The Assistant tab can be closed (the top-bar chat button reopens it); the Resource Tracker stays.
+        assistantTab.setContent(node);
+        assistantTab.setGraphic(new FontIcon(Feather.MESSAGE_SQUARE));
+        assistantTab.setOnClosed(e -> {
+            ws.settings().showAssistant = false;
+            assistantToggle.setSelected(false);
+        });
+        javafx.scene.control.Tab resources = new javafx.scene.control.Tab("Resource Tracker", new ResourceTrackerPanel());
+        resources.setGraphic(new FontIcon(Feather.PACKAGE));
+        resources.setClosable(false);
+        sideTabs.getTabs().setAll(resources);
+        sideTabs.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.SELECTED_TAB);
+        sideTabs.getStyleClass().add("side-tabs");
+        rightPanel.setCenter(sideTabs);
+        showAssistant(ws.settings().showAssistant);
+    }
+
+    private void showAssistant(boolean show) {
+        ws.settings().showAssistant = show;
+        assistantToggle.setSelected(show);
+        if (show) {
+            if (!sideTabs.getTabs().contains(assistantTab)) sideTabs.getTabs().addFirst(assistantTab);
+            sideTabs.getSelectionModel().select(assistantTab);
+        } else {
+            sideTabs.getTabs().remove(assistantTab);
+        }
     }
 
     /** Strip under the viewport (the iteration timeline). */
@@ -225,13 +253,16 @@ public final class MainWindow {
         undo.setDisable(true);
         redo.setDisable(true);
 
+        assistantToggle.getStyleClass().addAll("flat", "icon-toggle");
+        assistantToggle.setTooltip(new Tooltip("Show / hide the AI assistant tab"));
+        assistantToggle.setOnAction(e -> showAssistant(assistantToggle.isSelected()));
         Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark", () -> ws.darkProperty().set(!ws.darkProperty().get()));
         Button assets = LayersPanel.iconButton(Feather.SETTINGS, "Minecraft assets & mods", () -> startAssetLoading(true));
         assetBadge.getStyleClass().add("badge");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, theme, assetBadge, assets, imp, export);
+        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, assistantToggle, theme, assetBadge, assets, imp, export);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("top-bar");
         return bar;
@@ -560,6 +591,11 @@ public final class MainWindow {
 
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (scene.getFocusOwner() instanceof TextInputControl) return;
+            if (e.getCode() == KeyCode.K && e.isAltDown() && !e.isShortcutDown()) {
+                viewport.toggleShortcuts();
+                e.consume();
+                return;
+            }
             if (e.getCode() == KeyCode.C && e.isAltDown() && !e.isShortcutDown()) {
                 ws.clearHotbar();
                 viewport.showToast("Hotbar cleared");

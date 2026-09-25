@@ -22,6 +22,8 @@ public final class Settings {
     public List<String> extraMods = new ArrayList<>();
     public List<String> resourcePacks = new ArrayList<>();
     public boolean darkTheme = true;
+    /** Whether the Assistant tab is open in the right panel. */
+    public boolean showAssistant = true;
     public boolean showGrid = true;
     public List<String> recentFiles = new ArrayList<>();
     public String author = System.getProperty("user.name", "");
@@ -49,7 +51,6 @@ public final class Settings {
     public double zoomSpeed = 1;
     public boolean showOutlines = true;
     public boolean showHud = true;
-    public boolean showHints = true;
 
     /** Puts every viewport setting (view, overlays and controls) back to its default. */
     public void resetViewport() {
@@ -68,7 +69,6 @@ public final class Settings {
         zoomSpeed = d.zoomSpeed;
         showOutlines = d.showOutlines;
         showHud = d.showHud;
-        showHints = d.showHints;
     }
 
     // ---- AI assistant ----
