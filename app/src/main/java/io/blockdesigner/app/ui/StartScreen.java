@@ -66,16 +66,28 @@ final class StartScreen extends StackPane {
     }
 
     private void rebuild() {
-        Label title = new Label("BlockDesigner", new FontIcon(Feather.BOX));
+        Label title = new Label("BlockDesigner");
         title.getStyleClass().add("start-title");
         Label sub = new Label("Design Minecraft builds, then export them as .nbt, .litematic or .schem");
         sub.getStyleClass().add("start-sub");
+        // The app icon (the same art as the window, taskbar and .bdproj files), from the 256 px image for sharp HiDPI.
+        javafx.scene.image.ImageView logo = new javafx.scene.image.ImageView();
+        var url = StartScreen.class.getResource("/io/blockdesigner/app/icons/icon-256.png");
+        if (url != null) logo.setImage(new javafx.scene.image.Image(url.toExternalForm()));
+        logo.setFitWidth(52);
+        logo.setFitHeight(52);
+        logo.setSmooth(true);
+        logo.setPreserveRatio(true);
         Region sp = new Region();
         HBox.setHgrow(sp, Priority.ALWAYS);
         Button x = new Button(null, new FontIcon(Feather.X));
         x.getStyleClass().add("flat");
         x.setOnAction(e -> close());
-        HBox header = new HBox(10, new VBox(2, title, sub), sp, x);
+        VBox titles = new VBox(2, title, sub);
+        titles.setAlignment(Pos.CENTER_LEFT);
+        HBox brand = new HBox(12, logo, titles);
+        brand.setAlignment(Pos.CENTER_LEFT);
+        HBox header = new HBox(10, brand, sp, x);
         header.setAlignment(Pos.TOP_LEFT);
 
         // Left: start actions + recent projects

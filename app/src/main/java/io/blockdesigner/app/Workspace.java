@@ -41,8 +41,9 @@ public final class Workspace {
     private final ObservableList<BlockState> hotbar = FXCollections.observableArrayList();
     /** The held slot, or -1 when the selected block did not come from the hotbar. */
     private final javafx.beans.property.IntegerProperty hotbarSlot = new javafx.beans.property.SimpleIntegerProperty(-1);
-    /** Shuffle mode (R): each placed block is a random pick from the filled hotbar slots. */
+    /** Shuffle mode (Z): each placed block is a random pick from the filled hotbar slots. */
     private final BooleanProperty shuffle = new SimpleBooleanProperty();
+    private final BooleanProperty replace = new SimpleBooleanProperty();
     private final java.util.Random random = new java.util.Random();
     private ToolKind beforeBuild = ToolKind.SELECT;
     private final ObjectProperty<Layer> activeLayer = new SimpleObjectProperty<>();
@@ -147,6 +148,20 @@ public final class Workspace {
         hotbarSlot.set(i);
     }
 
+    /**
+     * Delete in Build mode: empties the held hotbar slot. As in Minecraft the slot stays selected with an empty hand,
+     * so nothing is placed until another block is chosen. Returns the removed block, or null if the slot was empty.
+     */
+    public BlockState clearHeldSlot() {
+        int i = hotbarSlot.get();
+        if (i < 0 || hotbar.get(i) == null) return null;
+        BlockState removed = hotbar.get(i);
+        hotbar.set(i, null);
+        selectedBlock.set(null);
+        hotbarSlot.set(i);
+        return removed;
+    }
+
     /** Minecraft's scroll-to-change-slot over the filled slots: {@code step} +1 moves right, -1 left, wrapping. */
     public void scrollHotbar(int step) {
         int start = hotbarSlot.get() < 0 ? (step > 0 ? -1 : 0) : hotbarSlot.get();
@@ -180,6 +195,11 @@ public final class Workspace {
 
     public BooleanProperty shuffleProperty() {
         return shuffle;
+    }
+
+    /** Build mode's Replace (R): right-click swaps the aimed block for the held one instead of placing next to it. */
+    public BooleanProperty replaceProperty() {
+        return replace;
     }
 
     /** The block to place next: a random filled hotbar slot in shuffle mode, otherwise the held block. */

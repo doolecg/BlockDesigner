@@ -183,6 +183,42 @@ class BlockPlacementTest {
     }
 
     @Test
+    void replaceKeepsTheOldBlocksFacingAndShape() {
+        add("minecraft:stone_brick_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]",
+                Map.of("facing", H4, "half", List.of("top", "bottom"), "shape", List.of("straight", "inner_left", "inner_right", "outer_left", "outer_right")));
+        add("minecraft:spruce_log[axis=y]", Map.of("axis", List.of("x", "y", "z")));
+        world.put(O, def("oak_stairs").with("facing", "east").with("half", "top"));
+        assertThat(BlockPlacement.replace(def("stone_brick_stairs"), O, w, blocks).get(O))
+                .isEqualTo(def("stone_brick_stairs").with("facing", "east").with("half", "top"));
+
+        world.put(O, def("oak_log").with("axis", "x"));
+        assertThat(BlockPlacement.replace(def("spruce_log"), O, w, blocks).get(O).get("axis")).isEqualTo("x");
+
+        // A wall torch replaced with a torch stays on its wall.
+        world.put(O, def("wall_torch").with("facing", "west"));
+        add("minecraft:soul_torch", Map.of());
+        add("minecraft:soul_wall_torch[facing=north]", Map.of("facing", H4));
+        assertThat(BlockPlacement.replace(def("soul_torch"), O, w, blocks).get(O)).isEqualTo(def("soul_wall_torch").with("facing", "west"));
+
+        // Nothing to replace in air; the same block is a no-op.
+        assertThat(BlockPlacement.replace(def("spruce_log"), O.add(5, 5, 5), w, blocks)).isEmpty();
+        world.put(O, def("spruce_log"));
+        assertThat(BlockPlacement.replace(def("spruce_log"), O, w, blocks)).isEmpty();
+    }
+
+    @Test
+    void replacingADoorSwapsBothHalves() {
+        add("minecraft:birch_door[facing=north,half=lower,hinge=left,open=false,powered=false]",
+                Map.of("facing", H4, "half", List.of("upper", "lower"), "hinge", List.of("left", "right")));
+        BlockState lower = def("oak_door").with("facing", "south").with("hinge", "right");
+        world.put(O, lower);
+        world.put(O.add(0, 1, 0), lower.with("half", "upper"));
+        Map<BlockPos, BlockState> r = BlockPlacement.replace(def("birch_door"), O.add(0, 1, 0), w, blocks);
+        assertThat(r.get(O.add(0, 1, 0))).isEqualTo(def("birch_door").with("facing", "south").with("hinge", "right").with("half", "upper"));
+        assertThat(r.get(O)).isEqualTo(def("birch_door").with("facing", "south").with("hinge", "right"));
+    }
+
+    @Test
     void occupiedCellsAreLeftAlone() {
         world.put(O, BlockState.of("stone"));
         world.put(O.add(0, 1, 0), BlockState.of("dirt"));

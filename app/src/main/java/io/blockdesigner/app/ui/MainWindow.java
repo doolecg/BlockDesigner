@@ -696,13 +696,20 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
-            if (e.getCode() == KeyCode.R && !viewport.isPlacing()) {
-                // R rotates a placement ghost (handled by the viewport); otherwise it toggles shuffle mode.
+            if (e.getCode() == KeyCode.Z) {
                 ws.shuffleProperty().set(!ws.shuffleProperty().get());
                 long filled = ws.hotbar().stream().filter(java.util.Objects::nonNull).count();
                 viewport.showToast(!ws.shuffleProperty().get() ? "Shuffle off"
                         : filled == 0 ? "Shuffle on · add blocks to the hotbar (middle-click or drag) to mix them"
                         : "Shuffle on · placing random blocks from " + filled + " hotbar slot" + (filled == 1 ? "" : "s"));
+                e.consume();
+                return;
+            }
+            if (e.getCode() == KeyCode.R && !viewport.isPlacing()) {
+                // R rotates a placement ghost (handled by the viewport); otherwise it toggles Replace mode.
+                boolean on = !ws.replaceProperty().get();
+                ws.replaceProperty().set(on);
+                viewport.showToast(on ? "Replace on · right-click swaps the aimed block for the held one · R to leave" : "Replace off · right-click places");
                 e.consume();
                 return;
             }

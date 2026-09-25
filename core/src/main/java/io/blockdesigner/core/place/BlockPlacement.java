@@ -181,6 +181,55 @@ public final class BlockPlacement {
     private static final Dir[] HORIZONTAL = {Dir.NORTH, Dir.EAST, Dir.SOUTH, Dir.WEST};
 
     /**
+     * Build mode's Replace: swaps the block at {@code pos} for {@code held}, keeping the old block's facing, half,
+     * axis, shape and so on wherever the new block has them (stairs stay stairs the same way round, a wall torch stays
+     * on its wall). Both halves of doors, beds and tall plants are swapped, and neighbours reconnect. Empty when there
+     * is nothing to replace or nothing would change.
+     */
+    public static Map<BlockPos, BlockState> replace(BlockState held, BlockPos pos, World w, Blocks blocks) {
+        Map<BlockPos, BlockState> out = new LinkedHashMap<>();
+        BlockState old = w.get(pos);
+        if (held == null || held.isAir() || old.isAir()) return out;
+        BlockState st = replacement(old, held, blocks);
+        if (st == old) return out;
+        out.put(pos, st);
+
+        BlockPos partner = null;
+        if (("lower".equals(old.get("half")) || "upper".equals(old.get("half"))) && st.has("half")) {
+            partner = pos.add(0, "lower".equals(old.get("half")) ? 1 : -1, 0);
+        } else if (old.has("part") && Dir.parse(old.get("facing")) != null && isBed(old) && st.has("part")) {
+            Dir f = Dir.parse(old.get("facing"));
+            partner = ("foot".equals(old.get("part")) ? f : f.opposite()).offset(pos);
+        }
+        if (partner != null) {
+            BlockState other = w.get(partner);
+            if (other.name().equals(old.name())) out.put(partner, replacement(other, held, blocks));
+        }
+        out.putAll(reconnect(List.copyOf(out.keySet()), p -> out.containsKey(p) ? out.get(p) : w.get(p)));
+        return out;
+    }
+
+    /** {@code held}, or its wall form when {@code old} was on a wall, with {@code old}'s shared property values. */
+    static BlockState replacement(BlockState old, BlockState held, Blocks blocks) {
+        BlockState base = standing(held, blocks);
+        boolean oldOnWall = standing(old, blocks) != old || old.path().contains("_wall_") || old.path().endsWith("wall_torch");
+        String wall = wallVariant(base.name());
+        Info info;
+        if (oldOnWall && wall != null && blocks.info(wall) != null) {
+            info = blocks.info(wall);
+            base = carry(base, info);
+        } else {
+            info = blocks.info(base.name());
+        }
+        Map<String, List<String>> allowed = info != null ? info.properties() : null;
+        BlockState out = base;
+        for (var e : old.properties().entrySet()) {
+            if (out.has(e.getKey())) out = set(out, allowed, e.getKey(), e.getValue());
+        }
+        return out;
+    }
+
+    /**
      * Minecraft's shape updates after blocks at {@code changed} were placed or removed: stairs pick their corner
      * shape, and fences, walls, panes and iron bars connect only to their own kind, fence gates side-on and solid
      * blocks (never to air). Covers the changed blocks, their horizontal neighbours and the block below (a wall post).

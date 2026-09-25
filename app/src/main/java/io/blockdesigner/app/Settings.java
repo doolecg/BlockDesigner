@@ -39,6 +39,13 @@ public final class Settings {
     public int breakDelayMs = 250;
     /** Creative flight speed in blocks per second (Minecraft: ~10.9, sprinting ~21.6). */
     public double flySpeed = 10.9;
+    /** Flight glides to a stop (and eases up to speed) instead of stopping dead. */
+    public boolean flyMomentum = true;
+    /** Place / break thuds and their volume (0..1). */
+    public boolean blockSounds = true;
+    public double soundVolume = 0.6;
+    /** Chips fly out of broken blocks. */
+    public boolean breakParticles = true;
     /** Hotbar block states (nine slots, "" for empty). */
     public List<String> hotbar = new ArrayList<>();
 
@@ -64,6 +71,10 @@ public final class Settings {
         placeDelayMs = d.placeDelayMs;
         breakDelayMs = d.breakDelayMs;
         flySpeed = d.flySpeed;
+        flyMomentum = d.flyMomentum;
+        blockSounds = d.blockSounds;
+        soundVolume = d.soundVolume;
+        breakParticles = d.breakParticles;
         fovDeg = d.fovDeg;
         clipEnd = d.clipEnd;
         fog = d.fog;

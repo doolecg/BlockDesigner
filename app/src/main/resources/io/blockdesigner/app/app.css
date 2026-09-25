@@ -320,12 +320,33 @@
     -fx-background-color: -bd-accent-soft;
 }
 
-.hotbar-shuffle {
-    -fx-padding: 0 6 0 4;
+.hotbar-toggle {
+    -fx-padding: 2 5 0 5;
+    -fx-graphic-text-gap: 1;
+    -fx-font-size: 9px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-cursor: hand;
+    -fx-opacity: 0.5;
+    -fx-min-width: 44;
+    -fx-alignment: center;
 }
 
-.hotbar-shuffle .ikonli-font-icon {
-    -fx-icon-size: 18;
+.hotbar-toggle:hover {
+    -fx-opacity: 0.8;
+}
+
+.hotbar-toggle:on {
+    -fx-opacity: 1;
+    -fx-text-fill: -bd-accent;
+    -fx-font-weight: bold;
+}
+
+.hotbar-toggle .ikonli-font-icon {
+    -fx-icon-size: 17;
+    -fx-icon-color: -color-fg-default;
+}
+
+.hotbar-toggle:on .ikonli-font-icon {
     -fx-icon-color: -bd-accent;
 }
 

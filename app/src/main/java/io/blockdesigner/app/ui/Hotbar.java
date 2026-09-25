@@ -24,7 +24,10 @@ final class Hotbar extends HBox {
     private static final PseudoClass SELECTED = PseudoClass.getPseudoClass("selected");
     private static final PseudoClass DROP = PseudoClass.getPseudoClass("drop-target");
     private static final PseudoClass SHUFFLE = PseudoClass.getPseudoClass("shuffle");
-    private final Label shuffleBadge = new Label(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.SHUFFLE));
+    private static final PseudoClass ON = PseudoClass.getPseudoClass("on");
+    // Mode toggles at the left of the bar: always shown, dim when off and lit when on, with a small label underneath.
+    private final Label replaceBadge = toggle("Replace (R)", org.kordamp.ikonli.feather.Feather.REFRESH_CW);
+    private final Label shuffleBadge = toggle("Shuffle (Z)", org.kordamp.ikonli.feather.Feather.SHUFFLE);
 
     private final Workspace ws;
     private final StackPane[] slots = new StackPane[Workspace.HOTBAR_SIZE];
@@ -53,14 +56,26 @@ final class Hotbar extends HBox {
             slots[i] = p;
             getChildren().add(p);
         }
-        shuffleBadge.getStyleClass().add("hotbar-shuffle");
-        shuffleBadge.setTooltip(new Tooltip("Shuffle on (R): placing picks a random block from the hotbar"));
+        shuffleBadge.setTooltip(new Tooltip("Shuffle (Z): placing picks a random block from the hotbar"));
+        shuffleBadge.setOnMouseClicked(e -> ws.shuffleProperty().set(!ws.shuffleProperty().get()));
         getChildren().addFirst(shuffleBadge);
+        replaceBadge.setTooltip(new Tooltip("Replace mode (R): right-click swaps the block you aim at for the held block, "
+                + "keeping its facing and shape. Hold and drag to paint."));
+        replaceBadge.setOnMouseClicked(e -> ws.replaceProperty().set(!ws.replaceProperty().get()));
+        getChildren().addFirst(replaceBadge);
         ws.shuffleProperty().addListener((o, a, b) -> refresh());
+        ws.replaceProperty().addListener((o, a, b) -> refresh());
         ws.hotbar().addListener((javafx.collections.ListChangeListener<BlockState>) c -> refresh());
         ws.hotbarSlotProperty().addListener((o, a, b) -> refresh());
         ws.assetsProperty().addListener((o, a, b) -> refresh());
         refresh();
+    }
+
+    private static Label toggle(String text, org.kordamp.ikonli.feather.Feather icon) {
+        Label l = new Label(text, new org.kordamp.ikonli.javafx.FontIcon(icon));
+        l.setContentDisplay(javafx.scene.control.ContentDisplay.TOP);
+        l.getStyleClass().add("hotbar-toggle");
+        return l;
     }
 
     private static void accept(DragEvent e, StackPane p) {
@@ -85,8 +100,8 @@ final class Hotbar extends HBox {
         BlockAssets assets = ws.assets();
         int selected = ws.hotbarSlotProperty().get();
         boolean shuffle = ws.shuffleProperty().get();
-        shuffleBadge.setVisible(shuffle);
-        shuffleBadge.setManaged(shuffle);
+        shuffleBadge.pseudoClassStateChanged(ON, shuffle);
+        replaceBadge.pseudoClassStateChanged(ON, ws.replaceProperty().get());
         for (int i = 0; i < slots.length; i++) {
             StackPane p = slots[i];
             p.getChildren().clear();

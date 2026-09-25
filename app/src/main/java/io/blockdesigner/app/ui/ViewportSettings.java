@@ -66,11 +66,15 @@ final class ViewportSettings {
         rows.section("Flying (C)");
         rows.slider("Fly speed", 2, 80, () -> s.flySpeed, v -> s.flySpeed = v, v -> String.format("%.1f b/s", v));
         rows.slider("Look sensitivity", 0.2, 3, () -> s.lookSensitivity, v -> s.lookSensitivity = v, v -> String.format("%.2f×", v));
+        rows.check("Momentum (glide to a stop)", () -> s.flyMomentum, v -> s.flyMomentum = v);
 
         rows.section("Editing");
         rows.slider("Fast nudge step (Tab)", 2, 64, () -> s.fastNudgeStep, v -> s.fastNudgeStep = (int) Math.round(v), v -> String.format("%.0f", v));
         rows.slider("Place repeat", 50, 1000, () -> s.placeDelayMs, v -> s.placeDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
         rows.slider("Break repeat", 50, 1000, () -> s.breakDelayMs, v -> s.breakDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
+        rows.check("Place / break sounds", () -> s.blockSounds, v -> s.blockSounds = v);
+        rows.slider("Sound volume", 0, 1, () -> s.soundVolume, v -> s.soundVolume = v, v -> String.format("%.0f%%", v * 100));
+        rows.check("Break particles", () -> s.breakParticles, v -> s.breakParticles = v);
 
         Button reset = new Button("Reset to defaults");
         reset.getStyleClass().add("flat");

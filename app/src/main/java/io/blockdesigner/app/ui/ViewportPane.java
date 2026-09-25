@@ -143,6 +143,11 @@ public final class ViewportPane extends StackPane {
 
     // Move / Rotate tools: the gizmo overlay, the handle under the mouse and the drag in progress
     private final Gizmo gizmo = new Gizmo();
+    // Place / break feel: thuds, break chips, and flight velocity for momentum
+    private final BlockSounds sounds = new BlockSounds();
+    private final BreakParticles particles = new BreakParticles();
+    private boolean particlesDrawn;
+    private final Vector3f flyVel = new Vector3f();
     private Gizmo.Handle gizmoHot;
     private GizmoDrag gizmoDrag;
 
@@ -165,7 +170,7 @@ public final class ViewportPane extends StackPane {
         setFocusTraversable(true);
         view.setPreserveRatio(false);
         view.setManaged(false);
-        getChildren().addAll(view, gizmo);
+        getChildren().addAll(view, particles, gizmo);
 
         toast.getStyleClass().add("viewport-toast");
         toast.setOpacity(0);
@@ -232,7 +237,8 @@ public final class ViewportPane extends StackPane {
             updateHotbarVisibility();
             requestRedraw();
             showToast(switch (b) {
-                case BUILD -> "Build mode · left break · right place · middle pick · B to leave";
+                case BUILD -> ws.replaceProperty().get() ? "Build mode · Replace · left break · right replace · middle pick · R places again"
+                        : "Build mode · left break · right place · middle pick · B to leave";
                 case SELECT -> "Select mode";
                 case VIEW -> "View mode";
                 case MOVE -> "Move · drag an arrow, square or the centre · G";
@@ -314,6 +320,10 @@ public final class ViewportPane extends StackPane {
         lastPulse = nowNs;
         flyStep(dt);
         viewAnimStep();
+        if (particles.active() || particlesDrawn) {
+            particles.step(dt, camera, getWidth(), getHeight());
+            particlesDrawn = particles.active();
+        }
         holdStep();
         if (sceneRenderer != null) sceneRenderer.sync();
         double scale = getScene() != null && getScene().getWindow() != null ? getScene().getWindow().getOutputScaleX() : 1;
@@ -383,7 +393,7 @@ public final class ViewportPane extends StackPane {
             boolean build = ws.toolProperty().get() == ToolKind.BUILD;
             if (hover != null) {
                 BlockPos p = hover.world();
-                Overlays.block(lines, p.x(), p.y(), p.z(), 0xE6FFFFFF);
+                Overlays.block(lines, p.x(), p.y(), p.z(), build && ws.replaceProperty().get() ? 0xFFFFC85A : 0xE6FFFFFF);
             } else if (hoverGround != null && build) {
                 Overlays.block(lines, hoverGround.x(), hoverGround.y(), hoverGround.z(), 0xFFFFC85A);
             }
@@ -882,8 +892,16 @@ public final class ViewportPane extends StackPane {
                 else ws.toolProperty().set(ToolKind.SELECT);
             }
             case DELETE, BACK_SPACE -> {
-                if (blockSel.isEmpty()) return;
-                deleteSelectedBlocks();
+                if (ws.toolProperty().get() == ToolKind.BUILD) {
+                    // Build mode: Delete empties the held hotbar slot.
+                    BlockState removed = ws.clearHeldSlot();
+                    showToast(removed == null ? "That hotbar slot is already empty"
+                            : "Removed " + BlockInfoHud.pretty(removed.path()) + " from the hotbar");
+                } else if (!blockSel.isEmpty()) {
+                    deleteSelectedBlocks();
+                } else {
+                    return;
+                }
             }
             case R -> {
                 if (!placing.isEmpty()) rotatePlacement(1);
@@ -967,7 +985,10 @@ public final class ViewportPane extends StackPane {
     }
 
     private void flyStep(double dt) {
-        if (!fly || flyKeys.isEmpty()) return;
+        if (!fly) {
+            flyVel.zero();
+            return;
+        }
         // Forward follows the look direction, pitch included (spectator / UE-style); strafing stays level.
         Vector3f flat = camera.flatForward(), f = camera.forward(), r = new Vector3f(-flat.z, 0, flat.x);
         Vector3f move = new Vector3f();
@@ -978,10 +999,18 @@ public final class ViewportPane extends StackPane {
         if (move.lengthSquared() > 0) move.normalize();
         if (flyKeys.contains(KeyCode.SPACE)) move.y += 1;
         if (flyKeys.contains(KeyCode.SHIFT)) move.y -= 1;
-        if (move.lengthSquared() == 0) return;
         double speed = ws.settings().flySpeed * (flyKeys.contains(KeyCode.CONTROL) ? 2 : 1);
-        move.mul((float) (speed * dt));
-        camera.translate(move.x, move.y, move.z);
+        Vector3f want = move.mul((float) speed);
+        if (ws.settings().flyMomentum) {
+            // Eases up to speed quickly and glides to a stop in about half a second, a lighter version of Minecraft's.
+            boolean pushing = want.lengthSquared() > 0;
+            flyVel.lerp(want, (float) (1 - Math.exp(-(pushing ? 11 : 6) * dt)));
+            if (!pushing && flyVel.lengthSquared() < 0.01f) flyVel.zero();
+        } else {
+            flyVel.set(want);
+        }
+        if (flyVel.lengthSquared() == 0) return;
+        camera.translate(flyVel.x * (float) dt, flyVel.y * (float) dt, flyVel.z * (float) dt);
         updateHover(aimX(), aimY());
         requestRedraw();
     }
@@ -1026,6 +1055,16 @@ public final class ViewportPane extends StackPane {
             case BREAK -> {
                 if (hover == null) return;
                 Layer l = hover.layer();
+                BlockState broken = l.structure().get(hover.local());
+                if (broken.isAir()) return;
+                BlockPos bw = hover.world();
+                if (ws.settings().breakParticles) {
+                    BlockAssets assets = ws.assets();
+                    BlockState shown = BlockTransformer.defaults().apply(broken, l.transform());
+                    particles.burst(bw.x(), bw.y(), bw.z(), assets == null ? null : BlockIcons.icon(assets, shown));
+                    particlesDrawn = true;
+                }
+                if (ws.settings().blockSounds) sounds.breakBlock(ws.settings().soundVolume);
                 try (SceneEditor.BlockSession s = ws.editor().edit(l, "Break block", key)) {
                     s.set(hover.local().x(), hover.local().y(), hover.local().z(), BlockState.AIR);
                     // Neighbouring fences, walls, panes and stairs let go of the broken block.
@@ -1041,6 +1080,15 @@ public final class ViewportPane extends StackPane {
                 }
             }
             case PLACE -> {
+                BlockState held = ws.blockToPlace();
+                if (held == null) {
+                    showToast("Empty hand · pick a block (middle-click), choose a hotbar slot or click one in the palette");
+                    return;
+                }
+                if (ws.replaceProperty().get()) {
+                    replaceAimed(key, held);
+                    break;
+                }
                 BlockPos world = hover != null ? hover.adjacentWorld() : hoverGround;
                 if (world == null) return;
                 Layer l = ws.activeLayerProperty().get();
@@ -1052,7 +1100,7 @@ public final class ViewportPane extends StackPane {
                     showToast("Active layer is locked");
                     return;
                 }
-                java.util.Map<BlockPos, BlockState> edits = placementFor(l, world);
+                java.util.Map<BlockPos, BlockState> edits = placementFor(l, world, held);
                 if (edits.isEmpty()) return;
                 if (fly && edits.keySet().stream().anyMatch(this::insideCamera)) return;
                 try (SceneEditor.BlockSession s = ws.editor().edit(l, "Place block", key)) {
@@ -1061,16 +1109,41 @@ public final class ViewportPane extends StackPane {
                         s.set(local.x(), local.y(), local.z(), BlockTransformer.defaults().apply(en.getValue(), l.transform().inverse()));
                     }
                 }
+                if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
             }
         }
         updateHover(aimX(), aimY());
+    }
+
+    /** Replace mode: swaps the aimed block (in its own layer) for the held one, keeping its facing and shape. */
+    private void replaceAimed(String key, BlockState held) {
+        if (hover == null) return;
+        Layer l = hover.layer();
+        if (l.locked()) {
+            showToast("Layer is locked");
+            return;
+        }
+        BlockAssets assets = ws.assets();
+        BlockPlacement.Blocks blocks = assets == null ? BlockPlacement.Blocks.NONE
+                : id -> assets.registry().get(id).map(i -> new BlockPlacement.Info(i.defaultState(), i.properties())).orElse(null);
+        Transform t = l.transform();
+        var edits = BlockPlacement.replace(held, hover.world(),
+                p -> BlockTransformer.defaults().apply(l.structure().get(l.toLocal(p)), t), blocks);
+        if (edits.isEmpty()) return;
+        try (SceneEditor.BlockSession s = ws.editor().edit(l, "Replace block", key)) {
+            for (var en : edits.entrySet()) {
+                BlockPos local = l.toLocal(en.getKey());
+                s.set(local.x(), local.y(), local.z(), BlockTransformer.defaults().apply(en.getValue(), t.inverse()));
+            }
+        }
+        if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
     }
 
     /**
      * The world blocks to set for placing the held block at {@code world} in layer {@code l}, oriented the way
      * Minecraft would from the aimed face, the point on it and the look direction (see {@link BlockPlacement}).
      */
-    private java.util.Map<BlockPos, BlockState> placementFor(Layer l, BlockPos world) {
+    private java.util.Map<BlockPos, BlockState> placementFor(Layer l, BlockPos world, BlockState held) {
         Vector3f[] r = ray(aimX(), aimY());
         Vector3f dir = new Vector3f(r[1]).normalize();
         BlockPlacement.Context ctx;
@@ -1086,7 +1159,7 @@ public final class ViewportPane extends StackPane {
         BlockPlacement.Blocks blocks = assets == null ? BlockPlacement.Blocks.NONE
                 : id -> assets.registry().get(id).map(i -> new BlockPlacement.Info(i.defaultState(), i.properties())).orElse(null);
         Transform t = l.transform();
-        return BlockPlacement.place(ws.blockToPlace(), ctx,
+        return BlockPlacement.place(held, ctx,
                 p -> BlockTransformer.defaults().apply(l.structure().get(l.toLocal(p)), t), blocks);
     }
 
