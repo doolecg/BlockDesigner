@@ -71,6 +71,7 @@ public final class ProjectFile {
                 n.put("locked", l.locked());
                 n.put("ghost", l.ghost());
                 n.put("color", String.format("#%06X", l.color() & 0xFFFFFF));
+                if (l.source() != null) n.put("source", l.source());
                 String entry = "layers/" + l.id() + ".litematic";
                 n.put("file", entry);
 
@@ -136,6 +137,7 @@ public final class ProjectFile {
             l.setVisible(n.path("visible").asBoolean(true));
             l.setLocked(n.path("locked").asBoolean(false));
             l.setGhost(n.path("ghost").asBoolean(false));
+            l.setSource(n.path("source").asText(null));
             String color = n.path("color").asText("#7C9CFF");
             try {
                 l.setColor(Integer.parseInt(color.replace("#", ""), 16));

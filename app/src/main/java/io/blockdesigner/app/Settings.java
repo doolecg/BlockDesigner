@@ -22,10 +22,12 @@ public final class Settings {
     public List<String> extraMods = new ArrayList<>();
     public List<String> resourcePacks = new ArrayList<>();
     public boolean darkTheme = true;
+    /** Colour theme (an AppTheme name: CLAUDE, BLUE, GREEN, RED, ORANGE, ZEN). */
+    public String theme = "BLUE";
+    /** DARK, LIGHT or SYSTEM (follow Windows); null in settings saved before themes, where darkTheme decides. */
+    public String themeMode;
     /** Show the start screen (recent projects, new, jar, download sites) when the app opens. */
     public boolean showStartScreen = true;
-    /** Whether the Assistant tab is open in the right panel. */
-    public boolean showAssistant = true;
     /** Whether the Resource Tracker tab is open in the right panel. */
     public boolean showResources = true;
     public boolean showGrid = true;
@@ -39,6 +41,14 @@ public final class Settings {
     public int breakDelayMs = 250;
     /** Creative flight speed in blocks per second (Minecraft: ~10.9, sprinting ~21.6). */
     public double flySpeed = 10.9;
+    /** Paint brush / eraser size (1 = one block, n = a (2n-1)-block wide shape) and shape (cube, else sphere). */
+    public int brushSize = 2;
+    public boolean brushCube;
+    /** Brush mode (a Sculpt.Mode name) and strength 1–5. */
+    public String brushMode = "DRAW";
+    public int brushStrength = 2;
+    /** Brush dabs per second while painting (the path between dabs is still filled in). */
+    public double brushRate = 8;
     /** Flight glides to a stop (and eases up to speed) instead of stopping dead. */
     public boolean flyMomentum = true;
     /** Place / break thuds and their volume (0..1). */
@@ -48,6 +58,31 @@ public final class Settings {
     public boolean breakParticles = true;
     /** Hotbar block states (nine slots, "" for empty). */
     public List<String> hotbar = new ArrayList<>();
+    /** Build-mode shape (a ShapeTool.Shape name) placed by right-dragging; SINGLE places single blocks. */
+    public String buildShape = "SINGLE";
+    /** Build-mode symmetry: on/off, mirror planes, radial copies, centre (in half blocks), turn blocks to match, show planes. */
+    public boolean symOn;
+    public boolean symX = true, symY, symZ;
+    public int symRadial = 1;
+    public int[] symCenter = {1, 129, 1};
+    public boolean symFlip = true;
+    public boolean symShowPlanes = true;
+    /** Ids of plugins the user switched off in the Plugins window. */
+    public List<String> disabledPlugins = new ArrayList<>();
+
+    // ---- Export window (remembered between exports) ----
+    /** Card chosen last: a format id, "datapack", or "plugin:<plugin>/<exporter>". */
+    public String exportChoice = "litematica";
+    /** Last folder written to, per card. */
+    public java.util.Map<String, String> exportFolders = new java.util.LinkedHashMap<>();
+    public boolean exportIncludeAir = true;
+    public int exportSpongeVersion = 3;
+    /** Which layers: ACTIVE, SELECTED, VISIBLE or EACH. */
+    public String exportSource = "VISIBLE";
+    /** Loot tables made in the data pack window, offered for every pack. */
+    public List<io.blockdesigner.worldgen.LootTables.CustomTable> lootTables = new ArrayList<>();
+    /** Worldgen presets saved in the data pack window: name, then setting to value. */
+    public java.util.Map<String, java.util.Map<String, String>> worldgenPresets = new java.util.LinkedHashMap<>();
 
     // ---- Viewport (the sliders popover over the 3D view) ----
     /** Vertical field of view in degrees. */
@@ -72,6 +107,7 @@ public final class Settings {
         breakDelayMs = d.breakDelayMs;
         flySpeed = d.flySpeed;
         flyMomentum = d.flyMomentum;
+        brushRate = d.brushRate;
         blockSounds = d.blockSounds;
         soundVolume = d.soundVolume;
         breakParticles = d.breakParticles;
@@ -85,19 +121,6 @@ public final class Settings {
         showOutlines = d.showOutlines;
         showHud = d.showHud;
     }
-
-    // ---- AI assistant ----
-    public String aiProvider = "anthropic";
-    public String aiModel = "claude-opus-5";
-    public String aiEffort = "high";
-    /** Anthropic API key, encrypted for the current Windows user (DPAPI), base64. */
-    public String anthropicKeyProtected;
-    /** Opt in to Anthropic's server-side refusal fallback. */
-    public boolean aiRefusalFallback = true;
-    public String openAiName = "OpenAI-compatible";
-    public String openAiBaseUrl = "http://localhost:11434/v1";
-    public String openAiKeyProtected;
-    public String openAiModels = "";
 
     /**
      * Where settings live: {@code %APPDATA%/BlockDesigner}, or the folder named by {@code -Dblockdesigner.dataDir}

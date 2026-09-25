@@ -10,8 +10,8 @@ javafx {
 
 dependencies {
     implementation(project(":render"))
-    implementation(project(":ai"))
     implementation(project(":worldgen"))
+    implementation(project(":plugin-api"))
     implementation(libs.jna.platform)
     implementation(libs.atlantafx)
     implementation(libs.ikonli.javafx)
@@ -39,14 +39,14 @@ application {
 // ./gradlew :app:installer  -> dist/BlockDesigner-<v>.exe setup (Start menu + desktop shortcut, .bdproj association).
 //                              Needs the WiX Toolset: unzip WiX 3.14 binaries into tools/wix3, or have WiX on PATH.
 
-val packageVersion = "0.2.0"
+val packageVersion = "0.3.0"
 val jdkBin = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(26) }
     .map { it.metadata.installationPath.dir("bin") }
 val jpackageExe = jdkBin.map { it.file("jpackage.exe").asFile.absolutePath }
 val distDir = rootProject.layout.projectDirectory.dir("dist")
 val imagesDir = layout.buildDirectory.dir("jpackage")
 val runtimeModules = listOf(
-    "java.base", "java.desktop", "java.logging", "java.management", "java.naming", "java.net.http", "java.prefs",
+    "java.base", "java.desktop", "java.logging", "java.management", "java.naming", "java.prefs",
     "java.scripting", "java.sql", "java.xml", "java.xml.crypto", "jdk.unsupported", "jdk.unsupported.desktop",
     "jdk.zipfs", "jdk.crypto.ec", "jdk.crypto.mscapi", "jdk.charsets", "jdk.localedata", "jdk.accessibility",
 ).joinToString(",")
@@ -109,4 +109,10 @@ tasks.register<Exec>("installer") {
         // Fixed so newer installers upgrade older ones in place.
         "--win-upgrade-uuid", "3f0f6a4e-5b1c-4f3e-9d7a-2b8e6c1d4a90",
     )
+}
+
+// PluginManagerTest loads the example plugin's jar.
+tasks.named<Test>("test") {
+    dependsOn(":examples:hello-plugin:jar")
+    systemProperty("blockdesigner.examplePluginDir", rootProject.file("examples/hello-plugin/build/libs").absolutePath)
 }

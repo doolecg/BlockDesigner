@@ -110,6 +110,15 @@ class BlockPlacementTest {
     }
 
     @Test
+    void headsFaceThePlayerLikeSigns() {
+        world.put(O, BlockState.of("stone"));
+        // Looking north: a sign's rotation 0 faces south (back at you); a head's model faces south at rotation 8.
+        BlockState skull = BlockState.parse("minecraft:skeleton_skull[powered=false,rotation=0]");
+        assertThat(click(skull, O, Dir.UP, 0, 0, -0.3f, -1).get(O.add(0, 1, 0)).get("rotation")).isEqualTo("8");
+        assertThat(click(def("oak_sign"), O, Dir.UP, 0, 0, -0.3f, -1).get(O.add(0, 1, 0)).get("rotation")).isEqualTo("0");
+    }
+
+    @Test
     void doorsAndBedsPlaceBothHalves() {
         world.put(O, BlockState.of("stone"));
         Map<BlockPos, BlockState> door = click(def("oak_door"), O, Dir.UP, 0, 0, -0.5f, -1);

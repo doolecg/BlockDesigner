@@ -7,7 +7,6 @@ joml = "1.10.9"
 javafx = "26.0.2"
 atlantafx = "2.1.0"
 ikonli = "12.4.0"
-anthropic = "2.65.0"
 jna = "5.19.1"
 
 [libraries]
@@ -24,7 +23,6 @@ joml = { module = "org.joml:joml", version.ref = "joml" }
 atlantafx = { module = "io.github.mkpaz:atlantafx-base", version.ref = "atlantafx" }
 ikonli-javafx = { module = "org.kordamp.ikonli:ikonli-javafx", version.ref = "ikonli" }
 ikonli-feather = { module = "org.kordamp.ikonli:ikonli-feather-pack", version.ref = "ikonli" }
-anthropic = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 
 [plugins]

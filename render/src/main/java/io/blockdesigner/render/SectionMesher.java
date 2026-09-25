@@ -21,19 +21,60 @@ public final class SectionMesher {
         this.assets = assets;
     }
 
+    /**
+     * Per-section lookup tables: each padded cell's baked model and whether it is a full opaque cube. Built once per
+     * section so the culling and AO inner loops are plain array reads rather than hash lookups per face and vertex.
+     */
+    private static final class Cells {
+        final BlockState[] states;
+        final BakedModel[] models = new BakedModel[SectionSnapshot.PADDED * SectionSnapshot.PADDED * SectionSnapshot.PADDED];
+        final boolean[] full = new boolean[models.length];
+
+        Cells(SectionSnapshot snap, BlockAssets assets) {
+            states = snap.states();
+            java.util.IdentityHashMap<BlockState, BakedModel> seen = new java.util.IdentityHashMap<>();
+            BlockState last = null;
+            BakedModel lastModel = null;
+            for (int i = 0; i < states.length; i++) {
+                BlockState s = states[i];
+                if (s.isAir()) continue;
+                BakedModel m;
+                if (s == last) {
+                    m = lastModel;
+                } else {
+                    m = seen.get(s);
+                    if (m == null) {
+                        m = assets.model(s);
+                        seen.put(s, m);
+                    }
+                    last = s;
+                    lastModel = m;
+                }
+                models[i] = m;
+                full[i] = m.isFullCube();
+            }
+        }
+    }
+
     public MeshData mesh(SectionSnapshot snap) {
         MeshData out = new MeshData();
         if (snap.empty) return out;
+        Cells cells = new Cells(snap, assets);
         int ox = snap.sx * SectionSnapshot.SIZE, oy = snap.sy * SectionSnapshot.SIZE, oz = snap.sz * SectionSnapshot.SIZE;
         for (int y = 0; y < SectionSnapshot.SIZE; y++) {
             for (int z = 0; z < SectionSnapshot.SIZE; z++) {
                 for (int x = 0; x < SectionSnapshot.SIZE; x++) {
-                    BlockState state = snap.get(x, y, z);
-                    if (state.isAir()) continue;
-                    BakedModel model = assets.model(state);
+                    int c = SectionSnapshot.cell(x, y, z);
+                    BakedModel model = cells.models[c];
+                    if (model == null) continue;
+                    // A full cube buried on all six sides can't show a single face.
+                    if (cells.full[c] && buried(cells, c)) continue;
+                    BlockState state = cells.states[c];
+                    var extra = snap.data(x, y, z);
+                    if (extra != null) model = assets.bannerModel(state, extra);
                     for (BakedQuad q : model.quads()) {
-                        if (q.cull() != null && culled(snap, state, model, q, x, y, z)) continue;
-                        emit(out.layers[q.layer().ordinal()], snap, model, q, x, y, z, ox, oy, oz);
+                        if (q.cull() != null && culled(cells, c, state, model, q)) continue;
+                        emit(out.layers[q.layer().ordinal()], cells, model, q, x, y, z, ox, oy, oz);
                     }
                 }
             }
@@ -41,22 +82,32 @@ public final class SectionMesher {
         return out;
     }
 
-    private boolean culled(SectionSnapshot snap, BlockState self, BakedModel selfModel, BakedQuad q, int x, int y, int z) {
-        Dir c = q.cull();
-        BlockState n = snap.get(x + c.dx, y + c.dy, z + c.dz);
-        if (n.isAir()) return false;
-        BakedModel nm = assets.model(n);
-        if (nm.isOpaque(c.opposite())) return true;
+    private static final int DX = 1, DY = SectionSnapshot.PADDED * SectionSnapshot.PADDED, DZ = SectionSnapshot.PADDED;
+
+    private static int step(Dir d) {
+        return d.dx * DX + d.dy * DY + d.dz * DZ;
+    }
+
+    private static boolean buried(Cells cells, int c) {
+        boolean[] f = cells.full;
+        return f[c + DX] && f[c - DX] && f[c + DY] && f[c - DY] && f[c + DZ] && f[c - DZ];
+    }
+
+    private boolean culled(Cells cells, int c, BlockState self, BakedModel selfModel, BakedQuad q) {
+        Dir d = q.cull();
+        int n = c + step(d);
+        BakedModel nm = cells.models[n];
+        if (nm == null) return false;
+        if (nm.isOpaque(d.opposite())) return true;
         // Neighbouring identical see-through cubes (glass, ice, stained glass) hide the faces between them.
-        return n == self && q.layer() != RenderLayer.SOLID && selfModel.quads().size() == 6;
+        return cells.states[n] == self && q.layer() != RenderLayer.SOLID && selfModel.quads().size() == 6;
     }
 
-    private boolean occludes(SectionSnapshot snap, int x, int y, int z) {
-        BlockState s = snap.get(x, y, z);
-        return !s.isAir() && assets.model(s).isFullCube();
+    private static boolean occludes(Cells cells, int x, int y, int z) {
+        return cells.full[SectionSnapshot.cell(x, y, z)];
     }
 
-    private void emit(MeshData.Builder b, SectionSnapshot snap, BakedModel model, BakedQuad q, int x, int y, int z, int ox, int oy, int oz) {
+    private void emit(MeshData.Builder b, Cells snap, BakedModel model, BakedQuad q, int x, int y, int z, int ox, int oy, int oz) {
         float[] n = q.normal();
         float shadeTint = 1f;
         int tr = (q.tint() >> 16) & 255, tg = (q.tint() >> 8) & 255, tb = q.tint() & 255;
@@ -77,7 +128,7 @@ public final class SectionMesher {
      * Samples the three blocks touching a vertex on the outside of its face (two edges and the corner). Faces inset
      * from the block boundary sample the block's own layer instead of the neighbour's.
      */
-    private float vertexAo(SectionSnapshot snap, Dir face, int x, int y, int z, float px, float py, float pz) {
+    private float vertexAo(Cells snap, Dir face, int x, int y, int z, float px, float py, float pz) {
         float along = switch (face) {
             case DOWN -> py;
             case UP -> 1 - py;

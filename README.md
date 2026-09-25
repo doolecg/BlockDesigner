@@ -1,6 +1,6 @@
 # BlockDesigner
 
-A Minecraft structure designer. Build block by block in a live 3D view with Minecraft-style controls, arrange schematics as layers, then export the result as a schematic or as a worldgen data pack. An AI assistant that builds from a description or a reference image is coming in a future release.
+A Minecraft structure designer. Build block by block in a live 3D view with Minecraft-style controls, arrange schematics as layers, then export the result as a schematic or as a worldgen data pack.
 
 ## Run
 
@@ -12,54 +12,53 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
 
 ## Windows builds
 
-- `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-0.2.0-portable.zip`. Nothing needs installing, the Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
-- `./gradlew :app:installer` builds `dist/BlockDesigner-0.2.0.exe`, a per-user setup with Start menu and desktop shortcuts. It also makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
-- The icon is drawn by `packaging/make_icon.py` (needs Pillow). Rerun it after changing the design.
+- `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-0.3.0-portable.zip`. Nothing needs installing, the Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
+- `./gradlew :app:installer` builds `dist/BlockDesigner-0.3.0.exe`, a per-user setup with Start menu and desktop shortcuts. It also makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
+- The version is `packageVersion` in `app/build.gradle.kts`. The icon is drawn by `packaging/make_icon.py` (needs Pillow); rerun it after changing the design.
 
 ## Features
 
-- **Formats**
+- **Build like Minecraft:** creative flight, a hotbar, and break / place / pick-block controls with Minecraft's repeat timing.
+  - **Placement:** blocks face the way Minecraft places them. Stairs and slabs go top or bottom, logs follow the clicked face, torches and signs go on walls, and doors and beds place both halves.
+  - **Connections:** fences, walls, panes, redstone dust and rails connect to their neighbours as they do in game.
+  - **Names:** blocks use Minecraft's own names, read from the game's and each mod's language files.
+- **Tools:**
+  - Select, with Select by type.
+  - Build, with Replace and Shuffle modes.
+  - Blender-style Move and Rotate gizmos.
+  - Sculpting brushes (draw, erase, smooth, erode, fill, pinch, raise, lower, flatten, slope) and an Eraser.
+- **WorldEdit:** set pos1 and pos2 with left and right click in Select mode, then press T for a chat-style command line with `/set`, `/replace`, `/walls`, `/copy`, `/paste`, `/stack`, `/smooth`, `/sphere` and more.
+- **Layers:** every schematic, imported or new, is a layer.
+  - Show / hide, lock, ghost, rename, reorder, duplicate and merge.
+  - Move layers with the wheel or the Move gizmo, and turn them in quarter turns.
+  - The slice view steps through Y levels.
+- **Camera:** orbit and pan like Blender, a view cube, perspective or orthographic, numpad views, and creative flight with momentum.
+- **Formats:**
   - Import and export Create / structure-block `.nbt`, Litematica `.litematic` (multi-region) and WorldEdit `.schem` (Sponge v2/v3).
-  - Directional blocks (stairs, doors, rails, fences, signs) stay correct through rotation and mirroring.
-- **Layers**
-  - Every schematic, imported or new, is a layer, with visibility, lock and ghost toggles, rename, reorder, duplicate and merge.
-  - Nudge the selected layers relative to the camera:
-    - Ctrl+wheel over a layer: along the axis of the hovered face (wheel up pulls it out towards you); elsewhere left/right
-    - Ctrl+Shift+wheel: up/down
-    - Shift+wheel: back/forward
-    - Arrow keys move left/right and back/forward
-    - Hold Tab for 8-block steps
-  - Alt+wheel over a layer turns it. Over the top it spins around the vertical axis. Over a side it flips a quarter turn around that side's horizontal edge: wheel up rolls the side you're looking at up to face the sky. Flipping rewrites the blocks; stairs, slabs and other blocks with no sideways form keep their old orientation.
-  - Alt+K or F1 (or the ⌘ button) shows every keyboard and mouse shortcut; they are all listed under [Controls and keybinds](#controls-and-keybinds) below.
-  - Hotbar: nine Minecraft-style slots, shown in Build mode, that record the blocks you middle-click and the ones you drag in from the block palette (drop on a slot to put it there). Press 1-9, click a slot, or use the wheel while flying to hold one. Alt+C clears it, and Delete in Build mode empties the held slot. Z toggles shuffle mode, where every placed block is a random pick from the filled slots (handy for textured walls and paths). R toggles Replace mode, where right-click swaps the aimed block for the held one. Fly speed is in the viewport settings.
-  - Slice view: PgUp/PgDn step through Y levels. By default each level shows with everything below it; Insert switches to showing a single level.
-  - Imports appear as a ghost that follows the cursor. Click to place, R to rotate, Esc to cancel.
-- **Tools**
-  - Start screen: new, open, import, recent projects, the Minecraft jar used for assets, and recommended schematic download sites. Turn it off with its checkbox; click the logo to open it again.
-  - Flying (C) is creative mode: you can only break, place, pick and select blocks within 5 blocks, as in Minecraft.
-  - Camera: middle-drag orbits around the point under the mouse, Shift+middle-drag pans, wheel zooms.
-  - Modes: View (V) only looks around. Select (Q): left-click sets WorldEdit pos1 and right-click pos2, and the box's blocks are selected; Shift/Ctrl-click and marquee drags pick single blocks, Shift+right-click opens the menu, Esc clears. Build (B, which toggles back to the previous mode and also works while flying) works like Minecraft: left-click breaks, right-click places (hold to repeat), middle-click picks the block. Move (G) and Rotate (E) show Blender-style gizmos for the selected layers.
-  - Undo and redo cover every action.
-- **Coming soon**
-  - AI Assistant: describe a build or show a reference image, and the assistant builds it block by block. It will work with Claude or any OpenAI-compatible server (OpenAI, Ollama, LM Studio). The code is in the `ai` module; it stays switched off (`AI_ASSISTANT` in `BlockDesignerApp`) until it has been tested end to end.
-  - Resource Tracker: the materials a build needs, what you have gathered and what is left.
-- **Worldgen export**
-  - Writes a data pack with a jigsaw structure, template pool, structure set and biome tag, in the layout the chosen version expects.
-  - Can save it as a zip or install it straight into a world. Test it in-game with `/place structure <ns>:<name>`.
+  - Directional blocks stay correct through rotation and mirroring.
+- **Export window (Ctrl+E):** cards for Litematica, WorldEdit, Create / structure `.nbt`, worldgen and plugin formats. Each card shows what will be exported (layers, blocks, size, block types) and saves straight into a detected instance's `schematics` or `config/worldedit/schematics` folder. It remembers your last choices.
+- **Format icons:** Create (cog), Litematica (hologram cube), WorldEdit (wand axe), worldgen (grass block) and plugin (puzzle piece) icons appear in the export menu and window, on imported layers and in the start screen's recent files.
+- **Worldgen export:** writes a data pack that generates in new chunks, either as a single structure (with random variants) or **village-style**. For a village, you mark each layer as the centre, a street or a building. BlockDesigner adds jigsaw blocks (entrances found from doors) and can generate streets and crossroads, so the centre, streets and houses grow together like vanilla villages. It can save the pack as a zip or install it straight into a world; test it in-game with `/place structure <ns>:<name>`.
+- **Themes and Settings (Ctrl+, or the gear):** the Claude (warm ivory and terracotta), Blue, Green, Red, Orange and Zen themes, each in dark or light, or matching Windows' app mode. A theme colours every window, menu and dialog, plus the sky and grid of the 3D view. The Settings window also has general options: author, start screen, Minecraft assets and plugins.
+- **Plugins:** third-party jars can add schematic formats, exporters, menu actions and `/commands`. See [PLUGINS.md](PLUGINS.md) and `examples/hello-plugin`.
+- **Modded blocks:** pick a Prism, CurseForge, Modrinth or official-launcher instance and its mods and resource packs render too.
+- **Feel:** place and break sounds, break particles and smooth view transitions.
+- **Undo and redo** cover every action.
+- **Coming soon:** the **Resource Tracker**: the materials a build needs, what you have gathered and what is left.
 
 ## Controls and keybinds
 
-The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button in the viewport. Single-letter keys don't fire while you're typing in a text box.
+The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button in the viewport. Single-letter keys don't fire while you're typing in a text box, and while flying W A S D, Space, Shift and Ctrl always belong to flight.
 
-### Modes
+### Modes and tools
 
 | Key | Action |
 |---|---|
 | V | View mode: look around only |
 | Q | Select mode |
 | B | Build mode on / off (also while flying) |
-| G | Move tool (gizmo for the selected layers) |
-| E | Rotate tool (gizmo for the selected layers) |
+| G / E | Move / Rotate tool (gizmos for the selected layers) |
+| U / X | Brush / Eraser |
 | Esc | Cancel a drag or placement, clear the selection, stop flying, then back to Select |
 
 ### Camera
@@ -68,18 +67,16 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 |---|---|
 | Middle-drag | Orbit around the point under the mouse |
 | Shift+middle-drag | Pan |
-| Alt+middle-drag | Swing to the next orthographic view in that direction (left, right, top, bottom…) |
+| Alt+middle-drag | Swing to the next orthographic view in that direction |
 | Wheel | Zoom |
 | F | Frame the selected blocks, or else the active layer |
 | Shift+F / Home | Frame everything |
 | C | Creative flight on / off |
 | P / O | Perspective / orthographic |
-| Numpad 1 / 3 / 7 | Front / right / top view (Ctrl: back / left / bottom) |
-| Numpad 9 | Opposite side of the current view |
-| Numpad 5 | Toggle perspective / orthographic |
-| Numpad 2 / 4 / 6 / 8 | Orbit 15° down / left / right / up |
-| Numpad . | Frame the active layer |
-| View cube | Click a face for that view (click again for the opposite side), drag to orbit |
+| Numpad 1 / 3 / 7 | Front / right / top (Ctrl: back / left / bottom) |
+| Numpad 9 / 5 | Opposite side / toggle perspective and orthographic |
+| Numpad 2 4 6 8 / . | Orbit 15° / frame the active layer |
+| View cube | Click a face for that view (again for the opposite side), drag to orbit |
 
 ### Flying
 
@@ -91,130 +88,97 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 | Wheel | Next / previous hotbar slot |
 | C / Esc | Stop flying |
 
-Reach is 5 blocks, as in creative mode. Momentum (gliding to a stop) can be turned off in viewport settings.
-
-### Build mode
+### Build mode and hotbar
 
 | Key | Action |
 |---|---|
 | Left-click | Break (hold to repeat) |
 | Right-click | Place (hold to repeat), oriented like Minecraft |
 | Middle-click | Pick the block into the hotbar |
-| R | Replace mode: right-click swaps the aimed block and keeps its facing (drag to paint) |
+| R | Replace mode: right-click swaps the aimed block and keeps its facing |
 | Z | Shuffle mode: place random blocks from the hotbar |
+| 1 – 9 | Hold a hotbar slot |
 | Delete | Empty the held hotbar slot |
-
-### Hotbar
-
-| Key | Action |
-|---|---|
-| 1 – 9 | Hold a slot |
-| Middle-click | Record the block under the cursor |
-| Drag from palette | Put a block in a slot |
 | Alt+C | Clear the hotbar |
 
-### Select mode
+### Brush and Eraser
 
 | Key | Action |
 |---|---|
-| Left-click | Set WorldEdit pos1 |
-| Right-click | Set WorldEdit pos2 (the box's blocks become the selection) |
+| Drag | Paint with the brush mode (Eraser: remove blocks) |
+| Right-drag | Smooth |
+| Alt+1 … Alt+0 | Draw · Erase · Smooth · Erode · Fill · Pinch · Raise · Lower · Flatten · Slope |
+| Shift+right-click | Brush settings: mode, size, strength, shape |
+| - / = | Smaller / bigger brush (1–16) |
+| , / . | Weaker / stronger brush (1–5) |
+| Shift+drag / Ctrl+drag | Smooth / inverse mode (not while flying) |
+
+### Select mode and WorldEdit
+
+| Key | Action |
+|---|---|
+| Left-click / right-click | Set pos1 / pos2; the box's blocks become the selection |
 | Shift+click / Ctrl+click | Add a block to / remove it from the selection |
-| Drag | Marquee select (Shift adds, Ctrl removes) |
-| Shift+right-click or Menu key | Context menu: region fill, delete, replace, select by type, copy to layer, hide, lock |
-| T | Select by type, with layer and property filters |
+| Drag | Marquee select; pos1 and pos2 are set to the corners of the box around the selection |
+| Shift+right-click or Menu key | Context menu |
+| Alt+T | Select by type |
 | Ctrl+A / Alt+A | Select every block of the active layer / deselect |
-| Ctrl+J | Copy the selected blocks to a new layer |
-| Ctrl+R | Fill the selected blocks with the held block |
+| Ctrl+J / Ctrl+R | Copy the selection to a new layer / fill it with the held block |
 | Delete | Delete the selected blocks |
 | Esc | Clear the region and selection |
+| T or / | Command line, like Minecraft's chat (Tab completes, ↑ ↓ history) |
 
-### WorldEdit commands
-
-Press **/** (or the terminal button) to open the command bar. **Tab** completes, **↑ / ↓** walk the history, **Enter** runs, **Esc** closes. Commands edit the active layer, and each one is a single undo step.
+Commands take one slash and work on every visible, unlocked layer:
 
 | Command | Action |
 |---|---|
-| `//pos1`, `//pos2` [x y z] | Set a corner (default: the block you aim at) |
-| `//sel` | Clear the region |
-| `//set <pattern>` | Fill the region, e.g. `stone`, `70%stone,30%andesite`, `hand` |
-| `//replace [from] <to>` | Replace blocks (just `<to>`: every non-air block) |
-| `//walls`, `//faces`, `//overlay` `<pattern>` | Side walls, all six faces, a layer on top of each column |
-| `//copy`, `//cut`, `//paste [-a] [-s]` | Clipboard, relative to pos1 (`-a` skips air, `-s` selects what was pasted) |
-| `//rotate <90\|180\|270>`, `//flip [dir]` | Turn or mirror the clipboard |
-| `//move [n] [dir] [-a]`, `//stack [count] [dir] [-a]` | Move or repeat the region's contents |
-| `//expand <n> [dir]`, `//expand vert`, `//contract <n> [dir]`, `//shift <n> [dir]` | Resize or move the region |
-| `//outset <n>`, `//inset <n>` | Grow or shrink every side |
-| `//line <pattern> [thickness]` | A line from pos1 to pos2 |
-| `//sphere`, `//hsphere` `<pattern> <radius>` | Solid / hollow sphere around pos1 |
-| `//cyl`, `//hcyl` `<pattern> <radius> [height]` | Solid / hollow cylinder up from pos1 |
-| `//pyramid`, `//hpyramid` `<pattern> <size>` | Solid / hollow pyramid on pos1 |
-| `//count <mask>`, `//distr`, `//size` | Count blocks, what the region is made of, its size |
-| `//undo`, `//redo`, `//help [command]` | Undo, redo, list commands |
-
-Directions: `me` (where you look, the default), `up`, `down`, `north`, `south`, `east`, `west`, `forward`, `back`, `left`, `right`.
+| `/pos1`, `/pos2` [x y z] | Set a corner (default: the block you aim at) |
+| `/set <pattern>` | Fill the region, e.g. `stone`, `70%stone,30%andesite`, `hand` |
+| `/replace [from] <to>` | Replace blocks |
+| `/walls`, `/faces`, `/overlay`, `/center` `<pattern>` | Side walls, all faces, a layer on top, the middle |
+| `/smooth [passes]`, `/naturalize` | Smooth the terrain · grass, dirt and stone by depth |
+| `/hollow [thickness] [pattern]` | Hollow out shapes, keeping a shell |
+| `/copy`, `/cut`, `/paste [-a] [-s]`, `/rotate`, `/flip` | Clipboard, relative to pos1 |
+| `/move`, `/stack` `[n] [dir] [-a]` | Move or repeat the region's contents |
+| `/expand`, `/contract`, `/shift` `<n> [dir]`, `/outset`, `/inset` | Resize or move the region |
+| `/line`, `/sphere`, `/cyl`, `/pyramid` (`/h…` hollow) | Shapes at pos1 |
+| `/count`, `/distr`, `/size`, `/sel` | Region info, clear the region |
+| `/undo`, `/redo`, `/help` | Undo, redo, list commands |
 
 ### Move and Rotate tools
 
 | Action | Result |
 |---|---|
-| Drag an arrow | Move along that axis |
-| Drag a square | Move in that plane |
-| Drag the centre | Move freely in the view plane |
-| Drag a ring | Turn about that axis in 90° steps |
+| Drag an arrow / square / the centre | Move along an axis / in a plane / freely |
+| Drag a ring | Turn in 90° steps |
 | Click a layer | Select it (Shift adds) |
 | Esc / right-click | Cancel the drag |
-
-### Moving layers
-
-| Key | Action |
-|---|---|
-| Ctrl+wheel | Along the hovered face's axis (left / right elsewhere) |
-| Ctrl+Shift+wheel | Up / down |
-| Shift+wheel | Back / forward |
-| Arrow keys | Left / right, back / forward |
-| Hold Tab | Bigger steps |
-| Alt+wheel | Spin (over the top) or flip (over a side) |
 
 ### Layers
 
 | Key | Action |
 |---|---|
+| Ctrl+wheel | Move along the hovered face's axis |
+| Ctrl+Shift+wheel / Shift+wheel | Up / down · back / forward |
+| Arrow keys, hold Tab | Move, bigger steps |
+| Alt+wheel | Spin (over the top) or flip (over a side) |
 | [ / ] | Make the layer below / above active |
-| Ctrl+Shift+N | New empty layer |
-| Ctrl+D | Duplicate the selected layers |
-| Ctrl+M | Merge the selected layers (or the active one down) |
+| Ctrl+Shift+N / Ctrl+D / Ctrl+M | New / duplicate / merge |
 | F2 | Rename the active layer |
-| H / Alt+H | Hide or show the selected layers / show every layer |
-| Shift+H | Ghost the selected layers |
-| L | Lock or unlock the selected layers |
+| H / Alt+H / Shift+H | Hide or show / show every layer / ghost |
+| L | Lock or unlock |
 | Shift+Delete | Delete the selected layers |
-
-### Placing an import
-
-| Key | Action |
-|---|---|
-| Click / Enter | Place |
-| R / Alt+wheel | Rotate |
-| Esc | Cancel |
-
-### Slice view
-
-| Key | Action |
-|---|---|
-| PgUp / PgDn | Step through Y levels |
-| Insert | Single level on / off |
+| PgUp / PgDn, Insert | Slice view: step through Y levels, single level |
+| Click / Enter, R, Esc | Placing an import: place, rotate, cancel |
 
 ### File, edit and view
 
 | Key | Action |
 |---|---|
-| Ctrl+N | New project |
-| Ctrl+O / Ctrl+I | Open / import |
+| Ctrl+N / Ctrl+O / Ctrl+I | New / open / import |
 | Ctrl+S / Ctrl+Shift+S | Save / save as |
 | Ctrl+E / Ctrl+Shift+E | Export schematic / worldgen data pack |
-| Ctrl+Z | Undo |
-| Ctrl+Y / Ctrl+Shift+Z | Redo |
+| Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) | Undo / redo |
 | Ctrl+F | Search blocks |
 | N | Viewport settings |
 | Alt+G | Ground grid on / off |
@@ -228,9 +192,10 @@ Directions: `me` (where you look, the default), `up`, `down`, `north`, `south`, 
 | `core` | NBT, block states, sparse structures, layers and scenes, undo, transforms, schematic formats, `.bdproj` projects |
 | `assets` | Finds installs; loads blockstates, models and textures from game, mod and resource-pack jars; bakes models; builds the texture atlas |
 | `render` | LWJGL/OpenGL offscreen renderer (MSAA, smooth AO, sorted translucency), meshing on worker threads, picking |
-| `ai` | Provider interface, Claude and OpenAI-compatible providers, build tools, agent loop |
-| `worldgen` | Data pack exporter |
-| `app` | JavaFX UI (AtlantaFX theme) |
+| `worldgen` | Data pack exporter: single structures and village-style jigsaw layouts |
+| `plugin-api` | The API third-party plugins compile against |
+| `app` | JavaFX UI (AtlantaFX theme), plugin manager |
+| `examples/hello-plugin` | A sample plugin, also used by the tests |
 
 ## Tests
 

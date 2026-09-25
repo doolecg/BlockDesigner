@@ -56,7 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-/** The main editor window: top bar, layers + palette on the left, viewport in the centre, assistant on the right. */
+/** The main editor window: top bar, layers + palette on the left, viewport in the centre, side tabs on the right. */
 public final class MainWindow {
     private LayersPanel layers;
     private BlockPalette palette;
@@ -80,23 +80,33 @@ public final class MainWindow {
     private McInstallLocator.Result scan;
     private final BorderPane rightPanel = new BorderPane();
     private final javafx.scene.control.TabPane sideTabs = new javafx.scene.control.TabPane();
-    private final javafx.scene.control.Tab assistantTab = new javafx.scene.control.Tab("Assistant");
     private final javafx.scene.control.Tab resourcesTab = new javafx.scene.control.Tab("Resource Tracker");
     /** Thin bar on the right edge listing closed side tabs; click one to reopen it. */
     private final javafx.scene.layout.VBox closedTabsBar = new javafx.scene.layout.VBox(4);
     private SplitPane mainSplit;
     private final BorderPane centerColumn = new BorderPane();
+    private final java.util.Set<String> disabledPlugins;
+    private final io.blockdesigner.app.plugins.PluginManager plugins;
 
     public MainWindow(Stage stage, Workspace ws) {
         this.stage = stage;
         this.ws = ws;
         this.viewport = new ViewportPane(ws);
+        this.disabledPlugins = new java.util.LinkedHashSet<>(ws.settings().disabledPlugins);
+        this.plugins = new io.blockdesigner.app.plugins.PluginManager(io.blockdesigner.app.Settings.dir().resolve("plugins"), pluginHost(), disabledPlugins);
 
+        resolveDark();
         applyTheme();
         ws.darkProperty().addListener((o, a, b) -> applyTheme());
+        ws.themeProperty().addListener((o, a, b) -> applyTheme());
+        ws.themeModeProperty().addListener((o, a, b) -> resolveDark());
+        // "Match Windows" follows a change of the Windows app mode the next time the window gets focus.
+        stage.focusedProperty().addListener((o, a, focused) -> {
+            if (focused) resolveDark();
+        });
 
         // Left: layers over palette
-        layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> export(List.of(l), null), viewport::frameLayer));
+        layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> exportDialog(null, List.of(l)), viewport::frameLayer));
         palette = new BlockPalette(ws);
         SplitPane left = new SplitPane(layers, palette);
         left.setOrientation(javafx.geometry.Orientation.VERTICAL);
@@ -182,49 +192,106 @@ public final class MainWindow {
         ws.editor().undoStack().addListener(this::updateStatus);
         stage.setOnCloseRequest(e -> {
             viewport.detach();
+            plugins.shutdown();
             ws.settings().save();
         });
     }
 
-    /** Right-hand panel: the assistant (set by the app once the AI module is wired) plus the Resource Tracker tab. */
-    public void setRightPanel(javafx.scene.Node node) {
-        // Both tabs can be closed; closed tabs wait in the bar on the right edge. With none open the panel folds away.
-        assistantTab.setContent(node);
-        assistantTab.setGraphic(new FontIcon(Feather.MESSAGE_SQUARE));
+    /** What plugins can reach: the scene, undoable edits, the viewport's world editing and feedback. */
+    private io.blockdesigner.app.plugins.PluginHost pluginHost() {
+        return new io.blockdesigner.app.plugins.PluginHost() {
+            @Override
+            public Scene scene() {
+                return ws.scene();
+            }
+
+            @Override
+            public io.blockdesigner.core.edit.SceneEditor editor() {
+                return ws.editor();
+            }
+
+            @Override
+            public java.util.Optional<Layer> activeLayer() {
+                return java.util.Optional.ofNullable(ws.activeLayerProperty().get());
+            }
+
+            @Override
+            public List<Layer> selectedLayers() {
+                return ws.nudgeTargets();
+            }
+
+            @Override
+            public io.blockdesigner.core.version.McVersion targetVersion() {
+                return ws.targetVersionProperty().get();
+            }
+
+            @Override
+            public void editWorld(String label, java.util.function.Consumer<io.blockdesigner.core.worldedit.WorldEdit.World> edit) {
+                viewport.editWorld(label, edit);
+            }
+
+            @Override
+            public Layer addLayer(String name, Structure blocks) {
+                Layer l = new Layer(name, blocks);
+                ws.editor().addLayer(l);
+                ws.selectedLayers().setAll(l);
+                return l;
+            }
+
+            @Override
+            public void status(String message) {
+                ws.statusProperty().set(message);
+            }
+
+            @Override
+            public void toast(String message) {
+                viewport.showToast(message);
+            }
+
+            @Override
+            public void runOnUiThread(Runnable task) {
+                if (Platform.isFxApplicationThread()) task.run();
+                else Platform.runLater(task);
+            }
+
+            @Override
+            public void pluginsChanged() {
+                ws.settings().disabledPlugins = new ArrayList<>(disabledPlugins);
+                ws.settings().save();
+            }
+        };
+    }
+
+    /** Right-hand panel: the Resource Tracker tab. */
+    public void setRightPanel() {
+        // Tabs can be closed; closed tabs wait in the bar on the right edge. With none open the panel folds away.
         resourcesTab.setContent(ComingSoonPanel.resourceTracker());
         resourcesTab.setGraphic(new FontIcon(Feather.PACKAGE));
         sideTabs.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.ALL_TABS);
         sideTabs.getStyleClass().add("side-tabs");
         rightPanel.setCenter(sideTabs);
-        if (ws.settings().showAssistant) sideTabs.getTabs().add(assistantTab);
         if (ws.settings().showResources) sideTabs.getTabs().add(resourcesTab);
         sideTabs.getTabs().addListener((javafx.collections.ListChangeListener<javafx.scene.control.Tab>) c -> sideTabsChanged());
         sideTabsChanged();
     }
 
     private void reopenTab(javafx.scene.control.Tab tab) {
-        if (!sideTabs.getTabs().contains(tab)) {
-            // Keep the original order: Assistant first.
-            if (tab == assistantTab) sideTabs.getTabs().addFirst(tab);
-            else sideTabs.getTabs().add(tab);
-        }
+        if (!sideTabs.getTabs().contains(tab)) sideTabs.getTabs().add(tab);
         sideTabs.getSelectionModel().select(tab);
     }
 
     /** Syncs settings, the closed-tabs bar and whether the right panel is shown at all. */
     private void sideTabsChanged() {
-        boolean assistant = sideTabs.getTabs().contains(assistantTab), resources = sideTabs.getTabs().contains(resourcesTab);
-        ws.settings().showAssistant = assistant;
+        boolean resources = sideTabs.getTabs().contains(resourcesTab);
         ws.settings().showResources = resources;
 
         closedTabsBar.getChildren().clear();
-        if (!assistant) closedTabsBar.getChildren().add(closedTabButton(assistantTab, Feather.MESSAGE_SQUARE));
         if (!resources) closedTabsBar.getChildren().add(closedTabButton(resourcesTab, Feather.PACKAGE));
         boolean anyClosed = !closedTabsBar.getChildren().isEmpty();
         closedTabsBar.setVisible(anyClosed);
         closedTabsBar.setManaged(anyClosed);
 
-        boolean anyOpen = assistant || resources;
+        boolean anyOpen = resources;
         if (anyOpen && !mainSplit.getItems().contains(rightPanel)) {
             mainSplit.getItems().add(rightPanel);
             mainSplit.setDividerPosition(1, 0.76);
@@ -241,11 +308,6 @@ public final class MainWindow {
         b.setRotate(90);
         b.setOnAction(e -> reopenTab(tab));
         return new javafx.scene.Group(b);
-    }
-
-    /** Strip under the viewport (the iteration timeline). */
-    public void setCenterBottom(javafx.scene.Node node) {
-        centerColumn.setBottom(node);
     }
 
     public ViewportPane viewport() {
@@ -291,6 +353,9 @@ public final class MainWindow {
 
     public void show() {
         stage.show();
+        plugins.loadAll();
+        long failed = plugins.plugins().stream().filter(p -> p.state() == io.blockdesigner.app.plugins.PluginManager.State.FAILED).count();
+        if (failed > 0) ws.statusProperty().set(failed + " plugin" + (failed == 1 ? "" : "s") + " failed to load · see Plugins > Manage plugins");
         if (ws.settings().showStartScreen) startScreen.open();
         startAssetLoading(false);
     }
@@ -314,12 +379,31 @@ public final class MainWindow {
         ws.statusProperty().set("New project");
     }
 
+    /** Sets dark/light from the theme mode (Dark, Light, or Windows' app mode). */
+    private void resolveDark() {
+        ws.darkProperty().set(AppTheme.isDark(AppTheme.mode(ws.themeModeProperty().get())));
+    }
+
+    /** Installs the theme as the user-agent stylesheet, so every window, menu and popup follows it. */
     private void applyTheme() {
         boolean dark = ws.darkProperty().get();
-        Application.setUserAgentStylesheet(dark ? new PrimerDark().getUserAgentStylesheet() : new PrimerLight().getUserAgentStylesheet());
+        AppTheme theme = AppTheme.byId(ws.themeProperty().get());
+        try {
+            Application.setUserAgentStylesheet(theme.userAgentStylesheet(dark));
+        } catch (RuntimeException e) {
+            // Fall back to plain Primer if the themed sheet can't be built.
+            Application.setUserAgentStylesheet(dark ? new PrimerDark().getUserAgentStylesheet() : new PrimerLight().getUserAgentStylesheet());
+        }
         windowRoot.getStyleClass().removeAll("dark", "light");
         windowRoot.getStyleClass().add(dark ? "dark" : "light");
         ws.settings().darkTheme = dark;
+    }
+
+    /** The Settings window (theme, mode, general options). */
+    public void openSettings() {
+        new SettingsDialog(stage, ws, () -> startAssetLoading(true),
+                () -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait()).showAndWait();
+        ws.settings().save();
     }
 
     // ---- top & status bars ------------------------------------------------------------------------------------
@@ -344,15 +428,14 @@ public final class MainWindow {
 
         MenuButton export = new MenuButton("Export", new FontIcon(Feather.UPLOAD));
         export.getStyleClass().add("accent");
-        MenuItem nbt = new MenuItem("Structure / Create (.nbt)…");
-        nbt.setOnAction(e -> exportDialog(Schematics.VANILLA));
-        MenuItem lit = new MenuItem("Litematica (.litematic)…");
-        lit.setOnAction(e -> exportDialog(Schematics.LITEMATICA));
-        MenuItem schem = new MenuItem("WorldEdit (.schem)…");
-        schem.setOnAction(e -> exportDialog(Schematics.SPONGE));
-        MenuItem datapack = new MenuItem("Worldgen data pack…", new FontIcon(Feather.GLOBE));
-        datapack.setOnAction(e -> exportDatapack());
-        export.getItems().addAll(nbt, lit, schem, new SeparatorMenuItem(), datapack);
+        export.setOnShowing(e -> fillExportMenu(export));
+        fillExportMenu(export);
+
+        MenuButton pluginMenu = new MenuButton(null, FormatIcons.icon(FormatIcons.Kind.PLUGIN, 16));
+        pluginMenu.getStyleClass().add("flat");
+        pluginMenu.setTooltip(new Tooltip("Plugins"));
+        pluginMenu.setOnShowing(e -> fillPluginMenu(pluginMenu));
+        fillPluginMenu(pluginMenu);
 
         Button undo = LayersPanel.iconButton(Feather.CORNER_UP_LEFT, "Undo (Ctrl+Z)", () -> ws.editor().undoStack().undo());
         Button redo = LayersPanel.iconButton(Feather.CORNER_UP_RIGHT, "Redo (Ctrl+Y)", () -> ws.editor().undoStack().redo());
@@ -365,16 +448,75 @@ public final class MainWindow {
         undo.setDisable(true);
         redo.setDisable(true);
 
-        Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark theme", () -> ws.darkProperty().set(!ws.darkProperty().get()));
-        Button assets = LayersPanel.iconButton(Feather.SETTINGS, "Minecraft assets & mods", () -> startAssetLoading(true));
+        Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark (Settings has themes)",
+                () -> ws.themeModeProperty().set(ws.darkProperty().get() ? "LIGHT" : "DARK"));
+        Button assets = LayersPanel.iconButton(Feather.SETTINGS, "Settings: themes, appearance, general (Ctrl+,)", this::openSettings);
         assetBadge.getStyleClass().add("badge");
+        assetBadge.setCursor(javafx.scene.Cursor.HAND);
+        assetBadge.setOnMouseClicked(e -> startAssetLoading(true));
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, theme, assetBadge, assets, imp, export);
+        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, theme, assetBadge, assets, pluginMenu, imp, export);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("top-bar");
         return bar;
+    }
+
+    /** Export menu: the Export window, one entry per card (with its format icon), then plugin exporters. */
+    private void fillExportMenu(MenuButton menu) {
+        List<MenuItem> items = new ArrayList<>();
+        MenuItem all = new MenuItem("Export…  (Ctrl+E)", new FontIcon(Feather.UPLOAD));
+        all.setOnAction(e -> exportDialog(null, null));
+        items.add(all);
+        items.add(new SeparatorMenuItem());
+        items.add(exportItem("Litematica (.litematic)…", FormatIcons.Kind.LITEMATICA, "litematica"));
+        items.add(exportItem("WorldEdit (.schem)…", FormatIcons.Kind.WORLDEDIT, "sponge"));
+        items.add(exportItem("Create / Structure (.nbt)…", FormatIcons.Kind.CREATE, "vanilla"));
+        items.add(new SeparatorMenuItem());
+        MenuItem datapack = new MenuItem("Worldgen data pack…  (Ctrl+Shift+E)", FormatIcons.icon(FormatIcons.Kind.DATAPACK, 16));
+        datapack.setOnAction(e -> exportDatapack());
+        items.add(datapack);
+        boolean first = true;
+        for (SchematicFormat f : Schematics.formats()) {
+            if (Schematics.isBuiltIn(f) || !f.canWrite()) continue;
+            if (first) items.add(new SeparatorMenuItem());
+            first = false;
+            items.add(exportItem(f.displayName() + " (." + f.extensions().getFirst() + ")…", FormatIcons.Kind.PLUGIN, f.id()));
+        }
+        for (var ex : plugins.exporters()) {
+            if (first) items.add(new SeparatorMenuItem());
+            first = false;
+            items.add(exportItem(ex.exporter().displayName() + "…", FormatIcons.Kind.PLUGIN,
+                    "plugin:" + ex.plugin().info().id() + "/" + ex.exporter().id()));
+        }
+        menu.getItems().setAll(items);
+    }
+
+    private MenuItem exportItem(String text, FormatIcons.Kind kind, String card) {
+        MenuItem m = new MenuItem(text, FormatIcons.icon(kind, 16));
+        m.setOnAction(e -> exportDialog(card, null));
+        return m;
+    }
+
+    /** Plugins menu: every plugin action, then the Plugins window. */
+    private void fillPluginMenu(MenuButton menu) {
+        List<MenuItem> items = new ArrayList<>();
+        for (var a : plugins.actions()) {
+            MenuItem m = new MenuItem(a.action().label());
+            m.setOnAction(e -> plugins.run(a));
+            items.add(m);
+        }
+        if (items.isEmpty()) {
+            MenuItem none = new MenuItem("No plugin actions");
+            none.setDisable(true);
+            items.add(none);
+        }
+        items.add(new SeparatorMenuItem());
+        MenuItem manage = new MenuItem("Manage plugins…", new FontIcon(Feather.SETTINGS));
+        manage.setOnAction(e -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait());
+        items.add(manage);
+        menu.getItems().setAll(items);
     }
 
     private HBox statusBar() {
@@ -387,7 +529,19 @@ public final class MainWindow {
         return bar;
     }
 
+    private boolean statusQueued;
+
+    /** Status-bar totals; change events arrive in bursts (brush strokes, fills), so recompute once per pulse. */
     private void updateStatus() {
+        if (statusQueued) return;
+        statusQueued = true;
+        Platform.runLater(() -> {
+            statusQueued = false;
+            updateStatusNow();
+        });
+    }
+
+    private void updateStatusNow() {
         long blocks = 0;
         for (Layer l : ws.scene().layers()) blocks += l.structure().blockCount();
         String size = ws.scene().worldBounds().map(b -> b.sizeX() + "×" + b.sizeY() + "×" + b.sizeZ()).orElse("—");
@@ -464,8 +618,11 @@ public final class MainWindow {
 
     // ---- import / open / save -------------------------------------------------------------------------------
 
+    /** Every readable extension, including formats added by plugins. */
     private FileChooser.ExtensionFilter schematicFilter() {
-        return new FileChooser.ExtensionFilter("Schematics (*.litematic, *.schem, *.nbt)", "*.litematic", "*.schem", "*.nbt");
+        List<String> exts = Schematics.formats().stream().filter(SchematicFormat::canRead)
+                .flatMap(f -> f.extensions().stream()).distinct().map(e -> "*." + e).toList();
+        return new FileChooser.ExtensionFilter("Schematics (" + String.join(", ", exts) + ")", exts);
     }
 
     private File initialDir() {
@@ -490,11 +647,12 @@ public final class MainWindow {
         ws.statusProperty().set("Reading " + file.getFileName() + "…");
         CompletableFuture.supplyAsync(() -> {
             try {
-                return Schematics.read(file);
+                return Schematics.readDetailed(file);
             } catch (Exception e) {
                 throw new RuntimeException("Could not read " + file.getFileName() + ": " + e.getMessage(), e);
             }
-        }).thenAcceptAsync(sf -> {
+        }).thenAcceptAsync(read -> {
+            SchematicFile sf = read.file();
             List<Layer> layers = new ArrayList<>();
             for (SchematicFile.Region r : sf.regions()) {
                 String name = sf.regions().size() == 1 ? sf.name() : sf.name() + " · " + r.name();
@@ -503,6 +661,7 @@ public final class MainWindow {
                 s.metadata().author = sf.author();
                 Layer l = new Layer(name, s);
                 l.setOffset(r.position());
+                l.setSource(read.format().id());
                 layers.add(l);
             }
             ws.settings().addRecent(file);
@@ -544,7 +703,7 @@ public final class MainWindow {
         }, Platform::runLater).exceptionally(this::fail);
     }
 
-    /** Hook for other modules (chat history, snapshots) to restore their data. */
+    /** Hook for other modules to store their own data in the project file. */
     private java.util.function.Consumer<Map<String, byte[]>> extrasLoader = m -> {
     };
     private java.util.function.Supplier<Map<String, byte[]>> extrasSaver = Map::of;
@@ -586,70 +745,26 @@ public final class MainWindow {
 
     // ---- export -------------------------------------------------------------------------------------------
 
-    private void exportDialog(SchematicFormat preselect) {
-        new ExportDialog(stage, ws.targetVersionProperty().get(), preselect).showAndWait().ifPresent(opts -> {
-            List<Layer> layers = switch (opts.source()) {
-                case ACTIVE -> ws.activeLayerProperty().get() == null ? List.of() : List.of(ws.activeLayerProperty().get());
-                case SELECTED -> ws.scene().layers().stream().filter(ws.selectedLayers()::contains).toList();
-                case VISIBLE, EACH -> ws.scene().layers().stream().filter(Layer::visible).toList();
-            };
-            if (layers.isEmpty()) {
-                error("Nothing to export", "There are no layers matching that choice.");
-                return;
-            }
-            export(layers, opts);
-        });
-    }
-
-    private void export(List<Layer> layers, ExportDialog.Options opts) {
-        if (opts == null) {
-            new ExportDialog(stage, ws.targetVersionProperty().get(), Schematics.LITEMATICA).showAndWait()
-                    .ifPresent(o -> export(layers, new ExportDialog.Options(o.format(), o.version(), ExportDialog.Source.VISIBLE, o.includeAir(), o.spongeVersion())));
+    /**
+     * Opens the Export window on a card ({@code "litematica"}, {@code "sponge"}, {@code "vanilla"}, {@code "datapack"}, a
+     * plugin card key) or on the last one used when null. {@code layers} fixes what is exported (a layer's own menu).
+     */
+    private void exportDialog(String preselect, List<Layer> layers) {
+        if (ws.scene().layers().isEmpty()) {
+            error("Nothing to export", "Build or import something first.");
             return;
         }
-        WriteOptions wo = new WriteOptions(opts.version(), opts.includeAir(), opts.spongeVersion());
-        SchematicFormat format = opts.format();
-        String ext = format.extensions().getFirst();
-        String author = ws.settings().author;
-        try {
-            if (opts.source() == ExportDialog.Source.EACH && format != Schematics.LITEMATICA) {
-                DirectoryChooser dc = new DirectoryChooser();
-                dc.setTitle("Export each layer into…");
-                File dir = dc.showDialog(stage);
-                if (dir == null) return;
-                for (Layer l : layers) {
-                    Structure flat = Scene.flatten(List.of(l));
-                    SchematicFile sf = new SchematicFile(l.name(), author, "", opts.version().dataVersion(),
-                            List.of(new SchematicFile.Region(l.name(), flat, BlockPos.ORIGIN)));
-                    Schematics.write(sf, format, wo, dir.toPath().resolve(safeName(l.name()) + "." + ext));
-                }
-                ws.statusProperty().set("Exported " + layers.size() + " files to " + dir);
+        new ExportDialog(stage, ws, scan, plugins.exporters(), layers, preselect).showAndWait().ifPresent(out -> {
+            ws.settings().save();
+            if (out.datapack()) {
+                exportDatapack();
                 return;
             }
-            FileChooser fc = new FileChooser();
-            fc.setTitle("Export " + format.displayName());
-            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(format.displayName(), "*." + ext));
-            String baseName = layers.size() == 1 ? layers.getFirst().name() : ws.projectNameProperty().get();
-            fc.setInitialFileName(safeName(baseName) + "." + ext);
-            File dir = initialDir();
-            if (dir != null) fc.setInitialDirectory(dir);
-            File f = fc.showSaveDialog(stage);
-            if (f == null) return;
-            SchematicFile sf;
-            if (opts.source() == ExportDialog.Source.EACH) {
-                List<SchematicFile.Region> regions = new ArrayList<>();
-                for (Layer l : layers) regions.add(new SchematicFile.Region(l.name(), Scene.flatten(List.of(l)), BlockPos.ORIGIN));
-                sf = new SchematicFile(ws.projectNameProperty().get(), author, "", opts.version().dataVersion(), regions);
-            } else {
-                sf = new SchematicFile(baseName, author, "", opts.version().dataVersion(),
-                        List.of(new SchematicFile.Region(baseName, Scene.flatten(layers), BlockPos.ORIGIN)));
-            }
-            Schematics.write(sf, format, wo, f.toPath());
-            ws.statusProperty().set(String.format("Exported %,d blocks to %s", sf.totalBlocks(), f.getName()));
-            viewport.showToast("Exported " + f.getName());
-        } catch (Exception e) {
-            error("Export failed", e.getMessage());
-        }
+            String where = out.written().size() == 1 ? out.written().getFirst().getFileName().toString() : out.written().size() + " files";
+            ws.statusProperty().set(String.format("Exported %,d blocks to %s", out.blocks(),
+                    out.written().size() == 1 ? out.written().getFirst() : out.written().getFirst().getParent()));
+            viewport.showToast("Exported " + where);
+        });
     }
 
     /** Replaced by the worldgen module; shows a message until then. */
@@ -696,9 +811,10 @@ public final class MainWindow {
         acc.put(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN), () -> save(true));
         acc.put(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN), this::openDialog);
         acc.put(new KeyCodeCombination(KeyCode.I, KeyCombination.SHORTCUT_DOWN), this::importDialog);
-        acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN), () -> exportDialog(null));
+        acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN), () -> exportDialog(null, null));
         acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN), this::exportDatapack);
         acc.put(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN), this::newProject);
+        acc.put(new KeyCodeCombination(KeyCode.COMMA, KeyCombination.SHORTCUT_DOWN), this::openSettings);
         acc.put(new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN), () -> palette.focusSearch());
         acc.put(new KeyCodeCombination(KeyCode.F11), () -> {
             stage.setFullScreenExitHint("F11 or Esc leaves full screen");
@@ -707,6 +823,15 @@ public final class MainWindow {
 
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (scene.getFocusOwner() instanceof TextInputControl) return;
+            // While flying, W A S D, Space, Shift and Ctrl belong to flight: no shortcut may take them (Ctrl+D, Ctrl+A…).
+            if (viewport.isFlying() && (e.getCode() == KeyCode.W || e.getCode() == KeyCode.A || e.getCode() == KeyCode.S
+                    || e.getCode() == KeyCode.D || e.getCode() == KeyCode.SPACE || e.getCode() == KeyCode.SHIFT
+                    || e.getCode() == KeyCode.CONTROL)) return;
+            // The brush popup's own keys (mode letters, size, strength) while it is open.
+            if (viewport.brushPopupKey(e)) {
+                e.consume();
+                return;
+            }
             if (startScreen.isVisible()) {
                 if (e.getCode() == KeyCode.ESCAPE) startScreen.close();
                 e.consume();
@@ -723,8 +848,39 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
-            if ((e.getCode() == KeyCode.SLASH || e.getCode() == KeyCode.DIVIDE) && !e.isShortcutDown() && !e.isAltDown()) {
+            // T or / opens the command line, like Minecraft's chat. Alt+T is Select by type.
+            if ((e.getCode() == KeyCode.SLASH || e.getCode() == KeyCode.DIVIDE || e.getCode() == KeyCode.T) && !e.isShortcutDown() && !e.isAltDown()
+                    && !viewport.isPlacing()) {
                 viewport.openCommandBar();
+                e.consume();
+                return;
+            }
+            if (e.getCode() == KeyCode.T && e.isAltDown() && !e.isShortcutDown()) {
+                viewport.openSelectByTypeAtAim();
+                e.consume();
+                return;
+            }
+            // - / = resize the paint brush and eraser.
+            ToolKind tool = ws.toolProperty().get();
+            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && !e.isShortcutDown() && !e.isAltDown()
+                    && (e.getCode() == KeyCode.MINUS || e.getCode() == KeyCode.EQUALS || e.getCode() == KeyCode.SUBTRACT || e.getCode() == KeyCode.ADD)) {
+                viewport.stepBrush(e.getCode() == KeyCode.MINUS || e.getCode() == KeyCode.SUBTRACT ? -1 : 1);
+                e.consume();
+                return;
+            }
+            // Alt+1…Alt+0 pick the brush mode (Alt isn't a flight key, so this works while flying too).
+            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && e.isAltDown() && !e.isShortcutDown()
+                    && e.getCode().isDigitKey() && !e.getCode().isKeypadKey()) {
+                String name = e.getCode().getName();
+                int d = name.charAt(name.length() - 1) - '0';
+                viewport.setBrushMode(d == 0 ? 9 : d - 1);
+                e.consume();
+                return;
+            }
+            // , / . change the brush strength.
+            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && !e.isShortcutDown() && !e.isAltDown()
+                    && (e.getCode() == KeyCode.COMMA || e.getCode() == KeyCode.PERIOD)) {
+                viewport.stepBrushStrength(e.getCode() == KeyCode.COMMA ? -1 : 1);
                 e.consume();
                 return;
             }
@@ -777,6 +933,8 @@ public final class MainWindow {
                 case Q -> ToolKind.SELECT;
                 case G -> ToolKind.MOVE;
                 case E -> ToolKind.ROTATE;
+                case U -> ToolKind.BRUSH;
+                case X -> ToolKind.ERASER;
                 default -> null;
             };
             if (t != null) {

@@ -26,6 +26,7 @@ final class FallbackModels {
         List<String> out = new java.util.ArrayList<>(List.of("minecraft:block/water_still", "minecraft:block/lava_still",
                 "minecraft:block/oak_planks", "minecraft:block/structure_void", "minecraft:block/barrier"));
         for (String c : COLORS) out.add("minecraft:block/" + c + "_wool");
+        out.addAll(EntityModels.textures());
         return out;
     }
 
@@ -43,6 +44,10 @@ final class FallbackModels {
         if (path.equals("structure_void")) {
             return Optional.of(baker.bakeBoxes(state, List.of(box(5, 5, 5, 11, 11, 11, "minecraft:block/structure_void", -1, RenderLayer.CUTOUT)), 0, false));
         }
+        // Chests, beds, signs and heads: their real models, built like the game's renderers (the boxes below are
+        // only for blocks without one, such as modded signs).
+        Optional<BakedModel> real = EntityModels.bake(state, baker.atlas());
+        if (real.isPresent()) return real;
         if (path.endsWith("chest")) {
             return Optional.of(baker.bakeBoxes(state, List.of(box(1, 0, 1, 15, 14, 15, tex, -1, null)), yRot, false));
         }

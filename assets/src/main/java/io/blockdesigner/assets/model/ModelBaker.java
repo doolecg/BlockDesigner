@@ -17,6 +17,10 @@ public final class ModelBaker {
     private final TextureAtlas atlas;
     private final BlockTints tints;
 
+    public TextureAtlas atlas() {
+        return atlas;
+    }
+
     public ModelBaker(TextureAtlas atlas, BlockTints tints) {
         this.atlas = atlas;
         this.tints = tints;
@@ -28,18 +32,23 @@ public final class ModelBaker {
 
     public BakedModel bake(BlockState state, List<Placed> parts) {
         List<BakedQuad> quads = new ArrayList<>();
+        List<float[]> boxes = new ArrayList<>();
         boolean ao = true;
         for (Placed p : parts) {
             ao &= p.model.ambientOcclusion();
             for (ModelLoader.Element e : p.model.elements()) {
+                List<BakedQuad> element = new ArrayList<>();
                 for (Map.Entry<Dir, ModelLoader.Face> f : e.faces().entrySet()) {
                     String tex = p.model.resolve(f.getValue().texture());
                     TextureAtlas.Sprite sprite = atlas.sprite(tex == null ? TextureAtlas.MISSING : tex);
-                    quads.add(bakeFace(state, e, f.getKey(), f.getValue(), sprite, p.x, p.y, p.uvlock));
+                    element.add(bakeFace(state, e, f.getKey(), f.getValue(), sprite, p.x, p.y, p.uvlock));
                 }
+                quads.addAll(element);
+                // Each element's (rotated) bounds is one hitbox, as Minecraft's shapes are unions of boxes.
+                if (!element.isEmpty()) boxes.add(BakedModel.bounds(element));
             }
         }
-        return new BakedModel(List.copyOf(quads), opaqueFaces(quads), ao, false);
+        return new BakedModel(List.copyOf(quads), opaqueFaces(quads), ao, false, List.copyOf(boxes));
     }
 
     /** Simple textured box in 0..16 space, used for fallback models (chests, signs, fluids...). */

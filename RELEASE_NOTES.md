@@ -1,3 +1,241 @@
+# BlockDesigner 0.3.0
+
+This release adds sculpting brushes (smooth, erode, raise, flatten and more), the Eraser, build shapes and symmetry. WorldEdit now works like Minecraft's chat: press T, type `/set stone`, and it replaces what's already there across all your layers.
+
+Worldgen data packs gain village layouts, loot tables for chests and other containers, and presets you can save. There is also a new Export window, six themes, plugins, and real models for chests, beds, signs, heads and banners. The unfinished AI Assistant has been removed.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.3.0.exe** | You want a normal install: Start menu entry, optional desktop shortcut, and `.bdproj` projects that open with a double-click. Installs for your user only, so no admin is needed. |
+| **BlockDesigner-0.3.0-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. Settings stay in a `data` folder next to the exe. |
+
+The requirements haven't changed: 64-bit Windows 10 or 11, OpenGL 3.3, and Minecraft: Java Edition installed.
+
+## Changed controls
+- **T opens the command line**, like Minecraft's chat. **Select by type** moved from T to **Alt+T**; the filter button still opens it.
+- **Commands take one slash:** `/set stone` (`//set` still works).
+
+## New
+
+### Export window
+- **A new Export window (Ctrl+E):**
+  - Pick a card on the left: Litematica, WorldEdit, Create / Structure, Worldgen data pack, or anything a plugin adds.
+  - Before you export, it shows the layer count, blocks, size and number of block types.
+  - **Save to** lists each Minecraft instance's `schematics` folder (or `config/worldedit/schematics` for WorldEdit), so an export lands where the mod looks for it.
+  - It remembers the last card, options and folder, and warns before replacing a file.
+  - Exports are written in the background.
+- **Format icons** for Create (brass cog), Litematica (hologram cube), WorldEdit (wand axe), worldgen (grass block) and plugins (puzzle piece). They appear in the Export menu and window, on imported layers in the layer list (hover for the format) and in the start screen's recent files.
+
+### Build shapes (Effortless Building style)
+- **Hold Alt in Build mode** to open the shape wheel, point at a shape and let go:
+  - Line, Wall, Floor
+  - Box, Room (hollow box), Walls
+  - Circle, Ring, Cylinder
+  - Sphere, Dome, Pyramid
+  - **None**, for normal single-block placing
+- **Right-drag** to draw the shape out from the aimed block with an outline preview. Release to place it as one undo step.
+  - Lines follow the axis closest to the mouse, walls stand across your view, and everything else lies on the start block's level.
+  - **Mouse wheel** while dragging sets the height of boxes, rooms, walls and cylinders.
+  - **Esc** or a left-click cancels.
+- Shapes fill only empty cells, or everything in Replace mode (R). They use the held block, or a random hotbar block per cell in Shuffle mode (Z). Fences and walls join up.
+- This works with the normal camera and while flying. Alt+key shortcuts, Alt+wheel layer moves and Alt+middle-drag still work: the wheel only opens when Alt is held on its own.
+
+### Symmetry (Effortless Building style mirror)
+- **M** in Build mode opens the Symmetry panel (or use the new mirror button on the right of the 3D view):
+  - **Mirror** across X (red plane), Y (green) and/or Z (blue).
+  - **Radial:** 2–16 copies around a vertical axis.
+  - **Centre** on a block's middle (odd-width builds) or on the edge between blocks (even-width). **Shift+M** puts the centre on the aimed block.
+- **Applies to** shapes, single-block placing and breaking. Each copy's stairs, doors, slabs and logs are turned to match; you can switch that off.
+- **Previews:** the planes and spokes are drawn in the view. Faint outlines show where the aimed block's copies go, and a shape being dragged shows every mirrored copy.
+
+### Themes and Settings
+- **Settings window** (the gear in the top bar, or **Ctrl+,**):
+  - **Appearance:** choose a theme and a mode (Dark, Light or Match Windows).
+  - **General:** your author name, the start screen, Minecraft assets, plugins, and the settings folder.
+- **Six themes:**
+  - **Claude:** professional warmth, with ivory paper, warm slate and terracotta.
+  - **Blue:** the classic look.
+  - **Green**, **Red** and **Orange**.
+  - **Zen:** calm stone and sage, lower contrast for long sessions.
+- **Each theme covers everything:** panels, menus, tooltips, dialogs, the accent on buttons and layer outlines, and the 3D view's sky and grid. Changes apply instantly.
+- The moon button still flips between dark and light. **Minecraft assets** moved from the gear to the version badge (click it) and to Settings > General.
+
+### Village-style worldgen
+- The data pack window has a **Village (jigsaw)** layout.
+  - Mark each layer as the **centre**, a **street** or a **building**, give it a weight, and optionally pick a building's entrance side.
+  - BlockDesigner adds the jigsaw blocks. A building's entrance goes under its door (or on the side you picked), so houses stand with their door on the street. Streets connect at their ends and take houses along their sides.
+  - It can also generate streets and crossroads in a block you choose (dirt path, gravel, cobblestone…). With no centre layer, it adds a small square.
+  - Streets follow the terrain; the centre and buildings keep their shape.
+  - Layers that already contain jigsaw blocks are used as they are.
+
+### Worldgen presets
+- **Built-in presets** at the top of the data pack window fill in placement, blending and weathering for a common kind of structure:
+  - House on the surface (like villages)
+  - Big build on rough ground
+  - **On flat ground, never on hills:** plains and meadows, with hills and mountains excluded, a solid base and a 2-block foundation, so it never hangs off a slope
+  - Half-buried ruin (like trail ruins)
+  - Underground vault (like trial chambers)
+  - Sunken wreck on the sea floor
+  - Floating sky island
+- **Save your own:** **Save…** keeps every setting except the pack's name and version, including biomes, exclusions and loot. Saved presets are listed under the built-in ones as **Saved · name** and are available in every project. **Delete** removes one.
+
+### Loot in generated structures
+- **Give each kind of container a loot table:** chests (copper chests too), trapped chests, barrels, shulker boxes, dispensers, droppers, hoppers and decorated pots (1.20.3+). Suspicious sand and gravel roll their loot when brushed.
+- The window lists the containers in your layers with a count, and **All containers** sets them all at once.
+- **Minecraft's own tables**, grouped:
+  - Dungeons and ruins: dungeon, mineshaft, stronghold, ancient city, ruined portal, woodland mansion, pillager outpost, igloo, bonus chest
+  - Temples: desert pyramid, jungle temple (and its arrow dispenser)
+  - Villages: the five house styles and every job site
+  - Ocean: shipwrecks, buried treasure, ocean ruins
+  - Nether and End: fortress, bastion, end city
+  - Trial chambers (1.21+): supplies, corridors, vault rewards
+  - Archaeology: desert pyramid and well, ocean ruins, trail ruins
+- **From the game and mods:** chest tables found in the loaded game and your mods are listed too.
+- **Custom tables:** name it, set how many rolls each fill makes (e.g. 2–5), then add items with a weight, a count range and an optional random enchantment. Item ids autocomplete from the game and mods, and each item's chance is shown as you change weights. Custom tables are saved with your settings, can be edited or deleted later, and are written into the pack.
+- **Keep as built** (the default) leaves containers as you filled them, including loot tables in imported structures. **Empty** clears them. **Loot table id…** takes any table from a mod or another data pack.
+- Loot is rolled the first time a container is opened, so every copy of the structure gets different loot.
+
+### More worldgen control
+- **Blending with the terrain** is now a set of cards, each with a cross-section sketch (the ground before and after), a plain explanation and the vanilla structures that use it:
+  - **Soft blend** (`beard_thin`)
+  - **Solid base** (`beard_box`)
+  - **Buried** (`bury`)
+  - **Encased** (`encapsulate`)
+  - **No blending** (`none`)
+- **Foundations:** extend the bottom layer 1–32 blocks down so the build stands on footings instead of floating over dips. The footings can match each bottom block or use a block you pick. The build is lowered by the same amount, so its floor stays put.
+- **Height:** on the surface, on the sea floor, at a fixed Y (sky islands), or at a random Y between two levels (underground ruins).
+- **Generation step:** choose when it generates, with a note on what else runs at that step.
+- **How often:**
+  - A spacing summary in blocks.
+  - **Spread:** random or even.
+  - **Chance:** 5–100%, to make it rarer without changing the grid.
+  - **Keep away from** villages, outposts, monuments and other vanilla structures, by 1–16 chunks.
+- **Weathering:**
+  - **Integrity:** for ruins, blocks go missing at random.
+  - **Age:** mossy and cracked stone.
+- **Biome blacklist ("Never in"):**
+  - Tick groups to exclude: oceans, rivers, beaches and shores, swamps, hills and mountains, mountain peaks, snowy and icy, mushroom fields, deep dark.
+  - Type any other biomes or #tags to exclude.
+  - Biome tags are expanded into single biomes from your loaded game and mods, then the exclusions are taken away. Modded biomes stay optional, so the pack still loads without that mod.
+  - The window shows how many biomes are left, and which ones.
+- **Stay away from water:** one click excludes oceans, rivers, beaches and swamps. It also turns on **Keep blocks dry**, so blocks placed into water aren't waterlogged (1.21+).
+- **Bigger villages:** village size goes up to 20 on 1.20.2 and newer (7 before).
+
+### Plugins
+- **Plugins** made by other people can add schematic formats (to Import and Export), export cards, menu entries and `/commands`.
+- They are managed from the new puzzle button in the top bar: turn them on and off, install, reload, uninstall, and see errors and logs.
+- Guide: `PLUGINS.md`. Example: `examples/hello-plugin`.
+
+### Faster
+- **Layer bounds are tracked as you edit** instead of being rescanned. Each rescan used to take about 8 ms on a 3-million-block build, and it happened several times per frame per layer.
+- **Meshing:** sections are copied in bulk (about 3× faster) and each block's model is looked up once per section, not per face and vertex. Fully buried blocks are skipped.
+- **Frustum culling:** sections outside the view aren't drawn.
+- **Duplicated layers share one GPU mesh (instancing):** copies aren't re-meshed or re-uploaded until one of them is edited.
+- **Less work while editing:**
+  - Exports flatten layers without creating objects per block.
+  - Big commands skip layers they don't touch.
+  - The layer list and status bar refresh once per frame instead of on every change.
+
+### Brushes
+- **Brush (U)**, with ten modes picked with **Alt+1 … Alt+0**. Alt isn't a flight key, so they work while flying too.
+
+  | Key | Mode | What it does |
+  |---|---|---|
+  | Alt+1 | Draw | Adds blocks with the held block (a random hotbar pick per block in shuffle mode) |
+  | Alt+2 | Erase | Removes blocks |
+  | Alt+3 | Smooth | Rounds things off. On top of the ground it smooths the heightmap (hills round off, pits fill in, grass stays on top); on a side face it rounds shapes in 3D |
+  | Alt+4 | Erode | Wears away exposed corners and edges |
+  | Alt+5 | Fill | Plugs pits and crevices |
+  | Alt+6 | Pinch | Pulls material in to sharpen ridges (Ctrl: pushes out) |
+  | Alt+7 | Raise | Builds a hill with a soft falloff |
+  | Alt+8 | Lower | Sinks the ground the same way |
+  | Alt+9 | Flatten | Levels to the height you click and closes holes |
+  | Alt+0 | Slope | A ramp rising from where the stroke started (Ctrl: cuts down) |
+
+- **Right-drag smooths**, in any mode and while flying.
+- **Shift+right-click** (or the brush bar's mode button) opens the brush settings: modes, size, strength and shape.
+- **Size, strength and shape:** `-`/`=` change the size (1–16) and `,`/`.` the strength (1–5). The shape can be a sphere or a cube.
+- **While painting** (not flying): Shift smooths and Ctrl inverts the mode (Draw↔Erase, Raise↔Lower, Erode↔Fill).
+- **Strokes are smooth:**
+  - The brush aims at the surface as it was when the stroke began, so it glides along it instead of catching on its own new blocks.
+  - Fast drags are filled in along the path.
+  - Sculpt modes keep working while you hold still, like an airbrush.
+  - The pace is set by **Brush speed** in viewport settings (default 8 dabs a second).
+- **Brushes never build into the camera:** they stop short of it instead of growing past it.
+- **The outline under the cursor** is green for adding, red for removing and blue for reshaping. Terrain brushes show a ring on the ground.
+- Each stroke is one undo step, and fences, walls, redstone, rails and stairs reconnect as you paint.
+
+### Eraser
+- **Eraser (X):** drag to remove blocks from every visible, unlocked layer, sized and shaped like the brush.
+
+### WorldEdit
+- **The command line works like Minecraft's chat:**
+  - T (or `/`) opens it bottom-left with `/` already typed.
+  - Recent commands and their results show above the input.
+  - Tab completes commands and block names, and matching blocks are listed while you type one.
+- **Commands work on what you see:** every visible, unlocked layer, merged. `/set` replaces the blocks already there, whichever layer they're in; empty cells go into the active layer.
+- **Connections:** fences, walls, redstone, rails and stairs now join up with what commands build.
+- **A drag selection sets pos1 and pos2** to the corners of the box around what you selected, so `/set`, `/copy`, `/stack` and the rest work on it straight away. Shift- and Ctrl-clicking to add or remove blocks updates the corners too.
+- **New commands:**
+  - `/smooth [passes]` smooths the terrain surface in the region.
+  - `/naturalize` puts grass on top, then three dirt, then stone.
+  - `/hollow [thickness] [pattern]` hollows out shapes, keeping a shell.
+  - `/center <pattern>` marks the middle of the region.
+
+### Chests, beds, signs, heads, banners and shulker boxes look real
+- **They're drawn with their real models,** built the way Minecraft's own renderers build them, using the game's textures:
+  - Chests with the lid seam and latch; double chests join with the latch across the middle. Trapped and ender chests too.
+  - Beds with pillow, blanket and legs, in all 16 colours.
+  - Standing and wall signs, and hanging signs with their chains (and the bar on walls), for every wood type.
+  - Skeleton, wither skeleton, zombie, creeper, player (Steve), piglin (with ears) and dragon heads.
+  - Banners (standing and on walls) in all 16 colours, with their patterns from the schematic layered on top. Both the current pattern format and the pre-1.20.5 short codes are read, and pattern textures from mods and resource packs work too.
+  - Shulker boxes (undyed and all 16 colours) turned to face the way they're placed.
+- **Heads now face you when placed.** Before, they faced away.
+- Modded signs and decorated pots still use simple shapes.
+
+### Hitboxes follow the model
+- **Blocks smaller than a full block use Minecraft's own hitboxes:**
+  - Flowers, grass, ferns, saplings, mushrooms, fungi, crops (which grow with age), stems, sugar cane and cactus.
+  - Coral and coral fans, amethyst buds (turned the way they point), carpets, pressure plates, rails, potted plants and torches.
+  - Pointed dripstone (by thickness), big dripleaf (its leaf follows the tilt), bamboo and cocoa (three sizes).
+  - Signs (standing, wall and hanging), heads and skulls, beds (mattress and legs), chests (single and double) and banners.
+- Other non-full blocks (slabs, stairs, fences, walls, lanterns…) use their model's shape. Modded plants drawn as a cross get the grass shape.
+- Aiming at the empty part of a block reaches whatever is behind it, as in Minecraft.
+- The hover outline is drawn around the real shape too.
+- Placement uses the exact point you click, so slabs and stairs pick top or bottom more reliably.
+
+### New shortcuts
+
+| Area | Keys |
+|---|---|
+| Tools | U brush · X eraser |
+| Brush | Alt+1…0 modes · right-drag smooth · Shift+right-click settings · - / = size · , / . strength · Shift+drag smooth · Ctrl+drag invert |
+| Commands | T or / opens the command line · Tab completes · ↑ ↓ history |
+| Selecting | Alt+T select by type |
+
+## Removed
+- **The AI Assistant** is gone: its tab, the chat, and the Claude and OpenAI-compatible (local model) providers. It never left "Coming soon". The side panel now holds only the Resource Tracker tab. API keys saved by earlier versions are ignored, and dropped from the settings file the next time it saves.
+
+## Fixes
+- **Worldgen packs made for 1.21 and newer no longer stop the world from loading.** They set `max_distance_from_center` to 128. With a terrain setting like `beard_thin`, Minecraft adds 12 blocks, and the total must stay at or under 128, so the world failed with "Horizontal structure size including terrain adaptation must not exceed 128". Structures that fit the ground now use 116.
+
+## Known issues
+- **Security warning:** the installer and exe still aren't code-signed, so Windows SmartScreen may warn on first run. Click **More info → Run anyway**.
+- **Existing blocks:** fences, walls, redstone and rails in imported schematics keep the shapes they were saved with until you place or break next to them. Deleting or replacing a selection doesn't update neighbours.
+- **Across layers:** connections, stair corners and the sculpt brushes only look at blocks in the same layer.
+- **Eraser tool:** picking a mode in the brush popup has no effect there; switch to the Brush (U) first.
+- **Block selections and the WorldEdit region** aren't saved in projects yet.
+- **Special blocks:** decorated pots and modded signs still show as simple shapes. Chests and shulker boxes don't animate open.
+- **Banner patterns** show when a schematic has them, but copying banners with `/copy` and `/paste` drops their patterns.
+- **Loot tables** only apply to worldgen data packs. Schematic exports keep containers exactly as built.
+
+## Coming soon
+- **Resource Tracker:** the materials a build needs, what you've gathered and what's left.
+
+---
+
 # BlockDesigner 0.2.0
 
 Blocks now go down the way Minecraft places them, with the game's own names. This release also adds WorldEdit-style commands, Blender-style Move and Rotate gizmos, a view cube with an orthographic camera, and sounds and particles.

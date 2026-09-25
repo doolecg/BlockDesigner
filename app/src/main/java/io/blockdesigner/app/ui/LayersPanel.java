@@ -81,16 +81,28 @@ public final class LayersPanel extends VBox {
         ws.scene().addListener(new Scene.Listener() {
             @Override
             public void layerPropertiesChanged(Layer layer) {
-                list.refresh();
+                refreshSoon();
             }
 
             @Override
             public void blocksChanged(Layer layer, Box localBox) {
-                list.refresh();
+                refreshSoon();
             }
         });
 
         getChildren().addAll(header, list);
+    }
+
+    private boolean refreshQueued;
+
+    /** Coalesces the many change events of a brush stroke or big edit into one list refresh per pulse. */
+    private void refreshSoon() {
+        if (refreshQueued) return;
+        refreshQueued = true;
+        javafx.application.Platform.runLater(() -> {
+            refreshQueued = false;
+            list.refresh();
+        });
     }
 
     /** Ctrl+Shift+N: adds an empty layer and makes it the one you build into. */
@@ -182,6 +194,9 @@ public final class LayersPanel extends VBox {
         private final ToggleButton ghost = toggle(Feather.SQUARE, Feather.LAYERS, "Ghost (translucent)");
         private final VBox text = new VBox(1, name, meta);
         private final HBox root;
+        /** Source-format badges, made once per cell (rows refresh often while editing). */
+        private final java.util.Map<FormatIcons.Kind, javafx.scene.Node> badges = new java.util.EnumMap<>(FormatIcons.Kind.class);
+        private final Tooltip sourceTip = new Tooltip();
 
         LayerCell(Actions actions) {
             swatch.setArcWidth(6);
@@ -311,6 +326,16 @@ public final class LayersPanel extends VBox {
                 return;
             }
             name.setText(l.name());
+            FormatIcons.Kind kind = FormatIcons.kindOf(l.source());
+            if (kind == null) {
+                name.setGraphic(null);
+                Tooltip.uninstall(name, sourceTip);
+            } else {
+                name.setGraphic(badges.computeIfAbsent(kind, k -> FormatIcons.icon(k, 14)));
+                sourceTip.setText("Imported from " + io.blockdesigner.core.formats.Schematics.byId(l.source())
+                        .map(f -> f.displayName()).orElse(kind.label));
+                Tooltip.install(name, sourceTip);
+            }
             String size = l.structure().bounds().map(b -> b.sizeX() + "×" + b.sizeY() + "×" + b.sizeZ()).orElse("empty");
             meta.setText(String.format("%,d blocks · %s · @ %s", l.structure().blockCount(), size, l.offset()));
             swatch.setFill(javafx.scene.paint.Color.rgb((l.color() >> 16) & 255, (l.color() >> 8) & 255, l.color() & 255));

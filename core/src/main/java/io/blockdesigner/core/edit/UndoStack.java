@@ -60,8 +60,8 @@ public final class UndoStack {
     }
 
     /**
-     * Collects every transaction pushed until the matching {@link #endGroup()} into one undo step (e.g. an entire AI
-     * turn). Groups nest; only the outermost one is recorded. Undo/redo are disabled while a group is open.
+     * Collects every transaction pushed until the matching {@link #endGroup()} into one undo step (e.g. a whole
+     * WorldEdit command). Groups nest; only the outermost one is recorded. Undo/redo are disabled while a group is open.
      */
     public void beginGroup(String label) {
         if (groupDepth++ == 0) group = new Transaction(label);

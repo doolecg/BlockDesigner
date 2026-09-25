@@ -33,9 +33,4 @@ public final class ComingSoonPanel extends VBox {
                 "Track the materials your build needs: a block count per layer, what you have already gathered and what is left.");
     }
 
-    /** The AI Assistant tab while the assistant is switched off. */
-    public static ComingSoonPanel assistant() {
-        return new ComingSoonPanel(Feather.MESSAGE_SQUARE, "AI Assistant",
-                "Describe a build or show a reference image, and an AI assistant builds it block by block. Refine it by chatting.");
-    }
 }

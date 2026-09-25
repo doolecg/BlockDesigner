@@ -109,6 +109,11 @@ public final class BlockAssets implements Closeable {
         log.accept("Resolving " + defs.size() + " block models…");
         ModelLoader loader = new ModelLoader(stack);
         Set<String> textures = new LinkedHashSet<>(FallbackModels.extraTextures());
+        // Every banner pattern texture (vanilla, mods and resource packs), for patterned banners.
+        for (String path : stack.list("assets/")) {
+            Matcher m = BANNER_PATTERN.matcher(path);
+            if (m.matches()) textures.add(m.group(1) + ":entity/banner/" + m.group(2));
+        }
         for (BlockStateDefinition d : defs.values()) {
             for (String model : d.allModels()) {
                 loader.resolve(model).ifPresent(rm -> {
@@ -193,11 +198,34 @@ public final class BlockAssets implements Closeable {
     }
 
     /** Baked model for a state; never null (falls back to approximations or a missing-texture cube). */
+    private static final Pattern BANNER_PATTERN = Pattern.compile("assets/([^/]+)/textures/entity/banner/([^/]+)\\.png");
+    private final Map<String, BakedModel> bannerCache = new ConcurrentHashMap<>();
+
+    /**
+     * A banner with its patterns (from its block entity data); the plain model when it has none. Patterned banners are
+     * cached by their state and pattern list.
+     */
+    public BakedModel bannerModel(BlockState state, io.blockdesigner.core.nbt.CompoundTag blockEntity) {
+        List<EntityModels.Pattern> patterns = EntityModels.patterns(blockEntity);
+        if (patterns.isEmpty()) return model(state);
+        String key = state + "|" + patterns;
+        BakedModel m = bannerCache.get(key);
+        if (m != null) return m;
+        return bannerCache.computeIfAbsent(key, k -> EntityModels.banner(state, state.path(), atlas, patterns)
+                .map(b -> withShape(state, b)).orElseGet(() -> model(state)));
+    }
+
     public BakedModel model(BlockState state) {
         if (state.isAir()) return BakedModel.EMPTY;
         BakedModel m = cache.get(state);
         if (m != null) return m;
-        return cache.computeIfAbsent(state, this::bakeUncached);
+        return cache.computeIfAbsent(state, st -> withShape(st, bakeUncached(st)));
+    }
+
+    /** Minecraft's own hitbox where the model's element bounds would be wrong (plants, torches, crops…). */
+    private static BakedModel withShape(BlockState state, BakedModel m) {
+        List<float[]> boxes = BlockShapes.shape(state, m);
+        return boxes == null ? m : new BakedModel(m.quads(), m.opaqueFaces(), m.ambientOcclusion(), m.missing(), boxes);
     }
 
     private BakedModel bakeUncached(BlockState state) {

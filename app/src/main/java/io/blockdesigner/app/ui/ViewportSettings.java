@@ -72,6 +72,7 @@ final class ViewportSettings {
         rows.slider("Fast nudge step (Tab)", 2, 64, () -> s.fastNudgeStep, v -> s.fastNudgeStep = (int) Math.round(v), v -> String.format("%.0f", v));
         rows.slider("Place repeat", 50, 1000, () -> s.placeDelayMs, v -> s.placeDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
         rows.slider("Break repeat", 50, 1000, () -> s.breakDelayMs, v -> s.breakDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
+        rows.slider("Brush speed", 2, 30, () -> s.brushRate, v -> s.brushRate = v, v -> String.format("%.0f / s", v));
         rows.check("Place / break sounds", () -> s.blockSounds, v -> s.blockSounds = v);
         rows.slider("Sound volume", 0, 1, () -> s.soundVolume, v -> s.soundVolume = v, v -> String.format("%.0f%%", v * 100));
         rows.check("Break particles", () -> s.breakParticles, v -> s.breakParticles = v);

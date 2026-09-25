@@ -24,11 +24,14 @@ public final class BlockState {
     private final String name;
     private final SortedMap<String, String> properties;
     private final String canonical;
+    /** Cached: {@link #isAir()} runs in every inner loop (meshing, picking, set). */
+    private final boolean air;
 
     private BlockState(String name, SortedMap<String, String> properties, String canonical) {
         this.name = name;
         this.properties = properties;
         this.canonical = canonical;
+        this.air = name.equals("minecraft:air") || name.equals("minecraft:cave_air") || name.equals("minecraft:void_air");
     }
 
     public static BlockState of(String name) {
@@ -122,7 +125,7 @@ public final class BlockState {
     }
 
     public boolean isAir() {
-        return name.equals("minecraft:air") || name.equals("minecraft:cave_air") || name.equals("minecraft:void_air");
+        return air;
     }
 
     /** Palette entry in vanilla structure / Litematica form: {@code {Name:"...", Properties:{...}}}. */

@@ -68,7 +68,7 @@ final class StartScreen extends StackPane {
     private void rebuild() {
         Label title = new Label("BlockDesigner");
         title.getStyleClass().add("start-title");
-        Label sub = new Label("Design Minecraft builds, then export them as .nbt, .litematic or .schem");
+        Label sub = new Label("Design Minecraft builds, then export them for Create, Litematica, WorldEdit or worldgen");
         sub.getStyleClass().add("start-sub");
         // The app icon (the same art as the window, taskbar and .bdproj files), from the 256 px image for sharp HiDPI.
         javafx.scene.image.ImageView logo = MainWindow.appIconView(52);
@@ -99,7 +99,9 @@ final class StartScreen extends StackPane {
         for (String f : settings.recentFiles.stream().limit(10).toList()) {
             Path p = Path.of(f);
             boolean exists = Files.isRegularFile(p);
-            Button b = new Button(p.getFileName().toString(), f.endsWith(".bdproj") ? MainWindow.appIconView(16) : new FontIcon(Feather.FILE));
+            // Each file shows where it comes from: the app icon for projects, Create / Litematica / WorldEdit for schematics.
+            FormatIcons.Kind kind = FormatIcons.kindOf(p);
+            Button b = new Button(p.getFileName().toString(), kind == null ? new FontIcon(Feather.FILE) : FormatIcons.icon(kind, 16));
             b.getStyleClass().addAll("flat", "start-recent");
             b.setMaxWidth(Double.MAX_VALUE);
             b.setAlignment(Pos.CENTER_LEFT);

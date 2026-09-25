@@ -86,4 +86,20 @@ class DatapackExporterTest {
         assertThat(errors).anyMatch(e -> e.contains("Namespace")).anyMatch(e -> e.contains("Separation"))
                 .anyMatch(e -> e.contains("biome")).anyMatch(e -> e.contains("empty"));
     }
+
+    /** Minecraft: max_distance_from_center + 12 (any terrain adaptation but none) must not exceed 128. */
+    @Test
+    void maxDistanceLeavesRoomForTerrainAdaptation() throws Exception {
+        for (McVersion v : McVersion.builtIn()) {
+            for (DatapackExporter.TerrainAdaptation t : DatapackExporter.TerrainAdaptation.values()) {
+                var d = DatapackExporter.Options.defaults("p", "hut", v);
+                var o = new DatapackExporter.Options(d.namespace(), d.name(), d.description(), v, d.biomes(), d.step(), t,
+                        d.followSurface(), d.yOffset(), d.spacing(), d.separation(), d.salt(), d.frequency(), d.includeAir());
+                var files = DatapackExporter.build(o, List.of(new DatapackExporter.Piece("main", hut(), 1)));
+                int max = JSON.readTree(files.get("data/p/worldgen/structure/hut.json")).path("max_distance_from_center").asInt();
+                int padding = t == DatapackExporter.TerrainAdaptation.NONE ? 0 : 12;
+                assertThat(max + padding).as(v.id() + " " + t).isLessThanOrEqualTo(128);
+            }
+        }
+    }
 }

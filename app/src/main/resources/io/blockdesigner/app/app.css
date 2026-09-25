@@ -1,8 +1,7 @@
 /* BlockDesigner styling on top of AtlantaFX Primer (dark/light). Uses Primer's looked-up colours so both themes work. */
 
 .app-root {
-    -bd-accent: #7c9cff;
-    -bd-accent-soft: rgba(124, 156, 255, 0.16);
+    /* -bd-accent and -bd-accent-soft come from the theme (AppTheme adds them to the user-agent stylesheet). */
     -bd-panel: -color-bg-default;
     -bd-panel-raised: -color-bg-subtle;
     -fx-font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", sans-serif;
@@ -437,179 +436,6 @@
     -fx-font-size: 13px;
 }
 
-/* ---------- assistant chat ---------- */
-
-.chat-panel {
-    -fx-padding: 10;
-    -fx-background-color: -color-bg-default;
-}
-
-.chat-messages {
-    -fx-background-color: transparent;
-}
-
-.bubble {
-    -fx-padding: 10 12 10 12;
-    -fx-background-radius: 14;
-}
-
-.bubble-user {
-    -fx-background-color: -bd-accent;
-}
-
-.bubble-user .label {
-    -fx-text-fill: white;
-}
-
-.bubble-assistant {
-    -fx-background-color: -color-bg-subtle;
-}
-
-.assistant-text {
-    -fx-line-spacing: 2;
-}
-
-.chat-working {
-    -fx-text-fill: -color-fg-muted;
-    -fx-font-size: 11.5px;
-}
-
-.chat-working .ikonli-font-icon {
-    -fx-icon-color: -bd-accent;
-}
-
-.chat-note {
-    -fx-text-fill: -color-fg-muted;
-    -fx-font-size: 11.5px;
-    -fx-font-style: italic;
-}
-
-.thinking-pane > .title {
-    -fx-background-color: transparent;
-    -fx-padding: 2 4 2 0;
-}
-
-.thinking-pane > .title > .text {
-    -fx-fill: -color-fg-muted;
-    -fx-font-size: 11.5px;
-}
-
-.thinking-text {
-    -fx-text-fill: -color-fg-muted;
-    -fx-font-size: 11.5px;
-}
-
-.tool-chip {
-    -fx-background-color: -color-bg-default;
-    -fx-background-radius: 999;
-    -fx-border-color: -color-border-muted;
-    -fx-border-radius: 999;
-    -fx-padding: 3 10 3 8;
-    -fx-font-size: 11.5px;
-    -fx-graphic-text-gap: 6;
-}
-
-.tool-chip .ikonli-font-icon {
-    -fx-icon-size: 12;
-}
-
-.tool-chip.running .ikonli-font-icon {
-    -fx-icon-color: -bd-accent;
-}
-
-.tool-chip.ok .ikonli-font-icon {
-    -fx-icon-color: #46c46e;
-}
-
-.tool-chip.failed {
-    -fx-border-color: rgba(229, 72, 77, 0.6);
-}
-
-.tool-chip.failed .ikonli-font-icon {
-    -fx-icon-color: #e5484d;
-}
-
-.shot-thumb {
-    -fx-cursor: hand;
-}
-
-.chat-composer {
-    -fx-background-color: -color-bg-subtle;
-    -fx-background-radius: 14;
-    -fx-padding: 8;
-}
-
-.chat-input, .chat-input .content {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
-    -fx-background-insets: 0;
-}
-
-.send-button {
-    -fx-background-radius: 999;
-    -fx-padding: 7 9 7 9;
-}
-
-.attachment {
-    -fx-background-color: -color-bg-default;
-    -fx-background-radius: 8;
-    -fx-padding: 3;
-}
-
-.attachment-remove {
-    -fx-padding: 1;
-    -fx-background-color: rgba(0, 0, 0, 0.55);
-    -fx-background-radius: 999;
-}
-
-.attachment-remove .ikonli-font-icon {
-    -fx-icon-color: white;
-    -fx-icon-size: 10;
-}
-
-.chat-empty {
-    -fx-padding: 22 8 8 8;
-}
-
-.chat-empty-title {
-    -fx-font-size: 18px;
-    -fx-font-weight: bold;
-}
-
-.suggestion {
-    -fx-font-size: 11.5px;
-}
-
-/* ---------- iteration timeline ---------- */
-
-.timeline {
-    -fx-background-color: -color-bg-default;
-    -fx-border-color: -color-border-muted transparent transparent transparent;
-    -fx-padding: 8 12 8 12;
-    -fx-pref-height: 168;
-}
-
-.timeline-item {
-    -fx-cursor: hand;
-    -fx-padding: 4;
-    -fx-background-radius: 10;
-}
-
-.timeline-item:hover {
-    -fx-background-color: -bd-accent-soft;
-}
-
-.timeline-thumb {
-    -fx-background-color: #0f1522;
-    -fx-background-radius: 8;
-}
-
-.timeline-caption {
-    -fx-font-size: 11.5px;
-    -fx-font-weight: bold;
-}
-
-
 /* ---------- block tooltip (Jade-style) & crosshair ---------- */
 
 .block-hud {
@@ -738,4 +564,301 @@
 .command-result.error {
     -fx-text-fill: #E5484D;
     -fx-font-size: 12px;
+}
+
+/* ---------- paint brush / eraser bar ---------- */
+
+.brush-bar {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 10;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 10;
+    -fx-padding: 5 10 5 10;
+    -fx-effect: dropshadow(gaussian, -bd-shadow, 18, 0.2, 0, 4);
+}
+
+.brush-title {
+    -fx-font-weight: bold;
+}
+
+.brush-value {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 11px;
+    -fx-min-width: 64;
+}
+
+.brush-popup {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 12;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 12;
+    -fx-effect: dropshadow(gaussian, -bd-shadow, 24, 0.25, 0, 6);
+}
+
+.brush-mode {
+    -fx-alignment: center-left;
+    -fx-graphic-text-gap: 8;
+    -fx-font-size: 12px;
+}
+
+.brush-mode:selected {
+    -fx-background-color: -bd-accent;
+    -fx-text-fill: white;
+}
+
+.command-log .label {
+    -fx-font-family: "Consolas", "Cascadia Mono", monospace;
+    -fx-font-size: 12px;
+}
+
+.command-log-command {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.command-log-line {
+    -fx-text-fill: -color-fg-default;
+}
+
+.command-log-error {
+    -fx-text-fill: #E5484D;
+}
+
+/* ---------- export window ---------- */
+
+.export-dialog > .content {
+    -fx-padding: 14 16 6 14;
+}
+
+.export-cards-scroll, .export-cards-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.export-cards {
+    -fx-padding: 2 10 2 0;
+}
+
+.export-cards-heading {
+    -fx-font-size: 10.5px;
+    -fx-font-weight: bold;
+    -fx-opacity: 0.6;
+    -fx-padding: 12 0 2 6;
+}
+
+.export-card {
+    -fx-background-color: transparent;
+    -fx-background-radius: 10;
+    -fx-border-color: transparent;
+    -fx-border-radius: 10;
+    -fx-padding: 8 10 8 8;
+}
+
+.export-card:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.export-card:selected {
+    -fx-background-color: -bd-accent-soft;
+    -fx-border-color: -bd-accent;
+}
+
+.export-card-title {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.export-card-sub {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.export-title {
+    -fx-font-size: 19px;
+    -fx-font-weight: bold;
+}
+
+.export-hint {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.export-detail {
+    -fx-border-color: transparent transparent transparent -color-border-muted;
+}
+
+.export-summary {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8;
+    -fx-padding: 7 10 7 10;
+    -fx-font-size: 12px;
+}
+
+.export-summary-empty {
+    -fx-text-fill: -color-danger-fg;
+}
+
+.export-path {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.export-ext {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+}
+
+.export-error {
+    -fx-text-fill: -color-danger-fg;
+}
+
+/* ---------- plugins window ---------- */
+
+.plugin-row {
+    -fx-padding: 8 10 8 10;
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 10;
+}
+
+.plugin-name {
+    -fx-font-weight: bold;
+    -fx-font-size: 13.5px;
+}
+
+.plugin-meta {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.plugin-error {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -color-danger-fg;
+}
+
+.plugin-warning {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -color-warning-fg;
+}
+
+.plugin-log {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 11px;
+}
+
+/* ---------- layer source badge ---------- */
+
+.layer-source {
+    -fx-opacity: 0.95;
+}
+
+/* ---------- settings window ---------- */
+
+.settings-nav {
+    -fx-padding: 4 12 4 0;
+    -fx-border-color: transparent -color-border-muted transparent transparent;
+}
+
+.settings-nav-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-padding: 8 12 8 12;
+    -fx-graphic-text-gap: 10;
+}
+
+.settings-nav-item:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.settings-nav-item:selected {
+    -fx-background-color: -bd-accent-soft;
+    -fx-text-fill: -bd-accent;
+}
+
+.settings-nav-item:selected .ikonli-font-icon {
+    -fx-icon-color: -bd-accent;
+}
+
+.theme-card {
+    -fx-padding: 10;
+    -fx-border-color: -color-border-muted;
+}
+
+/* ---------- data pack window ---------- */
+
+.terrain-card {
+    -fx-padding: 6;
+    -fx-border-color: -color-border-muted;
+}
+
+.terrain-card:selected {
+    -fx-background-color: -bd-accent-soft;
+    -fx-border-color: -bd-accent;
+    -fx-border-width: 2;
+}
+
+/* ---------- build shape wheel (hold Alt in Build mode) ---------- */
+
+.shape-radial-sector {
+    -fx-fill: rgba(16, 20, 30, 0.82);
+    -fx-stroke: rgba(255, 255, 255, 0.10);
+    -fx-stroke-width: 1;
+    -fx-cursor: hand;
+}
+
+.shape-radial-sector:current {
+    -fx-stroke: -bd-accent;
+    -fx-stroke-width: 2;
+}
+
+.shape-radial-sector:hot {
+    -fx-fill: -bd-accent;
+    -fx-opacity: 0.92;
+}
+
+.shape-radial-hub {
+    -fx-fill: rgba(16, 20, 30, 0.9);
+    -fx-stroke: rgba(255, 255, 255, 0.14);
+}
+
+.shape-radial-label {
+    -fx-text-fill: #eef1f7;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 3, 0.4, 0, 1);
+}
+
+.shape-radial-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.shape-radial-sub {
+    -fx-text-fill: rgba(255, 255, 255, 0.7);
+    -fx-font-size: 10px;
+}
+
+/* ---------- symmetry ---------- */
+
+.viewport-settings-button.active {
+    -fx-background-color: -bd-accent-soft;
+}
+
+.viewport-settings-button.active .ikonli-font-icon {
+    -fx-icon-color: -bd-accent;
+}
+
+.symmetry-axis-x:selected {
+    -fx-background-color: #E5484D;
+    -fx-text-fill: white;
+}
+
+.symmetry-axis-y:selected {
+    -fx-background-color: #46C46E;
+    -fx-text-fill: white;
+}
+
+.symmetry-axis-z:selected {
+    -fx-background-color: #3E9BFF;
+    -fx-text-fill: white;
 }

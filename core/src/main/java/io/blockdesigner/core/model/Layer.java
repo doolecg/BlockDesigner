@@ -19,6 +19,8 @@ public final class Layer {
     private boolean locked;
     private boolean ghost;
     private int color = 0x7C9CFF;
+    /** Id of the schematic format this layer was imported from (e.g. {@code litematica}), or null if built here. */
+    private String source;
 
     public Layer(String name, Structure structure) {
         this(UUID.randomUUID().toString(), name, structure);
@@ -86,6 +88,14 @@ public final class Layer {
         this.ghost = ghost;
     }
 
+    public String source() {
+        return source;
+    }
+
+    public void setSource(String formatId) {
+        this.source = formatId == null || formatId.isBlank() ? null : formatId;
+    }
+
     /** Display tint (0xRRGGBB) for the layer's list row and outline. */
     public int color() {
         return color;
@@ -120,6 +130,7 @@ public final class Layer {
         l.visible = visible;
         l.ghost = ghost;
         l.color = color;
+        l.source = source;
         return l;
     }
 

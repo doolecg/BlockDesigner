@@ -129,6 +129,31 @@ class WorldEditTest {
     }
 
     @Test
+    void naturalizeHollowCenterAndSmooth() {
+        box(0, 0, 0, 4, 5, 4);
+        run("//set stone");
+        run("//naturalize");
+        assertThat(blocks.get(new BlockPos(2, 5, 2)).name()).isEqualTo("minecraft:grass_block");
+        assertThat(blocks.get(new BlockPos(2, 3, 2)).name()).isEqualTo("minecraft:dirt");
+        assertThat(blocks.get(new BlockPos(2, 0, 2))).isEqualTo(STONE);
+
+        run("//set stone");
+        run("//hollow");
+        assertThat(blocks).doesNotContainKey(new BlockPos(2, 2, 2)).containsKey(new BlockPos(0, 2, 2));
+
+        blocks.clear();
+        assertThat(run("//center gold_block").changed()).isEqualTo(1 * 2 * 1);
+
+        // A spike on flat ground gets smoothed down.
+        blocks.clear();
+        box(0, 0, 0, 8, 6, 8);
+        for (int x = 0; x <= 8; x++) for (int z = 0; z <= 8; z++) blocks.put(new BlockPos(x, 0, z), STONE);
+        for (int y = 1; y <= 6; y++) blocks.put(new BlockPos(4, y, 4), STONE);
+        run("//smooth 3");
+        assertThat(blocks.keySet().stream().filter(p -> p.x() == 4 && p.z() == 4).mapToInt(BlockPos::y).max().orElse(0)).isLessThan(3);
+    }
+
+    @Test
     void errorsAreFriendly() {
         assertThat(run("//set stone").ok()).isFalse();
         box(0, 0, 0, 1, 1, 1);

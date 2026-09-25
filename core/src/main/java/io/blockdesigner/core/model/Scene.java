@@ -135,7 +135,20 @@ public final class Scene {
         for (Layer layer : toMerge) {
             Structure s = layer.structure();
             Transform t = layer.transform();
-            s.forEachBlock((x, y, z, state) -> out.set(layer.toWorld(x, y, z), bt.apply(state, t)));
+            // The lattice transform is linear: world = M·local + offset. Inlined so no position objects are made per block,
+            // and each distinct state is transformed once.
+            BlockPos ex = t.apply(1, 0, 0), ez = t.apply(0, 0, 1), off = layer.offset();
+            int m00 = ex.x(), m01 = ez.x(), m10 = ex.z(), m11 = ez.z();
+            int ox = off.x(), oy = off.y(), oz = off.z();
+            java.util.IdentityHashMap<BlockState, BlockState> turned = new java.util.IdentityHashMap<>();
+            s.forEachBlock((x, y, z, state) -> {
+                BlockState w = turned.get(state);
+                if (w == null) {
+                    w = bt.apply(state, t);
+                    turned.put(state, w);
+                }
+                out.set(m00 * x + m01 * z + ox, y + oy, m10 * x + m11 * z + oz, w);
+            });
             for (var e : s.blockEntities().entrySet()) {
                 BlockPos wp = layer.toWorld(e.getKey());
                 CompoundTag nbt = e.getValue().copy();

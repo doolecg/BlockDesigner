@@ -6,6 +6,7 @@ import io.blockdesigner.core.model.Scene;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -34,6 +35,25 @@ public final class Picker {
 
     /** As above, ignoring blocks whose world Y is outside {@code minY..maxY} (the slice view hides them). */
     public static Optional<Hit> pick(Scene scene, Vector3f origin, Vector3f dir, float maxDist, Predicate<Layer> filter, int minY, int maxY) {
+        return pick(scene, origin, dir, maxDist, filter, minY, maxY, null);
+    }
+
+    /**
+     * As above, with {@code override} deciding cells by world position first: TRUE counts a cell as solid, FALSE as
+     * empty, null leaves it to the blocks. A brush stroke uses it to aim at the surface as it was before the stroke.
+     */
+    public static Optional<Hit> pick(Scene scene, Vector3f origin, Vector3f dir, float maxDist, Predicate<Layer> filter, int minY, int maxY,
+                                     java.util.function.Function<BlockPos, Boolean> override) {
+        return pick(scene, origin, dir, maxDist, filter, minY, maxY, override, null);
+    }
+
+    /**
+     * As above, with {@code shapes} giving a block's hitbox boxes (0..1 space, null or empty for a full cube): rays hit
+     * the model's shape, and pass through the empty part of a slab, torch, flower or fence, as in Minecraft.
+     */
+    public static Optional<Hit> pick(Scene scene, Vector3f origin, Vector3f dir, float maxDist, Predicate<Layer> filter, int minY, int maxY,
+                                     java.util.function.Function<BlockPos, Boolean> override,
+                                     java.util.function.Function<io.blockdesigner.core.model.BlockState, List<float[]>> shapes) {
         Hit best = null;
         for (Layer l : scene.layers()) {
             if (!l.visible() || !filter.test(l)) continue;
@@ -45,14 +65,16 @@ public final class Picker {
             long base = l.ghost() ? 0 : l.offset().y();
             int lo = l.ghost() ? Integer.MIN_VALUE : (int) Math.max(Integer.MIN_VALUE, minY - base);
             int hi = l.ghost() ? Integer.MAX_VALUE : (int) Math.min(Integer.MAX_VALUE, maxY - base);
-            Hit h = march(l, o, d, limit, model, lo, hi);
+            Hit h = march(l, o, d, limit, model, lo, hi, override, shapes);
             if (h != null && (best == null || h.distance < best.distance)) best = h;
         }
         return Optional.ofNullable(best);
     }
 
     /** Amanatides–Woo voxel traversal in layer-local space. */
-    private static Hit march(Layer l, Vector3f o, Vector3f d, float maxDist, Matrix4f model, int minY, int maxY) {
+    private static Hit march(Layer l, Vector3f o, Vector3f d, float maxDist, Matrix4f model, int minY, int maxY,
+                             java.util.function.Function<BlockPos, Boolean> override,
+                             java.util.function.Function<io.blockdesigner.core.model.BlockState, List<float[]>> shapes) {
         var s = l.structure();
         var bounds = s.bounds();
         if (bounds.isEmpty()) return null;
@@ -81,10 +103,29 @@ public final class Picker {
         float tcur = t0;
         float tEnd = Math.min(maxDist, t[1]);
         while (tcur <= tEnd) {
-            if (y >= minY && y <= maxY && !s.get(x, y, z).isAir()) {
+            Boolean forced = override == null || y < minY || y > maxY ? null : override.apply(l.toWorld(x, y, z));
+            var state = y >= minY && y <= maxY ? s.get(x, y, z) : null;
+            if (state != null && (forced != null ? forced : !state.isAir())) {
                 BlockPos local = new BlockPos(x, y, z);
-                Vector3f wn = model.transformDirection(new Vector3f(nx, ny, nz));
-                return new Hit(l, local, l.toWorld(local), new BlockPos(Math.round(wn.x), Math.round(wn.y), Math.round(wn.z)), tcur);
+                List<float[]> boxes = forced == null && shapes != null ? shapes.apply(state) : null;
+                if (boxes == null || boxes.isEmpty()) {
+                    Vector3f wn = model.transformDirection(new Vector3f(nx, ny, nz));
+                    return new Hit(l, local, l.toWorld(local), new BlockPos(Math.round(wn.x), Math.round(wn.y), Math.round(wn.z)), tcur);
+                }
+                // Shaped block: the nearest of its boxes the ray hits; none means the ray carries on through the cell.
+                float bestT = Float.MAX_VALUE;
+                int[] bestN = null;
+                for (float[] bx : boxes) {
+                    float[] hit = boxHit(o, d, x + bx[0], y + bx[1], z + bx[2], x + bx[3], y + bx[4], z + bx[5]);
+                    if (hit != null && hit[0] < bestT && hit[0] <= maxDist) {
+                        bestT = hit[0];
+                        bestN = new int[]{(int) hit[1], (int) hit[2], (int) hit[3]};
+                    }
+                }
+                if (bestN != null) {
+                    Vector3f wn = model.transformDirection(new Vector3f(bestN[0], bestN[1], bestN[2]));
+                    return new Hit(l, local, l.toWorld(local), new BlockPos(Math.round(wn.x), Math.round(wn.y), Math.round(wn.z)), bestT);
+                }
             }
             if (tmx < tmy && tmx < tmz) {
                 x += stepX;
@@ -110,6 +151,38 @@ public final class Picker {
             }
         }
         return null;
+    }
+
+    /** Where the ray enters a box: {t, normalX, normalY, normalZ}, or null when it misses (or starts inside). */
+    static float[] boxHit(Vector3f o, Vector3f d, float x0, float y0, float z0, float x1, float y1, float z1) {
+        float[] os = {o.x, o.y, o.z}, ds = {d.x, d.y, d.z}, mins = {x0, y0, z0}, maxs = {x1, y1, z1};
+        float tmin = -Float.MAX_VALUE, tmax = Float.MAX_VALUE;
+        int axis = -1, sign = 0;
+        for (int i = 0; i < 3; i++) {
+            if (Math.abs(ds[i]) < 1e-9f) {
+                if (os[i] < mins[i] || os[i] > maxs[i]) return null;
+                continue;
+            }
+            float t0 = (mins[i] - os[i]) / ds[i], t1 = (maxs[i] - os[i]) / ds[i];
+            int s = -1;
+            if (t0 > t1) {
+                float tmp = t0;
+                t0 = t1;
+                t1 = tmp;
+                s = 1;
+            }
+            if (t0 > tmin) {
+                tmin = t0;
+                axis = i;
+                sign = s;
+            }
+            tmax = Math.min(tmax, t1);
+            if (tmin > tmax) return null;
+        }
+        if (axis < 0 || tmin < 0) return null;
+        float[] out = {tmin, 0, 0, 0};
+        out[1 + axis] = sign;
+        return out;
     }
 
     /** Slab test; returns {tNear, tFar} or null when the ray misses. */

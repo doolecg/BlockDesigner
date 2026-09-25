@@ -188,10 +188,9 @@ public final class BlockPalette extends VBox {
         if (!schematicDirty) return;
         schematicDirty = false;
         schematicCounts.clear();
+        // Per-state counts come from one pass over each palette-indexed section, no callback per block.
         for (var l : ws.scene().layers()) {
-            l.structure().forEachBlock((x, y, z, st) -> {
-                if (!st.isAir()) schematicCounts.merge(st.name(), 1L, Long::sum);
-            });
+            l.structure().stateCounts().forEach((st, n) -> schematicCounts.merge(st.name(), n, Long::sum));
         }
     }
 
