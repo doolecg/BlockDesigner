@@ -53,13 +53,8 @@ public final class LayersPanel extends VBox {
         title.getStyleClass().add("panel-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button add = iconButton(Feather.PLUS, "New empty layer", () -> {
-            Layer l = new Layer(uniqueName("Layer"), new Structure());
-            ws.activeLayerProperty().get();
-            ws.editor().addLayer(l);
-            ws.selectedLayers().setAll(l);
-        });
-        Button imp = iconButton(Feather.DOWNLOAD, "Import schematic…", actions.importSchematic());
+        Button add = iconButton(Feather.PLUS, "New empty layer (Ctrl+Shift+N)", this::newLayer);
+        Button imp = iconButton(Feather.DOWNLOAD, "Import schematic… (Ctrl+I)", actions.importSchematic());
         HBox header = new HBox(6, title, spacer, imp, add);
         header.setAlignment(Pos.CENTER_LEFT);
         header.getStyleClass().add("panel-header");
@@ -96,6 +91,29 @@ public final class LayersPanel extends VBox {
         });
 
         getChildren().addAll(header, list);
+    }
+
+    /** Ctrl+Shift+N: adds an empty layer and makes it the one you build into. */
+    public void newLayer() {
+        Layer l = new Layer(uniqueName("Layer"), new Structure());
+        ws.editor().addLayer(l);
+        ws.selectedLayers().setAll(l);
+    }
+
+    /** F2: starts renaming the active layer in the list. */
+    public void renameActive() {
+        Layer a = ws.activeLayerProperty().get();
+        if (a == null) return;
+        list.scrollTo(a);
+        // The cell exists once the list has laid itself out after scrolling.
+        javafx.application.Platform.runLater(() -> {
+            for (javafx.scene.Node n : list.lookupAll(".list-cell")) {
+                if (n instanceof LayerCell c && c.getItem() == a) {
+                    c.startRename();
+                    return;
+                }
+            }
+        });
     }
 
     private Region placeholder() {

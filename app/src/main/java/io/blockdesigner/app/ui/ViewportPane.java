@@ -143,6 +143,10 @@ public final class ViewportPane extends StackPane {
 
     // Move / Rotate tools: the gizmo overlay, the handle under the mouse and the drag in progress
     private final Gizmo gizmo = new Gizmo();
+    // WorldEdit: pos1 / pos2 region, clipboard and the "/" command bar
+    private final io.blockdesigner.core.worldedit.WorldEdit worldEdit = new io.blockdesigner.core.worldedit.WorldEdit();
+    private final CommandBar commandBar = new CommandBar(this::runCommand);
+    private final javafx.scene.control.Button commandButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.TERMINAL));
     // Place / break feel: thuds, break chips, and flight velocity for momentum
     private final BlockSounds sounds = new BlockSounds();
     private final BreakParticles particles = new BreakParticles();
@@ -184,13 +188,13 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(sliceBadge, Pos.TOP_RIGHT);
         StackPane.setMargin(sliceBadge, new javafx.geometry.Insets(14, 176, 0, 0));
         settingsButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        settingsButton.setTooltip(new javafx.scene.control.Tooltip("Viewport settings: field of view, clipping, fog, overlays, controls"));
+        settingsButton.setTooltip(new javafx.scene.control.Tooltip("Viewport settings (N): field of view, clipping, fog, overlays, controls"));
         settingsButton.setFocusTraversable(false);
         settingsButton.setOnAction(e -> toggleSettings());
         StackPane.setAlignment(settingsButton, Pos.TOP_RIGHT);
         StackPane.setMargin(settingsButton, new javafx.geometry.Insets(10, 12, 0, 0));
         keysButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        keysButton.setTooltip(new javafx.scene.control.Tooltip("Keyboard shortcuts (Alt+K)"));
+        keysButton.setTooltip(new javafx.scene.control.Tooltip("Keyboard shortcuts (Alt+K or F1)"));
         keysButton.setFocusTraversable(false);
         keysButton.setOnAction(e -> toggleShortcuts());
         StackPane.setAlignment(keysButton, Pos.TOP_RIGHT);
@@ -201,6 +205,14 @@ public final class ViewportPane extends StackPane {
         filterButton.setOnAction(e -> openSelectByType(null));
         StackPane.setAlignment(filterButton, Pos.TOP_RIGHT);
         StackPane.setMargin(filterButton, new javafx.geometry.Insets(94, 12, 0, 0));
+        commandButton.getStyleClass().addAll("flat", "viewport-settings-button");
+        commandButton.setTooltip(new javafx.scene.control.Tooltip("WorldEdit commands (/): //set, //replace, //walls, //copy, //paste, //stack, //sphere…"));
+        commandButton.setFocusTraversable(false);
+        commandButton.setOnAction(e -> openCommandBar());
+        StackPane.setAlignment(commandButton, Pos.TOP_RIGHT);
+        StackPane.setMargin(commandButton, new javafx.geometry.Insets(136, 12, 0, 0));
+        StackPane.setAlignment(commandBar, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(commandBar, new javafx.geometry.Insets(0, 0, 76, 0));
         StackPane.setAlignment(hud, Pos.TOP_LEFT);
         StackPane.setMargin(hud, new javafx.geometry.Insets(12, 0, 0, 12));
         javafx.scene.shape.Rectangle ch = new javafx.scene.shape.Rectangle(18, 2), cv = new javafx.scene.shape.Rectangle(2, 18);
@@ -217,7 +229,7 @@ public final class ViewportPane extends StackPane {
         hotbar = new Hotbar(ws);
         StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 14, 0));
-        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, viewCube, settingsButton, keysButton, filterButton);
+        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar);
         updateHotbarVisibility();
         applyViewSettings();
         toastFade.setFromValue(1);
@@ -389,6 +401,7 @@ public final class ViewportPane extends StackPane {
             Overlays.box(lines, f.minX() - 0.02f, f.minY() - 0.02f, f.minZ() - 0.02f, f.maxX() + 1.02f, f.maxY() + 1.02f, f.maxZ() + 1.02f, 0xFFFFC85A);
         }
         drawBlockSelection(lines);
+        drawRegion(lines);
         if (placing.isEmpty() && ws.toolProperty().get() != ToolKind.VIEW) {
             boolean build = ws.toolProperty().get() == ToolKind.BUILD;
             if (hover != null) {
@@ -663,7 +676,10 @@ public final class ViewportPane extends StackPane {
         if (fly) {
             // Minecraft controls in Build mode: left break, right place, middle pick. Select mode selects the aimed block.
             if (mode == ToolKind.SELECT && e.getButton() == MouseButton.PRIMARY) {
-                clickSelect(e.isShiftDown(), e.isShortcutDown());
+                if (e.isShiftDown() || e.isShortcutDown()) clickSelect(e.isShiftDown(), e.isShortcutDown());
+                else setCorner(true);
+            } else if (mode == ToolKind.SELECT && e.getButton() == MouseButton.SECONDARY) {
+                setCorner(false);
             } else if (mode == ToolKind.BUILD) {
                 switch (e.getButton()) {
                     case PRIMARY -> startHold(Action.BREAK);
@@ -794,16 +810,20 @@ public final class ViewportPane extends StackPane {
         }
         if (e.getButton() == MouseButton.MIDDLE && click) pickBlock();
         if (e.getButton() == MouseButton.SECONDARY && click && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
+            // WorldEdit: right-click sets pos2; Shift+right-click opens the menu.
             updateHover(e.getX(), e.getY());
-            showContextMenu(e.getScreenX(), e.getScreenY());
+            if (e.isShiftDown()) showContextMenu(e.getScreenX(), e.getScreenY());
+            else setCorner(false);
         }
         if (e.getButton() == MouseButton.PRIMARY && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
             if (marquee.isVisible()) {
                 marqueeSelect(Math.min(pressX, e.getX()), Math.min(pressY, e.getY()), Math.max(pressX, e.getX()), Math.max(pressY, e.getY()),
                         e.isShiftDown(), e.isShortcutDown());
             } else if (click) {
+                // WorldEdit: a plain click sets pos1; Shift / Ctrl still add or toggle single blocks.
                 updateHover(e.getX(), e.getY());
-                clickSelect(e.isShiftDown(), e.isShortcutDown());
+                if (e.isShiftDown() || e.isShortcutDown()) clickSelect(e.isShiftDown(), e.isShortcutDown());
+                else setCorner(true);
             }
         }
         marquee.setVisible(false);
@@ -853,6 +873,8 @@ public final class ViewportPane extends StackPane {
     }
 
     private void onKey(KeyEvent e) {
+        // Typing in the command bar is for the bar, not the viewport's keys.
+        if (commandBar.isFocusWithin()) return;
         KeyCode k = e.getCode();
         if (fly && isFlyKey(k)) {
             flyKeys.add(k);
@@ -878,6 +900,11 @@ public final class ViewportPane extends StackPane {
             case PAGE_UP -> stepSlice(1);
             case PAGE_DOWN -> stepSlice(-1);
             case INSERT -> toggleSingleSlice();
+            case CONTEXT_MENU -> {
+                if (ws.toolProperty().get() != ToolKind.SELECT) return;
+                javafx.geometry.Point2D c = localToScreen(lastX, lastY);
+                if (c != null) showContextMenu(c.getX(), c.getY());
+            }
             case T -> {
                 if (e.isShortcutDown() || e.isAltDown() || !placing.isEmpty()) return;
                 Layer hl = hover != null ? hover.layer() : null;
@@ -888,7 +915,7 @@ public final class ViewportPane extends StackPane {
                 else if (shortcutsShowing()) showShortcuts(false);
                 else if (fly) setFly(false);
                 else if (!placing.isEmpty()) cancelPlacement();
-                else if (!blockSel.isEmpty()) clearBlockSelection();
+                else if (!blockSel.isEmpty() || worldEdit.region() != null) clearRegionAndSelection();
                 else ws.toolProperty().set(ToolKind.SELECT);
             }
             case DELETE, BACK_SPACE -> {
@@ -896,7 +923,7 @@ public final class ViewportPane extends StackPane {
                     // Build mode: Delete empties the held hotbar slot.
                     BlockState removed = ws.clearHeldSlot();
                     showToast(removed == null ? "That hotbar slot is already empty"
-                            : "Removed " + BlockInfoHud.pretty(removed.path()) + " from the hotbar");
+                            : "Removed " + BlockInfoHud.name(ws.assets(), removed) + " from the hotbar");
                 } else if (!blockSel.isEmpty()) {
                     deleteSelectedBlocks();
                 } else {
@@ -906,6 +933,10 @@ public final class ViewportPane extends StackPane {
             case R -> {
                 if (!placing.isEmpty()) rotatePlacement(1);
                 else return;
+            }
+            case HOME -> {
+                setFly(false);
+                frameAll();
             }
             case F -> {
                 // F frames the selected blocks if there are any, otherwise the active layer; Shift+F frames everything.
@@ -1103,13 +1134,14 @@ public final class ViewportPane extends StackPane {
                 java.util.Map<BlockPos, BlockState> edits = placementFor(l, world, held);
                 if (edits.isEmpty()) return;
                 if (fly && edits.keySet().stream().anyMatch(this::insideCamera)) return;
+                // Sound first: the edit's updates (meshes, panels) must not delay it.
+                if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
                 try (SceneEditor.BlockSession s = ws.editor().edit(l, "Place block", key)) {
                     for (var en : edits.entrySet()) {
                         BlockPos local = l.toLocal(en.getKey());
                         s.set(local.x(), local.y(), local.z(), BlockTransformer.defaults().apply(en.getValue(), l.transform().inverse()));
                     }
                 }
-                if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
             }
         }
         updateHover(aimX(), aimY());
@@ -1130,13 +1162,13 @@ public final class ViewportPane extends StackPane {
         var edits = BlockPlacement.replace(held, hover.world(),
                 p -> BlockTransformer.defaults().apply(l.structure().get(l.toLocal(p)), t), blocks);
         if (edits.isEmpty()) return;
+        if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
         try (SceneEditor.BlockSession s = ws.editor().edit(l, "Replace block", key)) {
             for (var en : edits.entrySet()) {
                 BlockPos local = l.toLocal(en.getKey());
                 s.set(local.x(), local.y(), local.z(), BlockTransformer.defaults().apply(en.getValue(), t.inverse()));
             }
         }
-        if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
     }
 
     /**
@@ -1173,7 +1205,7 @@ public final class ViewportPane extends StackPane {
         if (hover == null) return false;
         BlockState s = BlockTransformer.defaults().apply(hover.layer().structure().get(hover.local()), hover.layer().transform());
         ws.recordInHotbar(s);
-        showToast("Picked " + BlockInfoHud.pretty(s.path()));
+        showToast("Picked " + BlockInfoHud.name(ws.assets(), s));
         return true;
     }
 
@@ -1368,11 +1400,20 @@ public final class ViewportPane extends StackPane {
         BlockState held = ws.selectedBlockProperty().get();
         Layer layer = hover != null ? hover.layer() : ws.activeLayerProperty().get();
 
+        if (worldEdit.region() != null) {
+            var rb = worldEdit.region();
+            contextMenu.getItems().addAll(
+                    item(String.format("Fill region %d×%d×%d with held block", rb.sizeX(), rb.sizeY(), rb.sizeZ()), "//set hand", () -> runCommand("//set hand")),
+                    item("Walls of region with held block", "//walls hand", () -> runCommand("//walls hand")),
+                    item("Copy region", "//copy", () -> runCommand("//copy")),
+                    item("Clear region", "Esc", this::clearRegionAndSelection),
+                    new javafx.scene.control.SeparatorMenuItem());
+        }
         if (hover != null) {
             contextMenu.getItems().add(item("Pick block to hotbar", "Middle-click", this::pickBlock));
             Layer hl = hover.layer();
             BlockState type = BlockTransformer.defaults().apply(hl.structure().get(hover.local()), hl.transform());
-            String typeName = BlockInfoHud.pretty(type.path());
+            String typeName = BlockInfoHud.name(ws.assets(), type);
             javafx.scene.control.Menu byType = new javafx.scene.control.Menu("Select by type");
             byType.getItems().addAll(
                     item("All " + typeName + " in " + hl.name(), null, () -> quickSelectType(type, false, List.of(hl))),
@@ -1385,7 +1426,7 @@ public final class ViewportPane extends StackPane {
         if (n > 0) {
             contextMenu.getItems().addAll(
                     item(String.format("Delete %,d block%s", n, n == 1 ? "" : "s"), "Del", this::deleteSelectedBlocks),
-                    item("Replace with " + (held == null ? "held block" : BlockInfoHud.pretty(held.path())), null, this::replaceSelection),
+                    item("Replace with " + (held == null ? "held block" : BlockInfoHud.name(ws.assets(), held)), null, this::replaceSelection),
                     item("Copy to new layer", null, this::copySelectionToLayer),
                     item("Clear selection", "Esc", this::clearBlockSelection));
         }
@@ -1408,6 +1449,51 @@ public final class ViewportPane extends StackPane {
         if (accel != null) mi.setText(text + "    (" + accel + ")");
         mi.setOnAction(e -> action.run());
         return mi;
+    }
+
+    /** Ctrl+A: every block of the active layer, in Select mode. */
+    public void selectAllInActive() {
+        Layer a = ws.activeLayerProperty().get();
+        if (a == null) {
+            showToast("No active layer");
+            return;
+        }
+        ws.toolProperty().set(ToolKind.SELECT);
+        selectAllIn(a);
+    }
+
+    /** Alt+A: drops the block selection. */
+    public void deselectBlocks() {
+        clearBlockSelection();
+    }
+
+    /** Ctrl+J: copies the selected blocks into a new layer. */
+    public void copySelectionToNewLayer() {
+        if (blockSel.isEmpty()) {
+            showToast("Select some blocks first (Select mode, Q)");
+            return;
+        }
+        copySelectionToLayer();
+    }
+
+    /** Ctrl+R: fills the selected blocks with the held block. */
+    public void replaceSelectionWithHeld() {
+        if (blockSel.isEmpty()) {
+            showToast("Select some blocks first (Select mode, Q)");
+            return;
+        }
+        if (ws.selectedBlockProperty().get() == null) {
+            showToast("Empty hand · choose a block first");
+            return;
+        }
+        replaceSelection();
+    }
+
+    /** Alt+G: ground grid on / off. */
+    public void toggleGrid() {
+        ws.settings().showGrid = !ws.settings().showGrid;
+        showToast(ws.settings().showGrid ? "Grid on" : "Grid off");
+        requestRedraw();
     }
 
     private void selectAllIn(Layer l) {
@@ -1439,7 +1525,7 @@ public final class ViewportPane extends StackPane {
             }
         }
         ws.editor().undoStack().sealTop();
-        showToast("Replaced with " + BlockInfoHud.pretty(held.path()));
+        showToast("Replaced with " + BlockInfoHud.name(ws.assets(), held));
     }
 
     /** Copies the selected blocks of each layer into a new layer at the same place. */
@@ -1999,6 +2085,146 @@ public final class ViewportPane extends StackPane {
         selectionChanged();
     }
 
+    // ---- WorldEdit region and commands ---------------------------------------------------------------------------
+
+    /** Left-click (pos1) / right-click (pos2) in Select mode: the aimed block, or the ground cell under the cursor. */
+    private void setCorner(boolean first) {
+        BlockPos p = hover != null ? hover.world() : hoverGround != null ? hoverGround : pickGround(aimX(), aimY(), groundY()).orElse(null);
+        if (p == null) {
+            showToast("Aim at a block or the ground to set " + (first ? "pos1" : "pos2"));
+            return;
+        }
+        if (first) worldEdit.setPos1(p);
+        else worldEdit.setPos2(p);
+        Box r = worldEdit.region();
+        regionChanged();
+        boolean both = worldEdit.pos1() != null && worldEdit.pos2() != null;
+        showToast((first ? "pos1 " : "pos2 ") + p + (both ? String.format(" · %d×%d×%d = %,d blocks · / for commands", r.sizeX(), r.sizeY(), r.sizeZ(), r.volume())
+                : first ? " · right-click pos2" : " · left-click pos1"));
+    }
+
+    /** The region's blocks (in visible, unlocked layers) become the block selection, so Delete, F, T and the menu act on it. */
+    private void regionChanged() {
+        Box r = worldEdit.region();
+        blockSel.clear();
+        if (r != null) {
+            List<Layer> touched = new ArrayList<>();
+            for (Layer l : ws.scene().layers()) {
+                if (!l.visible() || l.locked() || placing.contains(l)) continue;
+                java.util.Set<Long> set = new java.util.HashSet<>();
+                l.structure().forEachBlock((x, y, z, st) -> {
+                    BlockPos w = l.toWorld(x, y, z);
+                    if (r.contains(w.x(), w.y(), w.z())) set.add(BlockPos.pack(x, y, z));
+                });
+                if (!set.isEmpty()) {
+                    blockSel.put(l.id(), set);
+                    touched.add(l);
+                }
+            }
+            if (!touched.isEmpty() && touched.stream().noneMatch(l -> l == ws.activeLayerProperty().get())) {
+                ws.scene().setActive(touched.getLast());
+            }
+        }
+        requestRedraw();
+    }
+
+    private void clearRegionAndSelection() {
+        worldEdit.clear();
+        blockSel.clear();
+        showToast("Selection cleared");
+        requestRedraw();
+    }
+
+    /** The region box, with pos1 in red and pos2 in blue (like WorldEdit CUI). */
+    private void drawRegion(List<FrameRequest.Line> lines) {
+        Box r = worldEdit.region();
+        if (r == null) return;
+        float e = 0.03f;
+        Overlays.box(lines, r.minX() - e, r.minY() - e, r.minZ() - e, r.maxX() + 1 + e, r.maxY() + 1 + e, r.maxZ() + 1 + e, 0xFFFFC85A);
+        BlockPos a = worldEdit.pos1(), b = worldEdit.pos2();
+        if (a != null) Overlays.box(lines, a.x() - 0.06f, a.y() - 0.06f, a.z() - 0.06f, a.x() + 1.06f, a.y() + 1.06f, a.z() + 1.06f, 0xFFE5484D);
+        if (b != null) Overlays.box(lines, b.x() - 0.06f, b.y() - 0.06f, b.z() - 0.06f, b.x() + 1.06f, b.y() + 1.06f, b.z() + 1.06f, 0xFF3E9BFF);
+    }
+
+    /** "/" or the terminal button: the WorldEdit command bar. */
+    public void openCommandBar() {
+        if (fly) setFly(false);
+        commandBar.open();
+    }
+
+    /**
+     * Runs a WorldEdit command on the active layer (a new layer when there is none) as one undo step. The layer is
+     * read and written in world coordinates, so rotated layers work as expected.
+     */
+    private void runCommand(String line) {
+        Layer active = ws.activeLayerProperty().get();
+        if (active != null && active.locked()) {
+            showToast("✖ The active layer is locked");
+            return;
+        }
+        BlockAssets assets = ws.assets();
+        java.util.function.Function<String, BlockState> resolve = name -> {
+            try {
+                BlockState st = BlockState.parse(name.contains(":") ? name : "minecraft:" + name);
+                if (assets == null) return st;
+                if (assets.registry().get(st.name()).isEmpty()) return null;
+                return assets.registry().complete(st);
+            } catch (RuntimeException ex) {
+                return null;
+            }
+        };
+        Vector3f f = camera.forward();
+        float ax = Math.abs(f.x), ay = Math.abs(f.y), az = Math.abs(f.z);
+        BlockPlacement.Dir look = ay > ax && ay > az ? (f.y > 0 ? BlockPlacement.Dir.UP : BlockPlacement.Dir.DOWN)
+                : ax > az ? (f.x > 0 ? BlockPlacement.Dir.EAST : BlockPlacement.Dir.WEST) : (f.z > 0 ? BlockPlacement.Dir.SOUTH : BlockPlacement.Dir.NORTH);
+        BlockPos aim = hover != null ? hover.world() : hoverGround;
+
+        // The layer and its edit session are opened on the first write, so read-only commands change nothing.
+        Layer[] target = {active};
+        SceneEditor.BlockSession[] session = {null};
+        io.blockdesigner.core.worldedit.WorldEdit.World world = new io.blockdesigner.core.worldedit.WorldEdit.World() {
+            @Override
+            public BlockState get(BlockPos p) {
+                Layer l = target[0];
+                if (l == null) return BlockState.AIR;
+                BlockPos lp = l.toLocal(p);
+                BlockState st = session[0] != null ? session[0].get(lp.x(), lp.y(), lp.z()) : l.structure().get(lp);
+                return BlockTransformer.defaults().apply(st, l.transform());
+            }
+
+            @Override
+            public void set(BlockPos p, BlockState st) {
+                if (target[0] == null) {
+                    Layer l = new Layer("Layer " + (ws.scene().layers().size() + 1), new io.blockdesigner.core.model.Structure());
+                    ws.editor().addLayer(l);
+                    target[0] = l;
+                }
+                Layer l = target[0];
+                if (session[0] == null) session[0] = ws.editor().edit(l, line.strip(), null);
+                BlockPos lp = l.toLocal(p);
+                session[0].set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(st, l.transform().inverse()));
+            }
+        };
+        var undo = ws.editor().undoStack();
+        io.blockdesigner.core.worldedit.WorldEdit.Result r;
+        undo.beginGroup(line.strip());
+        try {
+            r = worldEdit.run(line, new io.blockdesigner.core.worldedit.WorldEdit.Context(world, look, aim, ws.selectedBlockProperty().get(), resolve));
+        } finally {
+            if (session[0] != null) session[0].close();
+            undo.endGroup();
+        }
+        switch (r.special()) {
+            case UNDO -> undo.undo();
+            case REDO -> undo.redo();
+            default -> {
+            }
+        }
+        if (r.region() || r.changed() > 0 || r.special() != io.blockdesigner.core.worldedit.WorldEdit.Special.NONE) regionChanged();
+        showToast((r.ok() ? "" : "✖ ") + r.message());
+        commandBar.showResult(r.ok(), r.message());
+    }
+
     private void clearBlockSelection() {
         if (blockSel.isEmpty()) return;
         blockSel.clear();
@@ -2158,7 +2384,7 @@ public final class ViewportPane extends StackPane {
 
     // ---- viewport settings ------------------------------------------------------------------------------------
 
-    private void toggleSettings() {
+    public void toggleSettings() {
         if (settingsPopover != null && settingsPopover.isShowing()) {
             settingsPopover.hide();
             return;

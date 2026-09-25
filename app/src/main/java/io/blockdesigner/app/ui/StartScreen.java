@@ -71,13 +71,7 @@ final class StartScreen extends StackPane {
         Label sub = new Label("Design Minecraft builds, then export them as .nbt, .litematic or .schem");
         sub.getStyleClass().add("start-sub");
         // The app icon (the same art as the window, taskbar and .bdproj files), from the 256 px image for sharp HiDPI.
-        javafx.scene.image.ImageView logo = new javafx.scene.image.ImageView();
-        var url = StartScreen.class.getResource("/io/blockdesigner/app/icons/icon-256.png");
-        if (url != null) logo.setImage(new javafx.scene.image.Image(url.toExternalForm()));
-        logo.setFitWidth(52);
-        logo.setFitHeight(52);
-        logo.setSmooth(true);
-        logo.setPreserveRatio(true);
+        javafx.scene.image.ImageView logo = MainWindow.appIconView(52);
         Region sp = new Region();
         HBox.setHgrow(sp, Priority.ALWAYS);
         Button x = new Button(null, new FontIcon(Feather.X));
@@ -105,7 +99,7 @@ final class StartScreen extends StackPane {
         for (String f : settings.recentFiles.stream().limit(10).toList()) {
             Path p = Path.of(f);
             boolean exists = Files.isRegularFile(p);
-            Button b = new Button(p.getFileName().toString(), new FontIcon(f.endsWith(".bdproj") ? Feather.BOX : Feather.FILE));
+            Button b = new Button(p.getFileName().toString(), f.endsWith(".bdproj") ? MainWindow.appIconView(16) : new FontIcon(Feather.FILE));
             b.getStyleClass().addAll("flat", "start-recent");
             b.setMaxWidth(Double.MAX_VALUE);
             b.setAlignment(Pos.CENTER_LEFT);

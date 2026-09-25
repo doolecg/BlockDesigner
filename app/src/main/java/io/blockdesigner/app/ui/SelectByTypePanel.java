@@ -310,7 +310,7 @@ public final class SelectByTypePanel extends VBox {
             this.key = key;
             this.state = state;
             this.count = count;
-            this.title = BlockInfoHud.pretty(state.path());
+            this.title = BlockInfoHud.name(assets, state);
         }
     }
 

@@ -240,8 +240,12 @@ public final class BlockPlacement {
         java.util.Set<BlockPos> todo = new java.util.LinkedHashSet<>();
         for (BlockPos p : changed) {
             todo.add(p);
-            for (Dir d : HORIZONTAL) todo.add(d.offset(p));
-            todo.add(p.add(0, -1, 0));
+            // Redstone and rails also join one block up or down, so the layers above and below are checked too.
+            for (int dy = -1; dy <= 1; dy++) {
+                BlockPos q = p.add(0, dy, 0);
+                if (dy != 0) todo.add(q);
+                for (Dir d : HORIZONTAL) todo.add(d.offset(q));
+            }
         }
         World now = p -> out.containsKey(p) ? out.get(p) : w.get(p);
         for (BlockPos p : todo) {
@@ -269,6 +273,8 @@ public final class BlockPlacement {
     }
 
     private static BlockState connect(BlockState s, BlockPos pos, World w) {
+        if (isWire(s)) return connectWire(s, pos, w);
+        if (isRail(s)) return connectRail(s, pos, w);
         Connector kind = connector(s);
         if (kind == null) return s;
         BlockState above = w.get(pos.add(0, 1, 0));
@@ -295,6 +301,94 @@ public final class BlockPlacement {
             out = out.with("up", Boolean.toString(!straight || abovePost));
         }
         return out;
+    }
+
+    // ---- redstone dust -------------------------------------------------------------------------------------------
+
+    private static boolean isWire(BlockState s) {
+        return s.path().equals("redstone_wire") && s.has("north");
+    }
+
+    private static final java.util.Set<String> SIGNAL_SOURCES = java.util.Set.of("redstone_torch", "redstone_wall_torch",
+            "lever", "redstone_block", "target", "daylight_detector", "detector_rail", "trapped_chest", "tripwire_hook",
+            "comparator", "sculk_sensor", "calibrated_sculk_sensor", "lectern", "observer", "repeater");
+
+    private static boolean signalSource(BlockState s) {
+        String p = s.path();
+        return SIGNAL_SOURCES.contains(p) || p.endsWith("_button") || p.endsWith("_pressure_plate");
+    }
+
+    /** Minecraft's RedStoneWireBlock.shouldConnectTo: repeaters only along their line, observers only from behind. */
+    private static boolean wireJoins(BlockState s, Dir d) {
+        if (isWire(s)) return true;
+        Dir f = Dir.parse(s.get("facing"));
+        if (s.path().equals("repeater")) return f != null && (f == d || f == d.opposite());
+        if (s.path().equals("observer")) return f == d;
+        return signalSource(s);
+    }
+
+    /** Solid, opaque blocks carry redstone (glass does not). */
+    private static boolean conductor(BlockState s) {
+        String p = s.path();
+        return sturdy(s) && !p.equals("glass") && !p.endsWith("_stained_glass") && !p.equals("tinted_glass");
+    }
+
+    /**
+     * Minecraft's dust shape: joins other dust (stepping up a block or down one), redstone parts; a lone dust is a
+     * cross, and dust joined on one side runs straight through.
+     */
+    private static BlockState connectWire(BlockState s, BlockPos pos, World w) {
+        boolean openAbove = !conductor(w.get(pos.add(0, 1, 0)));
+        String[] side = new String[4];
+        for (int i = 0; i < 4; i++) {
+            Dir d = HORIZONTAL[i];
+            BlockPos np = d.offset(pos);
+            BlockState ns = w.get(np);
+            String v = "none";
+            if (openAbove && sturdy(ns) && isWire(w.get(np.add(0, 1, 0)))) v = "up";
+            else if (wireJoins(ns, d) || !conductor(ns) && isWire(w.get(np.add(0, -1, 0)))) v = "side";
+            side[i] = v;
+        }
+        boolean n = !side[0].equals("none"), e = !side[1].equals("none"), so = !side[2].equals("none"), we = !side[3].equals("none");
+        boolean nsEmpty = !n && !so, ewEmpty = !e && !we;
+        if (!we && nsEmpty) side[3] = "side";
+        if (!e && nsEmpty) side[1] = "side";
+        if (!n && ewEmpty) side[0] = "side";
+        if (!so && ewEmpty) side[2] = "side";
+        BlockState out = s;
+        for (int i = 0; i < 4; i++) out = out.with(HORIZONTAL[i].id(), side[i]);
+        return out;
+    }
+
+    // ---- rails -----------------------------------------------------------------------------------------------------
+
+    private static boolean isRail(BlockState s) {
+        return s.path().endsWith("rail") && s.has("shape");
+    }
+
+    /**
+     * Rails join the rails next to them: straight runs, slopes up to a rail one block higher, and (plain rails only)
+     * curves where two meet at a corner. A rail with no neighbours keeps its placed direction.
+     */
+    private static BlockState connectRail(BlockState s, BlockPos pos, World w) {
+        Integer[] level = new Integer[4];
+        for (int i = 0; i < 4; i++) {
+            BlockPos np = HORIZONTAL[i].offset(pos);
+            if (isRail(w.get(np))) level[i] = 0;
+            else if (isRail(w.get(np.add(0, 1, 0)))) level[i] = 1;
+            else if (isRail(w.get(np.add(0, -1, 0)))) level[i] = -1;
+        }
+        boolean n = level[0] != null, e = level[1] != null, so = level[2] != null, we = level[3] != null;
+        boolean curves = s.path().equals("rail");
+        String shape = null;
+        if (curves && (n || so) && (e || we) && !(n && so) && !(e && we)) {
+            shape = (so ? "south" : "north") + "_" + (e ? "east" : "west");
+        } else if (n || so) {
+            shape = n && level[0] == 1 ? "ascending_north" : so && level[2] == 1 ? "ascending_south" : "north_south";
+        } else if (e || we) {
+            shape = e && level[1] == 1 ? "ascending_east" : we && level[3] == 1 ? "ascending_west" : "east_west";
+        }
+        return shape == null || shape.equals(s.get("shape")) ? s : s.with("shape", shape);
     }
 
     private static boolean isLowTall(String v) {

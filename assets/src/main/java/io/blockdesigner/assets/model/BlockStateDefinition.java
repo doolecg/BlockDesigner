@@ -81,8 +81,22 @@ public final class BlockStateDefinition {
             for (JsonNode p : root.get("multipart")) {
                 d.parts.add(new Part(p.has("when") ? d.condition(p.get("when")) : new Always(), refs(p.path("apply"))));
             }
+            d.addImpliedOffValues();
         }
         return d;
+    }
+
+    /**
+     * Multipart files only name the values that add a model ("north": "true" for a fence arm, "low" / "tall" for a wall
+     * side), never the "off" value. Without it a fence or wall could not be unconnected: states would be completed back
+     * to an arm reaching into air. So booleans get both values, and wall / redstone sides get "none".
+     */
+    private void addImpliedOffValues() {
+        Set<String> bool = Set.of("true", "false"), wallSide = Set.of("none", "low", "tall"), wireSide = Set.of("none", "side", "up");
+        properties.forEach((k, vals) -> {
+            if (bool.containsAll(vals)) vals.addAll(List.of("false", "true"));
+            else if (wallSide.containsAll(vals) || wireSide.containsAll(vals)) vals.add("none");
+        });
     }
 
     private static Map<String, String> parseKey(String key) {
@@ -164,7 +178,9 @@ public final class BlockStateDefinition {
         Map<String, String> m = new LinkedHashMap<>();
         properties.forEach((k, vals) -> {
             String v = firstVariant.get(k);
-            if (v == null) v = vals.contains("false") ? "false" : vals.contains("none") ? "none" : vals.iterator().next();
+            // A wall stands as a post by default (as in Minecraft); anything else starts off / unconnected.
+            boolean wallPost = k.equals("up") && properties.getOrDefault("north", Set.of()).contains("low");
+            if (v == null) v = wallPost ? "true" : vals.contains("false") ? "false" : vals.contains("none") ? "none" : vals.iterator().next();
             m.put(k, v);
         });
         return m;

@@ -79,6 +79,11 @@ public final class BlockInfoHud extends HBox {
         };
     }
 
+    /** A block's in-game name (from Minecraft's language files once assets are loaded). */
+    static String name(io.blockdesigner.assets.BlockAssets assets, BlockState s) {
+        return assets != null ? assets.registry().displayName(s.name()) : pretty(s.path());
+    }
+
     static String pretty(String id) {
         StringBuilder sb = new StringBuilder();
         for (String w : id.split("[_/]")) {

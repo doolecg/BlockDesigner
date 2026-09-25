@@ -117,11 +117,11 @@ final class Hotbar extends HBox {
                     iv.setSmooth(false);
                     p.getChildren().add(iv);
                 } else {
-                    Label l = new Label(BlockInfoHud.pretty(st.path()));
+                    Label l = new Label(BlockInfoHud.name(ws.assets(), st));
                     l.getStyleClass().add("hotbar-fallback");
                     p.getChildren().add(l);
                 }
-                Tooltip.install(p, new Tooltip(BlockInfoHud.pretty(st.path()) + "\n" + st));
+                Tooltip.install(p, new Tooltip(BlockInfoHud.name(ws.assets(), st) + "\n" + st));
             } else {
                 Tooltip.install(p, new Tooltip("Empty · middle-click a block or drag one here from the palette"));
             }

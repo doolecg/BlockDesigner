@@ -13,7 +13,14 @@ import java.util.TreeMap;
 /** Every block id known to the loaded assets, with its properties and a default state. */
 public final class BlockRegistry {
 
-    public record BlockInfo(String id, Map<String, List<String>> properties, BlockState defaultState) {
+    /**
+     * @param langName the in-game name from the language files (e.g. "Block of Redstone"), or null when there is none
+     */
+    public record BlockInfo(String id, Map<String, List<String>> properties, BlockState defaultState, String langName) {
+        public BlockInfo(String id, Map<String, List<String>> properties, BlockState defaultState) {
+            this(id, properties, defaultState, null);
+        }
+
         public String namespace() {
             return id.substring(0, id.indexOf(':'));
         }
@@ -22,16 +29,28 @@ public final class BlockRegistry {
             return id.substring(id.indexOf(':') + 1);
         }
 
-        /** "oak_stairs" → "Oak Stairs". */
+        /** The name Minecraft shows ("Block of Redstone"), or the id tidied up ("oak_stairs" → "Oak Stairs") without one. */
         public String displayName() {
-            StringBuilder sb = new StringBuilder();
-            for (String w : path().split("[_/]")) {
-                if (w.isEmpty()) continue;
-                if (!sb.isEmpty()) sb.append(' ');
-                sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1));
-            }
-            return sb.toString();
+            return langName != null ? langName : pretty(path());
         }
+    }
+
+    /** "oak_stairs" → "Oak Stairs". */
+    public static String pretty(String path) {
+        StringBuilder sb = new StringBuilder();
+        for (String w : path.split("[_/]")) {
+            if (w.isEmpty()) continue;
+            if (!sb.isEmpty()) sb.append(' ');
+            sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1));
+        }
+        return sb.toString();
+    }
+
+    /** The in-game name of a block id, falling back to the tidied id for blocks the assets don't know. */
+    public String displayName(String id) {
+        String n = BlockState.normalizeId(id);
+        BlockInfo b = blocks.get(n);
+        return b != null ? b.displayName() : pretty(n.substring(n.indexOf(':') + 1));
     }
 
     private final Map<String, BlockInfo> blocks;

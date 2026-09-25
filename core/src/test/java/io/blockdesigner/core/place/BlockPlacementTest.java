@@ -218,6 +218,53 @@ class BlockPlacementTest {
         assertThat(r.get(O)).isEqualTo(def("birch_door").with("facing", "south").with("hinge", "right"));
     }
 
+    static final BlockState DUST = BlockState.parse("minecraft:redstone_wire[east=none,north=none,power=0,south=none,west=none]");
+
+    @Test
+    void redstoneDustIsACrossAloneAndALineWhenJoined() {
+        for (int x = -3; x <= 3; x++) for (int z = -3; z <= 3; z++) world.put(new BlockPos(x, -1, z), BlockState.of("stone"));
+        BlockState alone = click(DUST, new BlockPos(0, -1, 0), Dir.UP, 0, 0, -1, -0.5f).get(O);
+        assertThat(alone.properties()).containsEntry("north", "side").containsEntry("east", "side")
+                .containsEntry("south", "side").containsEntry("west", "side");
+        world.put(O, alone);
+
+        // A second dust to the east: both become an east-west line.
+        Map<BlockPos, BlockState> r = click(DUST, new BlockPos(1, -1, 0), Dir.UP, 0, 0, -1, -0.5f);
+        assertThat(r.get(new BlockPos(1, 0, 0)).properties()).containsEntry("west", "side").containsEntry("east", "side")
+                .containsEntry("north", "none").containsEntry("south", "none");
+        assertThat(r.get(O).properties()).containsEntry("east", "side").containsEntry("north", "none");
+    }
+
+    @Test
+    void dustClimbsBlocksAndIgnoresTheSideOfARepeater() {
+        world.put(new BlockPos(0, -1, 0), BlockState.of("stone"));
+        world.put(new BlockPos(1, 0, 0), BlockState.of("stone"));
+        world.put(new BlockPos(1, 1, 0), DUST);
+        assertThat(click(DUST, new BlockPos(0, -1, 0), Dir.UP, 0, 0, -1, -0.5f).get(O).get("east")).isEqualTo("up");
+
+        world.clear();
+        world.put(new BlockPos(0, -1, 0), BlockState.of("stone"));
+        world.put(new BlockPos(0, 0, -1), BlockState.parse("minecraft:repeater[delay=1,facing=east,locked=false,powered=false]"));
+        BlockState d = click(DUST, new BlockPos(0, -1, 0), Dir.UP, 0, 0, -1, -0.5f).get(O);
+        // The repeater faces east-west, so dust to its south doesn't join it: still a lone cross.
+        assertThat(d.get("north")).isEqualTo("side");
+        assertThat(d.get("east")).isEqualTo("side");
+    }
+
+    @Test
+    void railsCurveAndSlope() {
+        BlockState rail = BlockState.parse("minecraft:rail[shape=north_south,waterlogged=false]");
+        world.put(new BlockPos(1, 0, 0), rail.with("shape", "east_west"));
+        world.put(new BlockPos(0, 0, 1), rail);
+        world.put(new BlockPos(0, -1, 0), BlockState.of("stone"));
+        assertThat(click(rail, new BlockPos(0, -1, 0), Dir.UP, 0, 0, -1, -0.5f).get(O).get("shape")).isEqualTo("south_east");
+
+        world.clear();
+        world.put(new BlockPos(0, -1, 0), BlockState.of("stone"));
+        world.put(new BlockPos(0, 1, -1), rail);
+        assertThat(click(rail, new BlockPos(0, -1, 0), Dir.UP, 0, 1, -0.5f, 0).get(O).get("shape")).isEqualTo("ascending_north");
+    }
+
     @Test
     void occupiedCellsAreLeftAlone() {
         world.put(O, BlockState.of("stone"));

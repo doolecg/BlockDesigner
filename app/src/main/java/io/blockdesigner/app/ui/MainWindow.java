@@ -58,6 +58,8 @@ import java.util.concurrent.CompletableFuture;
 
 /** The main editor window: top bar, layers + palette on the left, viewport in the centre, assistant on the right. */
 public final class MainWindow {
+    private LayersPanel layers;
+    private BlockPalette palette;
     private static final int[] LAYER_COLORS = {0x7C9CFF, 0x46C46E, 0xFFB454, 0xF2668B, 0x3DD6D0, 0xB18CFF, 0xE8D35A, 0xFF7A45};
 
     private final Stage stage;
@@ -94,8 +96,8 @@ public final class MainWindow {
         ws.darkProperty().addListener((o, a, b) -> applyTheme());
 
         // Left: layers over palette
-        LayersPanel layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> export(List.of(l), null), viewport::frameLayer));
-        BlockPalette palette = new BlockPalette(ws);
+        layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> export(List.of(l), null), viewport::frameLayer));
+        palette = new BlockPalette(ws);
         SplitPane left = new SplitPane(layers, palette);
         left.setOrientation(javafx.geometry.Orientation.VERTICAL);
         left.setDividerPositions(0.36);
@@ -149,6 +151,14 @@ public final class MainWindow {
         stage.setMinWidth(1000);
         stage.setMinHeight(640);
         stage.getIcons().setAll(appIcons());
+        // Every other window (dialogs, alerts, pop-out panels) gets the app icon too, instead of Java's default.
+        javafx.stage.Window.getWindows().addListener((javafx.collections.ListChangeListener<javafx.stage.Window>) c -> {
+            while (c.next()) {
+                for (javafx.stage.Window w : c.getAddedSubList()) {
+                    if (w instanceof Stage st && st.getIcons().isEmpty()) st.getIcons().setAll(appIcons());
+                }
+            }
+        });
 
         ws.scene().addListener(new Scene.Listener() {
             @Override
@@ -246,14 +256,37 @@ public final class MainWindow {
         return stage;
     }
 
+    private static List<javafx.scene.image.Image> appIcons;
+
     /** The BlockDesigner icon at every size (drawn by packaging/make_icon.py); the same art marks .bdproj saves. */
-    public static List<javafx.scene.image.Image> appIcons() {
-        List<javafx.scene.image.Image> out = new java.util.ArrayList<>();
-        for (int size : new int[]{16, 24, 32, 48, 64, 128, 256, 512}) {
-            var url = MainWindow.class.getResource("/io/blockdesigner/app/icons/icon-" + size + ".png");
-            if (url != null) out.add(new javafx.scene.image.Image(url.toExternalForm()));
+    public static synchronized List<javafx.scene.image.Image> appIcons() {
+        if (appIcons == null) {
+            List<javafx.scene.image.Image> out = new java.util.ArrayList<>();
+            for (int size : new int[]{16, 24, 32, 48, 64, 128, 256, 512}) {
+                var url = MainWindow.class.getResource("/io/blockdesigner/app/icons/icon-" + size + ".png");
+                if (url != null) out.add(new javafx.scene.image.Image(url.toExternalForm()));
+            }
+            appIcons = List.copyOf(out);
         }
-        return out;
+        return appIcons;
+    }
+
+    /** The app icon as a graphic {@code size} px tall, from an image twice that size so it stays sharp on HiDPI. */
+    public static javafx.scene.image.ImageView appIconView(double size) {
+        javafx.scene.image.Image best = null;
+        for (javafx.scene.image.Image i : appIcons()) {
+            if (best == null || best.getWidth() < size * 2) best = i;
+            if (i.getWidth() >= size * 2) {
+                best = i;
+                break;
+            }
+        }
+        javafx.scene.image.ImageView v = new javafx.scene.image.ImageView(best);
+        v.setFitWidth(size);
+        v.setFitHeight(size);
+        v.setPreserveRatio(true);
+        v.setSmooth(true);
+        return v;
     }
 
     public void show() {
@@ -292,7 +325,7 @@ public final class MainWindow {
     // ---- top & status bars ------------------------------------------------------------------------------------
 
     private HBox topBar() {
-        Label logo = new Label("BlockDesigner", new FontIcon(Feather.BOX));
+        Label logo = new Label("BlockDesigner", appIconView(20));
         logo.getStyleClass().add("app-logo");
         logo.setCursor(javafx.scene.Cursor.HAND);
         logo.setTooltip(new Tooltip("Start screen: new, open, recent, Minecraft jar, schematic sites"));
@@ -332,7 +365,7 @@ public final class MainWindow {
         undo.setDisable(true);
         redo.setDisable(true);
 
-        Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark", () -> ws.darkProperty().set(!ws.darkProperty().get()));
+        Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark theme", () -> ws.darkProperty().set(!ws.darkProperty().get()));
         Button assets = LayersPanel.iconButton(Feather.SETTINGS, "Minecraft assets & mods", () -> startAssetLoading(true));
         assetBadge.getStyleClass().add("badge");
 
@@ -664,6 +697,13 @@ public final class MainWindow {
         acc.put(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN), this::openDialog);
         acc.put(new KeyCodeCombination(KeyCode.I, KeyCombination.SHORTCUT_DOWN), this::importDialog);
         acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN), () -> exportDialog(null));
+        acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN), this::exportDatapack);
+        acc.put(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN), this::newProject);
+        acc.put(new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN), () -> palette.focusSearch());
+        acc.put(new KeyCodeCombination(KeyCode.F11), () -> {
+            stage.setFullScreenExitHint("F11 or Esc leaves full screen");
+            stage.setFullScreen(!stage.isFullScreen());
+        });
 
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (scene.getFocusOwner() instanceof TextInputControl) return;
@@ -680,6 +720,15 @@ public final class MainWindow {
             if (e.getCode() == KeyCode.C && e.isAltDown() && !e.isShortcutDown()) {
                 ws.clearHotbar();
                 viewport.showToast("Hotbar cleared");
+                e.consume();
+                return;
+            }
+            if ((e.getCode() == KeyCode.SLASH || e.getCode() == KeyCode.DIVIDE) && !e.isShortcutDown() && !e.isAltDown()) {
+                viewport.openCommandBar();
+                e.consume();
+                return;
+            }
+            if (extraKey(e, scene)) {
                 e.consume();
                 return;
             }
@@ -735,6 +784,186 @@ public final class MainWindow {
                 e.consume();
             }
         });
+    }
+
+    /**
+     * Keys added for actions that only had buttons or menus: layer management, block-selection helpers and view
+     * toggles. None of them replaces an existing key. Returns whether the key was used.
+     */
+    private boolean extraKey(KeyEvent e, javafx.scene.Scene scene) {
+        boolean ctrl = e.isShortcutDown(), shift = e.isShiftDown(), alt = e.isAltDown();
+        // Leave Ctrl+A etc. to a focused list (e.g. selecting every layer row).
+        boolean listFocused = scene.getFocusOwner() instanceof javafx.scene.control.ListView<?>;
+        switch (e.getCode()) {
+            case F1 -> viewport.toggleShortcuts();
+            case F2 -> layers.renameActive();
+            case N -> {
+                if (ctrl && shift) layers.newLayer();
+                else if (!ctrl && !alt && !shift) viewport.toggleSettings();
+                else return false;
+            }
+            case A -> {
+                if (ctrl && !shift && !alt && !listFocused) viewport.selectAllInActive();
+                else if (alt && !ctrl) viewport.deselectBlocks();
+                else return false;
+            }
+            case J -> {
+                if (!ctrl || alt) return false;
+                viewport.copySelectionToNewLayer();
+            }
+            case R -> {
+                if (!ctrl || alt || shift) return false;
+                viewport.replaceSelectionWithHeld();
+            }
+            case D -> {
+                if (!ctrl || alt || shift) return false;
+                duplicateLayers();
+            }
+            case M -> {
+                if (!ctrl || alt || shift) return false;
+                mergeLayers();
+            }
+            case DELETE -> {
+                if (!shift || ctrl || alt) return false;
+                deleteLayers();
+            }
+            case H -> {
+                if (ctrl) return false;
+                if (alt) showAllLayers();
+                else if (shift) toggleLayers("ghost", Layer::ghost, Layer::setGhost);
+                else toggleLayers("hide", l -> !l.visible(), (l, v) -> l.setVisible(!v));
+            }
+            case L -> {
+                if (ctrl || alt || shift) return false;
+                toggleLayers("lock", Layer::locked, Layer::setLocked);
+            }
+            case OPEN_BRACKET, CLOSE_BRACKET -> {
+                if (ctrl || alt) return false;
+                stepActiveLayer(e.getCode() == KeyCode.CLOSE_BRACKET ? 1 : -1);
+            }
+            case G -> {
+                if (!alt || ctrl) return false;
+                viewport.toggleGrid();
+            }
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private List<Layer> targetLayers() {
+        return ws.nudgeTargets();
+    }
+
+    /** H / Shift+H / L: hide, ghost or lock the selected layers; if they all already are, undo that. */
+    private void toggleLayers(String what, java.util.function.Predicate<Layer> is, java.util.function.BiConsumer<Layer, Boolean> set) {
+        List<Layer> ls = targetLayers();
+        if (ls.isEmpty()) {
+            viewport.showToast("Select a layer first");
+            return;
+        }
+        boolean on = !ls.stream().allMatch(is);
+        String verb = switch (what) {
+            case "hide" -> on ? "Hide" : "Show";
+            case "ghost" -> on ? "Ghost" : "Unghost";
+            default -> on ? "Lock" : "Unlock";
+        };
+        String label = verb + (ls.size() == 1 ? " " + ls.getFirst().name() : " " + ls.size() + " layers");
+        ws.editor().undoStack().beginGroup(label);
+        try {
+            for (Layer l : ls) ws.editor().modifyLayer(l, label, null, x -> set.accept(x, on));
+        } finally {
+            ws.editor().undoStack().endGroup();
+        }
+        viewport.showToast(label);
+    }
+
+    /** Alt+H: every layer visible again. */
+    private void showAllLayers() {
+        List<Layer> hidden = ws.scene().layers().stream().filter(l -> !l.visible()).toList();
+        if (hidden.isEmpty()) {
+            viewport.showToast("Every layer is already visible");
+            return;
+        }
+        ws.editor().undoStack().beginGroup("Show all layers");
+        try {
+            for (Layer l : hidden) ws.editor().modifyLayer(l, "Show all layers", null, x -> x.setVisible(true));
+        } finally {
+            ws.editor().undoStack().endGroup();
+        }
+        viewport.showToast("Showing " + hidden.size() + " hidden layer" + (hidden.size() == 1 ? "" : "s"));
+    }
+
+    /** Ctrl+D: copies of the selected layers, each just above its original. */
+    private void duplicateLayers() {
+        List<Layer> ls = targetLayers();
+        if (ls.isEmpty()) return;
+        List<Layer> made = new java.util.ArrayList<>();
+        ws.editor().undoStack().beginGroup("Duplicate layers");
+        try {
+            for (Layer l : ls) {
+                Layer copy = l.duplicate(l.name() + " copy");
+                ws.editor().addLayer(copy, ws.scene().indexOf(l) + 1);
+                made.add(copy);
+            }
+        } finally {
+            ws.editor().undoStack().endGroup();
+        }
+        ws.scene().setActive(made.getLast());
+        ws.selectedLayers().setAll(made);
+        viewport.showToast(made.size() == 1 ? "Duplicated as " + made.getFirst().name() : "Duplicated " + made.size() + " layers");
+    }
+
+    /** Ctrl+M: merges the selected layers into the lowest, or the active layer into the one below. */
+    private void mergeLayers() {
+        List<Layer> sel = ws.scene().layers().stream().filter(ws.selectedLayers()::contains).toList();
+        if (sel.size() >= 2) {
+            Layer bottom = sel.getFirst();
+            ws.editor().undoStack().beginGroup("Merge layers");
+            try {
+                for (int i = sel.size() - 1; i >= 1; i--) ws.editor().mergeDown(sel.get(i), bottom);
+            } finally {
+                ws.editor().undoStack().endGroup();
+            }
+            viewport.showToast("Merged " + sel.size() + " layers into " + bottom.name());
+            return;
+        }
+        Layer a = ws.activeLayerProperty().get();
+        int idx = a == null ? -1 : ws.scene().indexOf(a);
+        if (idx <= 0) {
+            viewport.showToast("Nothing below to merge into");
+            return;
+        }
+        Layer below = ws.scene().layers().get(idx - 1);
+        ws.editor().mergeDown(a, below);
+        viewport.showToast("Merged into " + below.name());
+    }
+
+    /** Shift+Delete: removes the selected layers (undo brings them back). */
+    private void deleteLayers() {
+        List<Layer> ls = targetLayers();
+        if (ls.isEmpty()) return;
+        ws.editor().undoStack().beginGroup(ls.size() == 1 ? "Delete " + ls.getFirst().name() : "Delete layers");
+        try {
+            for (Layer l : ls) ws.editor().removeLayer(l);
+        } finally {
+            ws.editor().undoStack().endGroup();
+        }
+        viewport.showToast((ls.size() == 1 ? "Deleted " + ls.getFirst().name() : "Deleted " + ls.size() + " layers") + " · Ctrl+Z to undo");
+    }
+
+    /** [ and ]: the layer below / above becomes the active one. */
+    private void stepActiveLayer(int dir) {
+        List<Layer> all = ws.scene().layers();
+        if (all.isEmpty()) return;
+        Layer a = ws.activeLayerProperty().get();
+        int i = a == null ? (dir > 0 ? -1 : all.size()) : ws.scene().indexOf(a);
+        int j = Math.clamp(i + dir, 0, all.size() - 1);
+        Layer l = all.get(j);
+        ws.scene().setActive(l);
+        ws.selectedLayers().setAll(l);
+        viewport.showToast("Active layer: " + l.name());
     }
 
     private void installDragAndDrop(javafx.scene.Scene scene) {

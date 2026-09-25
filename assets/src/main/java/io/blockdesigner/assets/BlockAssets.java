@@ -95,12 +95,15 @@ public final class BlockAssets implements Closeable {
             });
         }
 
+        log.accept("Reading block names…");
+        Map<String, String> lang = readLang(stack, defs.keySet(), json);
+
         Map<String, BlockRegistry.BlockInfo> infos = new HashMap<>();
         defs.forEach((id, d) -> {
             if (HIDDEN.contains(id)) return;
             Map<String, List<String>> props = new LinkedHashMap<>();
             d.properties().forEach((k, v) -> props.put(k, List.copyOf(v)));
-            infos.put(id, new BlockRegistry.BlockInfo(id, props, BlockState.of(id, d.defaultProperties())));
+            infos.put(id, new BlockRegistry.BlockInfo(id, props, BlockState.of(id, d.defaultProperties()), langName(id, lang)));
         });
 
         log.accept("Resolving " + defs.size() + " block models…");
@@ -122,6 +125,55 @@ public final class BlockAssets implements Closeable {
         TextureAtlas atlas = TextureAtlas.build(stack, textures);
         log.accept("Ready: " + infos.size() + " blocks, atlas " + atlas.width() + "×" + atlas.height());
         return new BlockAssets(version, stack, defs, new BlockRegistry(infos), loader, atlas);
+    }
+
+    /**
+     * Blocks whose item is named differently from the block (their item is not a plain block item), so the palette shows
+     * the name you know from the inventory.
+     */
+    private static final Map<String, String> ITEM_NAMES = Map.ofEntries(
+            Map.entry("minecraft:redstone_wire", "item.minecraft.redstone"),
+            Map.entry("minecraft:tripwire", "item.minecraft.string"),
+            Map.entry("minecraft:cocoa", "item.minecraft.cocoa_beans"),
+            Map.entry("minecraft:carrots", "item.minecraft.carrot"),
+            Map.entry("minecraft:potatoes", "item.minecraft.potato"),
+            Map.entry("minecraft:beetroots", "item.minecraft.beetroot_seeds"),
+            Map.entry("minecraft:wheat", "item.minecraft.wheat_seeds"),
+            Map.entry("minecraft:melon_stem", "item.minecraft.melon_seeds"),
+            Map.entry("minecraft:pumpkin_stem", "item.minecraft.pumpkin_seeds"),
+            Map.entry("minecraft:sweet_berry_bush", "item.minecraft.sweet_berries"),
+            Map.entry("minecraft:cave_vines", "item.minecraft.glow_berries"),
+            Map.entry("minecraft:torchflower_crop", "item.minecraft.torchflower_seeds"),
+            Map.entry("minecraft:pitcher_crop", "item.minecraft.pitcher_pod"));
+
+    private static String langName(String id, Map<String, String> lang) {
+        String itemKey = ITEM_NAMES.get(id);
+        if (itemKey != null && lang.containsKey(itemKey)) return lang.get(itemKey);
+        int c = id.indexOf(':');
+        String n = lang.get("block." + id.substring(0, c) + "." + id.substring(c + 1).replace('/', '.'));
+        return n == null || n.isBlank() ? null : n;
+    }
+
+    /**
+     * The English names from each namespace's {@code assets/<ns>/lang/en_us.json}, read through the asset stack so
+     * resource packs and mods override them as they do in game.
+     */
+    private static Map<String, String> readLang(AssetStack stack, Set<String> ids, ObjectMapper json) {
+        Map<String, String> out = new HashMap<>();
+        Set<String> namespaces = new java.util.TreeSet<>();
+        for (String id : ids) namespaces.add(id.substring(0, id.indexOf(':')));
+        for (String ns : namespaces) {
+            stack.read("assets/" + ns + "/lang/en_us.json").ifPresent(bytes -> {
+                try {
+                    json.readTree(bytes).properties().forEach(e -> {
+                        if (e.getValue().isTextual()) out.putIfAbsent(e.getKey(), e.getValue().asText());
+                    });
+                } catch (IOException | RuntimeException ignored) {
+                    // unreadable lang file: those blocks keep their tidied ids
+                }
+            });
+        }
+        return out;
     }
 
     public McVersion version() {

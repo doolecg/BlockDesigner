@@ -168,6 +168,30 @@
     -fx-border-color: transparent;
 }
 
+.palette-tabs {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8;
+    -fx-padding: 2;
+}
+
+.palette-tab {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-padding: 4 4 4 4;
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.palette-tab:hover {
+    -fx-text-fill: -color-fg-default;
+}
+
+.palette-tab:selected {
+    -fx-background-color: -bd-accent;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
 .chip {
     -fx-background-radius: 999;
     -fx-padding: 2 9 2 9;
@@ -687,4 +711,31 @@
     -fx-text-alignment: center;
     -fx-opacity: 0.7;
     -fx-max-width: 260;
+}
+
+/* ---------- WorldEdit command bar ---------- */
+
+.command-bar {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 10;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 10;
+    -fx-padding: 8 10 8 10;
+    -fx-effect: dropshadow(gaussian, -bd-shadow, 18, 0.2, 0, 4);
+}
+
+.command-field {
+    -fx-font-family: "Consolas", "Cascadia Mono", monospace;
+    -fx-font-size: 13px;
+}
+
+.command-hint {
+    -fx-font-family: "Consolas", "Cascadia Mono", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.command-result.error {
+    -fx-text-fill: #E5484D;
+    -fx-font-size: 12px;
 }
