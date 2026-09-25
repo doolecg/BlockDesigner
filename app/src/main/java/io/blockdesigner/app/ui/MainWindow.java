@@ -63,6 +63,11 @@ public final class MainWindow {
     private final Stage stage;
     private final Workspace ws;
     private final BorderPane root = new BorderPane();
+    /** Scene root: the main layout plus overlays such as the start screen. Holds the theme classes so every overlay sees the CSS variables. */
+    private final StackPane windowRoot = new StackPane(root);
+    private StartScreen startScreen;
+    private java.util.function.Consumer<String> browser = url -> {
+    };
     private final ViewportPane viewport;
     private final StackPane center;
     private final VBox loadingOverlay = new VBox(12);
@@ -127,9 +132,15 @@ public final class MainWindow {
         closedTabsBar.setAlignment(Pos.TOP_CENTER);
         root.setRight(closedTabsBar);
         root.setBottom(statusBar());
-        root.getStyleClass().add("app-root");
+        windowRoot.getStyleClass().add("app-root");
 
-        javafx.scene.Scene scene = new javafx.scene.Scene(root, 1560, 940);
+        startScreen = new StartScreen(ws.settings(), new StartScreen.Actions(this::newProject, this::openDialog, this::importDialog,
+                f -> {
+                    if (f.getFileName().toString().endsWith("." + ProjectFile.EXTENSION)) openProject(f);
+                    else importFile(f);
+                }, () -> startAssetLoading(true), url -> browser.accept(url)));
+        windowRoot.getChildren().add(startScreen);
+        javafx.scene.Scene scene = new javafx.scene.Scene(windowRoot, 1560, 940);
         scene.getStylesheets().add(MainWindow.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
         installShortcuts(scene);
         installDragAndDrop(scene);
@@ -236,14 +247,34 @@ public final class MainWindow {
 
     public void show() {
         stage.show();
+        if (ws.settings().showStartScreen) startScreen.open();
         startAssetLoading(false);
+    }
+
+    /** Opens web links (the start screen's download sites); the app passes in its host services. */
+    public void setBrowser(java.util.function.Consumer<String> browser) {
+        this.browser = browser;
+    }
+
+    public void closeStartScreen() {
+        startScreen.close();
+    }
+
+    /** Clears everything for a fresh, unsaved project. */
+    public void newProject() {
+        for (Layer l : List.copyOf(ws.scene().layers())) ws.scene().remove(l);
+        ws.editor().undoStack().clear();
+        ws.projectNameProperty().set("Untitled");
+        ws.projectFileProperty().set(null);
+        projectExtrasLoaded(Map.of());
+        ws.statusProperty().set("New project");
     }
 
     private void applyTheme() {
         boolean dark = ws.darkProperty().get();
         Application.setUserAgentStylesheet(dark ? new PrimerDark().getUserAgentStylesheet() : new PrimerLight().getUserAgentStylesheet());
-        root.getStyleClass().removeAll("dark", "light");
-        root.getStyleClass().add(dark ? "dark" : "light");
+        windowRoot.getStyleClass().removeAll("dark", "light");
+        windowRoot.getStyleClass().add(dark ? "dark" : "light");
         ws.settings().darkTheme = dark;
     }
 
@@ -252,6 +283,9 @@ public final class MainWindow {
     private HBox topBar() {
         Label logo = new Label("BlockDesigner", new FontIcon(Feather.BOX));
         logo.getStyleClass().add("app-logo");
+        logo.setCursor(javafx.scene.Cursor.HAND);
+        logo.setTooltip(new Tooltip("Start screen: new, open, recent, Minecraft jar, schematic sites"));
+        logo.setOnMouseClicked(e -> startScreen.open());
 
         TextField name = new TextField();
         name.getStyleClass().add("project-name");
@@ -622,6 +656,11 @@ public final class MainWindow {
 
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (scene.getFocusOwner() instanceof TextInputControl) return;
+            if (startScreen.isVisible()) {
+                if (e.getCode() == KeyCode.ESCAPE) startScreen.close();
+                e.consume();
+                return;
+            }
             if (e.getCode() == KeyCode.K && e.isAltDown() && !e.isShortcutDown()) {
                 viewport.toggleShortcuts();
                 e.consume();

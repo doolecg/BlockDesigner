@@ -89,6 +89,21 @@ public final class Camera {
         setAngles(yaw + dYaw, pitch + dPitch);
     }
 
+    /**
+     * Orbits around {@code pivot} instead of the target: the eye swings round the pivot with the view, so the point
+     * under the cursor stays put on screen (Blender's "orbit around mouse").
+     */
+    public void orbitAround(Vector3f pivot, float dYaw, float dPitch) {
+        Vector3f eye = eye(), v = new Vector3f(eye).sub(pivot);
+        Vector3f r0 = right(), u0 = up(), f0 = forward();
+        float cr = v.dot(r0), cu = v.dot(u0), cf = v.dot(f0);
+        setAngles(yaw + dYaw, pitch + dPitch);
+        Vector3f newEye = new Vector3f(pivot)
+                .add(right().mul(cr)).add(up().mul(cu)).add(forward().mul(cf));
+        // eye = target - forward * distance (orbit) or eye = target (fly)
+        target.set(fly ? newEye : newEye.add(forward().mul(distance)));
+    }
+
     public void zoom(float factor) {
         setDistance(distance * factor);
     }

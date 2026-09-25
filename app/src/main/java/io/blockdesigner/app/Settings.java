@@ -22,6 +22,8 @@ public final class Settings {
     public List<String> extraMods = new ArrayList<>();
     public List<String> resourcePacks = new ArrayList<>();
     public boolean darkTheme = true;
+    /** Show the start screen (recent projects, new, jar, download sites) when the app opens. */
+    public boolean showStartScreen = true;
     /** Whether the Assistant tab is open in the right panel. */
     public boolean showAssistant = true;
     /** Whether the Resource Tracker tab is open in the right panel. */

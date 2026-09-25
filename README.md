@@ -29,7 +29,8 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
   - Slice view: PgUp/PgDn step through Y levels. By default each level shows with everything below it; Insert switches to showing a single level.
   - Imports appear as a ghost that follows the cursor. Click to place, R to rotate, Esc to cancel.
 - **Tools**
-  - Camera: middle-drag orbits, Shift+middle-drag pans, wheel zooms.
+  - Start screen: new, open, import, recent projects, the Minecraft jar used for assets, and recommended schematic download sites. Turn it off with its checkbox; click the logo to open it again.
+  - Camera: middle-drag orbits around the point under the mouse, Shift+middle-drag pans, wheel zooms.
   - Three modes: View (V) only looks around; Select (Q) never edits: click a block to select it or drag a marquee (Shift adds, Ctrl removes, Delete removes the selected blocks, Esc clears); Build (B, which toggles back to the previous mode and also works while flying in creative mode) works like Minecraft: left-click breaks, right-click places (hold to repeat), middle-click picks the block.
   - Undo and redo cover every action.
 - **Assistant**

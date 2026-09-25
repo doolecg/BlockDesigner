@@ -28,6 +28,7 @@ public final class BlockDesignerApp extends Application {
         chat.setOnTurnFinished(timeline::snapshot);
         window.setRightPanel(chat);
         window.setCenterBottom(timeline);
+        window.setBrowser(url -> getHostServices().showDocument(url));
 
         window.show();
 
@@ -35,6 +36,7 @@ public final class BlockDesignerApp extends Application {
         for (String arg : getParameters().getRaw()) {
             Path p = Path.of(arg);
             if (!Files.isRegularFile(p)) continue;
+            window.closeStartScreen();
             if (arg.endsWith(".bdproj")) window.openProject(p);
             else window.importFile(p);
         }

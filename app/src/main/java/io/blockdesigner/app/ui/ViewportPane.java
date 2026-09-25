@@ -124,6 +124,10 @@ public final class ViewportPane extends StackPane {
     private final java.util.Map<String, java.util.Set<Long>> blockSel = new java.util.LinkedHashMap<>();
     private final javafx.scene.shape.Rectangle marquee = new javafx.scene.shape.Rectangle();
     private static final int SEL_OUTLINE_LIMIT = 4000;
+    private final javafx.scene.control.ContextMenu contextMenu = new javafx.scene.control.ContextMenu();
+
+    /** World point the middle-drag orbits around (the block or ground under the cursor when it was pressed). */
+    private Vector3f orbitPivot;
 
     // placement (ghost follows the cursor until clicked)
     private final List<Layer> placing = new ArrayList<>();
@@ -597,6 +601,11 @@ public final class ViewportPane extends StackPane {
             e.consume();
             return;
         }
+        contextMenu.hide();
+        if (e.getButton() == MouseButton.MIDDLE) {
+            orbitPivot = pivotUnder(e.getX(), e.getY());
+            return;
+        }
         if (e.getButton() == MouseButton.SECONDARY && mode == ToolKind.BUILD && placing.isEmpty()) {
             startHold(Action.PLACE);
             return;
@@ -635,7 +644,8 @@ public final class ViewportPane extends StackPane {
                     camera.pan((float) (dx / getHeight()), (float) (dy / getHeight()));
                 } else {
                     float k = (float) (0.008 * ws.settings().orbitSensitivity);
-                    camera.orbit((float) dx * k, (float) dy * k);
+                    if (orbitPivot != null) camera.orbitAround(orbitPivot, (float) dx * k, (float) dy * k);
+                    else camera.orbit((float) dx * k, (float) dy * k);
                 }
                 requestRedraw();
             }
@@ -663,6 +673,10 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (e.getButton() == MouseButton.MIDDLE && click) pickBlock();
+        if (e.getButton() == MouseButton.SECONDARY && click && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
+            updateHover(e.getX(), e.getY());
+            showContextMenu(e.getScreenX(), e.getScreenY());
+        }
         if (e.getButton() == MouseButton.PRIMARY && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
             if (marquee.isVisible()) {
                 marqueeSelect(Math.min(pressX, e.getX()), Math.min(pressY, e.getY()), Math.max(pressX, e.getX()), Math.max(pressY, e.getY()),
@@ -1092,6 +1106,122 @@ public final class ViewportPane extends StackPane {
         }
         updateHover(aimX(), aimY());
         requestRedraw();
+    }
+
+    // ---- orbit pivot ----------------------------------------------------------------------------------------
+
+    /** The exact point on the block (or ground) under the cursor, or null over empty sky. */
+    private Vector3f pivotUnder(double x, double y) {
+        Vector3f[] r = ray(x, y);
+        Optional<Picker.Hit> h = pick(x, y);
+        if (h.isPresent()) return new Vector3f(r[1]).mul(h.get().distance()).add(r[0]);
+        float gy = groundY();
+        if (Math.abs(r[1].y) < 1e-4f) return null;
+        float t = (gy - r[0].y) / r[1].y;
+        return t > 0 && t < 5000 ? new Vector3f(r[1]).mul(t).add(r[0]) : null;
+    }
+
+    // ---- context menu (Select mode right-click) ---------------------------------------------------------
+
+    private void showContextMenu(double screenX, double screenY) {
+        // Right-clicking an unselected block selects it first, like most editors.
+        if (hover != null) {
+            java.util.Set<Long> set = blockSel.get(hover.layer().id());
+            if (set == null || !set.contains(hover.local().pack())) clickSelect(false, false);
+        }
+        contextMenu.getItems().clear();
+        int n = selectedBlockCount();
+        BlockState held = ws.selectedBlockProperty().get();
+        Layer layer = hover != null ? hover.layer() : ws.activeLayerProperty().get();
+
+        if (hover != null) {
+            contextMenu.getItems().add(item("Pick block to hotbar", "Middle-click", this::pickBlock));
+        }
+        if (n > 0) {
+            contextMenu.getItems().addAll(
+                    item(String.format("Delete %,d block%s", n, n == 1 ? "" : "s"), "Del", this::deleteSelectedBlocks),
+                    item("Replace with " + (held == null ? "held block" : BlockInfoHud.pretty(held.path())), null, this::replaceSelection),
+                    item("Copy to new layer", null, this::copySelectionToLayer),
+                    item("Clear selection", "Esc", this::clearBlockSelection));
+        }
+        if (layer != null) {
+            if (!contextMenu.getItems().isEmpty()) contextMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
+            contextMenu.getItems().addAll(
+                    item("Select all in " + layer.name(), null, () -> selectAllIn(layer)),
+                    item("Frame " + layer.name(), "F", () -> frameLayer(layer)),
+                    item("Hide " + layer.name(), null, () -> ws.editor().modifyLayer(layer, "Hide " + layer.name(), null, x -> x.setVisible(false))),
+                    item(layer.locked() ? "Unlock " + layer.name() : "Lock " + layer.name(), null,
+                            () -> ws.editor().modifyLayer(layer, (layer.locked() ? "Unlock " : "Lock ") + layer.name(), null, x -> x.setLocked(!x.locked()))));
+        }
+        if (contextMenu.getItems().isEmpty()) return;
+        contextMenu.show(this, screenX, screenY);
+    }
+
+    private static javafx.scene.control.MenuItem item(String text, String accel, Runnable action) {
+        javafx.scene.control.MenuItem mi = new javafx.scene.control.MenuItem(text);
+        if (accel != null) mi.setText(text + "    (" + accel + ")");
+        mi.setOnAction(e -> action.run());
+        return mi;
+    }
+
+    private void selectAllIn(Layer l) {
+        java.util.Set<Long> set = new java.util.HashSet<>();
+        int base = l.offset().y(), lo = sliceMin(), hi = sliceMax();
+        l.structure().forEachBlock((x, y, z, st) -> {
+            if (y + base >= lo && y + base <= hi) set.add(BlockPos.pack(x, y, z));
+        });
+        blockSel.clear();
+        if (!set.isEmpty()) blockSel.put(l.id(), set);
+        selectOnly(l);
+        selectionChanged();
+    }
+
+    /** Replaces every selected block with the held block, as one undo step. */
+    private void replaceSelection() {
+        BlockState held = ws.selectedBlockProperty().get();
+        if (held == null || held.isAir()) return;
+        String key = "replace-selection-" + (++holdCounter);
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l == null || l.locked()) continue;
+            BlockState st = BlockTransformer.defaults().apply(held, l.transform().inverse());
+            try (SceneEditor.BlockSession s = ws.editor().edit(l, "Replace selection", key)) {
+                for (long packed : e.getValue()) {
+                    BlockPos p = BlockPos.unpack(packed);
+                    if (!s.get(p.x(), p.y(), p.z()).isAir()) s.set(p.x(), p.y(), p.z(), st);
+                }
+            }
+        }
+        ws.editor().undoStack().sealTop();
+        showToast("Replaced with " + BlockInfoHud.pretty(held.path()));
+    }
+
+    /** Copies the selected blocks of each layer into a new layer at the same place. */
+    private void copySelectionToLayer() {
+        List<Layer> made = new ArrayList<>();
+        for (var e : blockSel.entrySet()) {
+            Layer src = ws.scene().find(e.getKey()).orElse(null);
+            if (src == null) continue;
+            io.blockdesigner.core.model.Structure s = new io.blockdesigner.core.model.Structure();
+            for (long packed : e.getValue()) {
+                BlockPos p = BlockPos.unpack(packed);
+                BlockState st = src.structure().get(p);
+                if (st.isAir()) continue;
+                s.set(p, st);
+                var nbt = src.structure().blockEntity(p);
+                if (nbt != null) s.setBlockEntity(p, nbt.copy());
+            }
+            if (s.isEmpty()) continue;
+            Layer l = new Layer(src.name() + " selection", s);
+            l.setOffset(src.offset());
+            l.setTransform(src.transform());
+            ws.editor().addLayer(l);
+            made.add(l);
+        }
+        if (made.isEmpty()) return;
+        ws.scene().setActive(made.getLast());
+        ws.selectedLayers().setAll(made);
+        showToast(made.size() == 1 ? "Copied to " + made.getFirst().name() : "Copied to " + made.size() + " new layers");
     }
 
     // ---- selection ------------------------------------------------------------------------------------------

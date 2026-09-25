@@ -584,6 +584,48 @@
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.8), 2, 0.6, 0, 0);
 }
 
+.start-backdrop {
+    -fx-background-color: rgba(8, 11, 18, 0.55);
+}
+
+.start-card {
+    -fx-background-color: -color-bg-default;
+    -fx-background-radius: 16;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 16;
+    -fx-padding: 18 22 16 22;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 40, 0.2, 0, 10);
+}
+
+.start-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.start-title .ikonli-font-icon {
+    -fx-icon-size: 22;
+    -fx-icon-color: -bd-accent;
+}
+
+.start-sub, .start-muted {
+    -fx-opacity: 0.65;
+    -fx-font-size: 11.5px;
+}
+
+.start-action {
+    -fx-font-size: 13px;
+    -fx-padding: 6 10 6 10;
+}
+
+.start-recent {
+    -fx-padding: 4 10 4 10;
+}
+
+.start-path {
+    -fx-font-family: monospace;
+    -fx-font-size: 11px;
+}
+
 .closed-tabs-bar {
     -fx-padding: 8 2 8 2;
     -fx-background-color: -color-bg-subtle;
