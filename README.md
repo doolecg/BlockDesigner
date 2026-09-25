@@ -25,11 +25,12 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
     - Hold Tab for 8-block steps
   - Alt+wheel over a layer turns it. Over the top it spins around the vertical axis. Over a side it flips a quarter turn around that side's horizontal edge: wheel up rolls the side you're looking at up to face the sky. Flipping rewrites the blocks; stairs, slabs and other blocks with no sideways form keep their old orientation.
   - Alt+K (or the button in viewport settings) shows every keyboard and mouse shortcut.
-  - Hotbar: nine Minecraft-style slots, shown in Build mode, that record the blocks you middle-click and the ones you drag in from the block palette (drop on a slot to put it there). Press 1-9, click a slot, or use the wheel while flying to hold one. Alt+C clears it. Fly speed is in the viewport settings.
+  - Hotbar: nine Minecraft-style slots, shown in Build mode, that record the blocks you middle-click and the ones you drag in from the block palette (drop on a slot to put it there). Press 1-9, click a slot, or use the wheel while flying to hold one. Alt+C clears it. R toggles shuffle mode, where every placed block is a random pick from the filled slots (handy for textured walls and paths). Fly speed is in the viewport settings.
   - Slice view: PgUp/PgDn step through Y levels. By default each level shows with everything below it; Insert switches to showing a single level.
   - Imports appear as a ghost that follows the cursor. Click to place, R to rotate, Esc to cancel.
 - **Tools**
   - Start screen: new, open, import, recent projects, the Minecraft jar used for assets, and recommended schematic download sites. Turn it off with its checkbox; click the logo to open it again.
+  - Flying (C) is creative mode: you can only break, place, pick and select blocks within 5 blocks, as in Minecraft.
   - Camera: middle-drag orbits around the point under the mouse, Shift+middle-drag pans, wheel zooms.
   - Three modes: View (V) only looks around; Select (Q) never edits: click a block to select it or drag a marquee (Shift adds, Ctrl removes, Delete removes the selected blocks, Esc clears); Build (B, which toggles back to the previous mode and also works while flying in creative mode) works like Minecraft: left-click breaks, right-click places (hold to repeat), middle-click picks the block.
   - Undo and redo cover every action.

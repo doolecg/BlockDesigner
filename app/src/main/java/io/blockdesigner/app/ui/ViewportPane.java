@@ -98,7 +98,8 @@ public final class ViewportPane extends StackPane {
     private BlockPos hoverGround;
     private double dragDistance;
     private static final double CLICK_SLOP = 5;
-    private static final float FLY_REACH = 256;
+    /** Creative-mode block reach while flying, as in Minecraft (block_interaction_range 5; survival is 4.5). */
+    private static final float CREATIVE_REACH = 5;
 
     // Minecraft-style hold-to-repeat place/break
     private Action holdAction;
@@ -520,7 +521,7 @@ public final class ViewportPane extends StackPane {
 
     private Optional<Picker.Hit> pick(double x, double y) {
         Vector3f[] r = ray(x, y);
-        return Picker.pick(ws.scene(), r[0], r[1], fly ? FLY_REACH : 2000, l -> !l.locked() && !placing.contains(l),
+        return Picker.pick(ws.scene(), r[0], r[1], fly ? CREATIVE_REACH : 2000, l -> !l.locked() && !placing.contains(l),
                 sliceMin(), sliceMax());
     }
 
@@ -533,9 +534,9 @@ public final class ViewportPane extends StackPane {
         Vector3f[] r = ray(x, y);
         Optional<BlockPos> g = Picker.pickGround(r[0], r[1], planeY);
         if (fly && g.isPresent()) {
-            BlockPos p = g.get();
-            Vector3f eye = camera.eye();
-            if (eye.distance(p.x() + 0.5f, p.y() + 0.5f, p.z() + 0.5f) > FLY_REACH) return Optional.empty();
+            // Reach is measured along the look ray to where it meets the ground, like Minecraft's ray cast.
+            float t = Math.abs(r[1].y) < 1e-6f ? Float.MAX_VALUE : (planeY - r[0].y) / r[1].y;
+            if (t > CREATIVE_REACH) return Optional.empty();
         }
         return g;
     }
@@ -920,7 +921,7 @@ public final class ViewportPane extends StackPane {
                 if (fly && insideCamera(world)) return;
                 BlockPos local = l.toLocal(world);
                 if (!l.structure().get(local).isAir()) return;
-                BlockState st = BlockTransformer.defaults().apply(ws.selectedBlockProperty().get(), l.transform().inverse());
+                BlockState st = BlockTransformer.defaults().apply(ws.blockToPlace(), l.transform().inverse());
                 try (SceneEditor.BlockSession s = ws.editor().edit(l, "Place block", key)) {
                     s.set(local.x(), local.y(), local.z(), st);
                 }

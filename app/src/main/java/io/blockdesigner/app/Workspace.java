@@ -38,6 +38,9 @@ public final class Workspace {
     private final ObservableList<BlockState> hotbar = FXCollections.observableArrayList();
     /** The held slot, or -1 when the selected block did not come from the hotbar. */
     private final javafx.beans.property.IntegerProperty hotbarSlot = new javafx.beans.property.SimpleIntegerProperty(-1);
+    /** Shuffle mode (R): each placed block is a random pick from the filled hotbar slots. */
+    private final BooleanProperty shuffle = new SimpleBooleanProperty();
+    private final java.util.Random random = new java.util.Random();
     private ToolKind beforeBuild = ToolKind.SELECT;
     private final ObjectProperty<Layer> activeLayer = new SimpleObjectProperty<>();
     /** Layers selected in the layer list (for multi-layer moves); always includes the active layer when non-empty. */
@@ -170,6 +173,19 @@ public final class Workspace {
         if (existing >= 0 && existing != i) hotbar.set(existing, null);
         hotbar.set(i, state);
         selectHotbarSlot(i);
+    }
+
+    public BooleanProperty shuffleProperty() {
+        return shuffle;
+    }
+
+    /** The block to place next: a random filled hotbar slot in shuffle mode, otherwise the held block. */
+    public BlockState blockToPlace() {
+        if (shuffle.get()) {
+            java.util.List<BlockState> filled = hotbar.stream().filter(java.util.Objects::nonNull).toList();
+            if (!filled.isEmpty()) return filled.get(random.nextInt(filled.size()));
+        }
+        return selectedBlock.get();
     }
 
     /** Alt+C: empties every slot (the held block stays selected). */

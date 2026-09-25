@@ -315,6 +315,20 @@
     -fx-background-color: rgba(255, 255, 255, 0.14);
 }
 
+.hotbar-slot:shuffle {
+    -fx-border-color: -bd-accent;
+    -fx-background-color: -bd-accent-soft;
+}
+
+.hotbar-shuffle {
+    -fx-padding: 0 6 0 4;
+}
+
+.hotbar-shuffle .ikonli-font-icon {
+    -fx-icon-size: 18;
+    -fx-icon-color: -bd-accent;
+}
+
 .hotbar-slot:drop-target {
     -fx-border-color: -bd-accent;
 }

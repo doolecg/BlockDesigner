@@ -23,6 +23,8 @@ final class Hotbar extends HBox {
     private static final double SLOT = 44;
     private static final PseudoClass SELECTED = PseudoClass.getPseudoClass("selected");
     private static final PseudoClass DROP = PseudoClass.getPseudoClass("drop-target");
+    private static final PseudoClass SHUFFLE = PseudoClass.getPseudoClass("shuffle");
+    private final Label shuffleBadge = new Label(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.SHUFFLE));
 
     private final Workspace ws;
     private final StackPane[] slots = new StackPane[Workspace.HOTBAR_SIZE];
@@ -51,6 +53,10 @@ final class Hotbar extends HBox {
             slots[i] = p;
             getChildren().add(p);
         }
+        shuffleBadge.getStyleClass().add("hotbar-shuffle");
+        shuffleBadge.setTooltip(new Tooltip("Shuffle on (R): placing picks a random block from the hotbar"));
+        getChildren().addFirst(shuffleBadge);
+        ws.shuffleProperty().addListener((o, a, b) -> refresh());
         ws.hotbar().addListener((javafx.collections.ListChangeListener<BlockState>) c -> refresh());
         ws.hotbarSlotProperty().addListener((o, a, b) -> refresh());
         ws.assetsProperty().addListener((o, a, b) -> refresh());
@@ -78,11 +84,16 @@ final class Hotbar extends HBox {
     private void refresh() {
         BlockAssets assets = ws.assets();
         int selected = ws.hotbarSlotProperty().get();
+        boolean shuffle = ws.shuffleProperty().get();
+        shuffleBadge.setVisible(shuffle);
+        shuffleBadge.setManaged(shuffle);
         for (int i = 0; i < slots.length; i++) {
             StackPane p = slots[i];
             p.getChildren().clear();
-            p.pseudoClassStateChanged(SELECTED, i == selected);
             BlockState st = ws.hotbar().get(i);
+            // In shuffle mode every filled slot is in play.
+            p.pseudoClassStateChanged(SELECTED, !shuffle && i == selected);
+            p.pseudoClassStateChanged(SHUFFLE, shuffle && st != null);
             if (st != null) {
                 if (assets != null) {
                     ImageView iv = new ImageView(BlockIcons.icon(assets, st));
