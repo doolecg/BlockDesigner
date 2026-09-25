@@ -1,3 +1,105 @@
+# BlockDesigner 0.2.0
+
+Blocks now go down the way Minecraft places them, with the game's own names. This release also adds WorldEdit-style commands, Blender-style Move and Rotate gizmos, a view cube with an orthographic camera, and sounds and particles.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.2.0.exe** | You want a normal install: Start menu entry, optional desktop shortcut, and `.bdproj` projects that open with a double-click. Installs for your user only, so no admin is needed. |
+| **BlockDesigner-0.2.0-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. Settings stay in a `data` folder next to the exe. |
+
+The requirements are the same as 0.1.0: 64-bit Windows 10 or 11, OpenGL 3.3, and Minecraft: Java Edition installed.
+
+## Changed controls
+- **Shuffle mode** moved from R to **Z**. **R** now toggles Replace mode, and it still rotates an import ghost while you place one.
+- **Select mode:** left-click sets **pos1** and right-click sets **pos2** (see WorldEdit below). Shift-click and Ctrl-click add or remove single blocks, and dragging still draws a marquee.
+- **The right-click menu** in Select mode moved to **Shift+right-click** (or the Menu key).
+- **F** frames the selected blocks when there are any, and otherwise the active layer.
+
+## New
+
+### Placing like Minecraft
+- **Blocks face the way Minecraft places them.**
+  - Stairs and slabs go top or bottom depending on where you click, and stairs join into corners.
+  - Logs follow the face you click.
+  - Torches, signs, banners and heads switch to their wall form on sides.
+  - Doors and beds place both halves.
+  - Buttons, levers, trapdoors, ladders, pistons, observers, hoppers, furnaces, chests and repeaters all face the right way.
+  - Modded blocks get a matching rule from their properties.
+- **Connections:**
+  - Fences, walls, glass panes and iron bars join only their own kind, fence gates side-on, and solid blocks. They never reach into air.
+  - Walls go tall under blocks, and straight runs of wall have no post.
+- **Redstone:**
+  - A lone dust is a cross. Dust joins other dust (up and down steps too), torches, levers, buttons, repeaters (front and back only) and observers (back only).
+  - Rails join each other, climb slopes, and plain rails curve at corners.
+- **Neighbours update** when you place or break next to them.
+- **Replace mode (R):** right-click swaps the block you aim at for the held block and keeps its facing and shape. It swaps both halves of doors and beds. Hold and drag to paint.
+- **Minecraft's block names:** names come from the game's language files (and each mod's own), e.g. "Block of Redstone" and "Redstone Dust".
+
+### WorldEdit
+- In Select mode, left-click sets pos1 and right-click sets pos2. The box between them is drawn and its blocks become the selection. Esc clears it.
+- **Press `/`** (or the terminal button) for a command bar. It shows each command's usage as you type; Tab completes and ↑/↓ recalls earlier commands.
+- **Commands:** `//set`, `//replace`, `//walls`, `//faces`, `//overlay`, `//copy`, `//cut`, `//paste`, `//rotate`, `//flip`, `//move`, `//stack`, `//expand`, `//contract`, `//shift`, `//outset`, `//inset`, `//line`, `//sphere`, `//cyl`, `//pyramid` (with hollow versions), `//count`, `//distr`, `//size`, `//undo` and `//redo`.
+- **Mixes and directions:** blocks can be mixed (`//set 70%stone,30%andesite`) or taken from your hand (`//set hand`). Directions accept `up`, `north`, `left` or `me`.
+- **Where commands work:** they edit the active layer, and each command is one undo step. `//paste` and the shapes work from pos1.
+
+### Move and Rotate gizmos
+- **Move (G):** Blender-style handles. Drag an arrow to move along an axis, a square to move in a plane, or the centre to move freely. Moves snap to whole blocks.
+- **Rotate (E):** drag a ring to turn the selected layers in 90° steps around their shared centre.
+- Each drag is one undo step, and Esc or right-click cancels it.
+
+### Camera and view
+- **View cube:** click a face for that view, click it again for the opposite side, or drag the cube to orbit.
+- **Orthographic camera:** P for perspective and O for orthographic, or the button under the cube. Axis views switch to ortho automatically, as in Blender.
+- **Numpad views:**
+  - 1, 3 and 7 for front, right and top; hold Ctrl for back, left and bottom.
+  - 9 for the opposite side, and 5 to switch perspective and ortho.
+  - 2, 4, 6 and 8 orbit, and `.` frames the active layer.
+- **Alt+middle-drag** swings to the next ortho view in the direction you drag.
+- **Flight momentum:** flying glides to a stop instead of halting. You can turn it off in viewport settings.
+
+### Selecting
+- **Select by type (T, or the filter button):** pick block types or exact states to select. You can filter by layer, properties (`half=top`, `facing=north|south`) and slice level, and replace, add to or remove from the selection.
+
+### Feel
+- **Sounds:** a place thud and a break thud, with a slightly different pitch on every other click. Volume and on/off are in viewport settings.
+- **Break particles:** chips in the block's colours pop out and fall.
+- **Hotbar:** Shuffle (Z) and Replace (R) toggles are always shown at the end of the bar, lit when on. Delete in Build mode empties the held slot.
+
+### Block palette
+- **Tabs:** Game Blocks, Schematic Blocks (what your layers use, most used first, with counts) and Modded Blocks.
+
+### New shortcuts
+
+| Area | Keys |
+|---|---|
+| File | Ctrl+N new project · Ctrl+Shift+E worldgen data pack · Ctrl+F block search |
+| Layers | `[` / `]` layer below / above · Ctrl+Shift+N new layer · Ctrl+D duplicate · Ctrl+M merge · F2 rename · Shift+Delete delete |
+| Layer toggles | H hide/show · Alt+H show all · Shift+H ghost · L lock |
+| Selection | Ctrl+A select all in active layer · Alt+A deselect · Ctrl+J copy to new layer · Ctrl+R fill with held block |
+| View | N viewport settings · Alt+G grid · Home frame everything · F1 shortcuts · F11 full screen |
+
+Everything is listed in the shortcuts panel (Alt+K or F1).
+
+### Interface
+- **Side popovers:** viewport settings, shortcuts and Select by type all open beside their own icon.
+- **The shortcuts list** scrolls with the mouse wheel while it's open.
+- **App icon:** it now appears on the start screen, in the top bar, on recent `.bdproj` files and in every dialog's title bar.
+
+## Fixes
+- **Fences and walls** no longer show arms reaching into air, and new fences start unconnected.
+- **Sounds** start straight away, including the first click after the app opens.
+
+## Known issues
+- **Security warning:** the installer and exe still aren't code-signed, so Windows SmartScreen may warn on first run. Click **More info → Run anyway**.
+- **Existing blocks:** fences, walls, redstone and rails in imported schematics keep the shapes they were saved with until you place or break next to them. Deleting or replacing a selection, and WorldEdit commands, don't update neighbours.
+- **Across layers:** connections and stair corners only look at blocks in the same layer.
+- **Block selections and the WorldEdit region** aren't saved in projects yet.
+- **Special blocks:** chests, beds and other blocks Minecraft draws with a special renderer still show as simple boxes.
+
+---
+
 # BlockDesigner 0.1.0
 
 The first release of BlockDesigner, a Minecraft structure designer for Windows. Build block by block in a live 3D view with Minecraft-style controls, then export the result as a schematic or a worldgen data pack.
