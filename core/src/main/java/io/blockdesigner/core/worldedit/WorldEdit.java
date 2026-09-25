@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 
 /**
  * WorldEdit-style editing: a cuboid region between pos1 and pos2, a clipboard, and the familiar commands
- * ({@code //set}, {@code //replace}, {@code //walls}, {@code //copy}, {@code //paste}, {@code //stack}, {@code //sphere}…).
+ * ({@code /set}, {@code /replace}, {@code /walls}, {@code /copy}, {@code /paste}, {@code /stack}, {@code /sphere}…).
  * The session state lives here; the caller supplies the world to read and write and the player's aim and look.
  */
 public final class WorldEdit {
@@ -66,39 +66,43 @@ public final class WorldEdit {
     }
 
     public static final List<Command> COMMANDS = List.of(
-            new Command("pos1", "//pos1 [x y z]", "Set the first corner (default: the block you aim at)"),
-            new Command("pos2", "//pos2 [x y z]", "Set the second corner"),
-            new Command("sel", "//sel", "Clear the region"),
-            new Command("size", "//size", "Size and volume of the region"),
-            new Command("count", "//count <mask>", "Count blocks in the region (e.g. //count stone,dirt)"),
-            new Command("distr", "//distr", "What the region is made of"),
-            new Command("set", "//set <pattern>", "Fill the region (e.g. //set stone, //set 70%stone,30%andesite, //set hand)"),
-            new Command("replace", "//replace [from] <to>", "Replace blocks (just <to>: every non-air block)"),
-            new Command("walls", "//walls <pattern>", "The four side walls of the region"),
-            new Command("faces", "//faces <pattern>", "All six faces of the region (alias //outline)"),
-            new Command("overlay", "//overlay <pattern>", "A layer on top of the highest block of each column"),
-            new Command("move", "//move [n] [dir] [-a]", "Move the contents (-a: don't move air), the region follows"),
-            new Command("stack", "//stack [count] [dir] [-a]", "Repeat the contents next to itself"),
-            new Command("copy", "//copy", "Copy the region, relative to pos1"),
-            new Command("cut", "//cut", "Copy, then clear the region"),
-            new Command("paste", "//paste [-a] [-s]", "Paste at pos1 (-a: skip air, -s: select what was pasted)"),
-            new Command("rotate", "//rotate <90|180|270>", "Turn the clipboard clockwise (seen from above)"),
-            new Command("flip", "//flip [dir]", "Mirror the clipboard along a direction (default: where you look)"),
-            new Command("expand", "//expand <n> [dir] | //expand vert", "Grow the region that way"),
-            new Command("contract", "//contract <n> [dir]", "Pull that side of the region in"),
-            new Command("shift", "//shift <n> [dir]", "Move the region (not its blocks)"),
-            new Command("outset", "//outset <n>", "Grow every side"),
-            new Command("inset", "//inset <n>", "Shrink every side"),
-            new Command("line", "//line <pattern> [thickness]", "A line from pos1 to pos2"),
-            new Command("sphere", "//sphere <pattern> <radius>", "Solid sphere around pos1 (//hsphere: hollow)"),
-            new Command("hsphere", "//hsphere <pattern> <radius>", "Hollow sphere around pos1"),
-            new Command("cyl", "//cyl <pattern> <radius> [height]", "Solid cylinder up from pos1 (//hcyl: hollow)"),
-            new Command("hcyl", "//hcyl <pattern> <radius> [height]", "Hollow cylinder up from pos1"),
-            new Command("pyramid", "//pyramid <pattern> <size>", "Solid pyramid on pos1 (//hpyramid: hollow)"),
-            new Command("hpyramid", "//hpyramid <pattern> <size>", "Hollow pyramid on pos1"),
-            new Command("undo", "//undo", "Undo the last change"),
-            new Command("redo", "//redo", "Redo"),
-            new Command("help", "//help [command]", "List the commands"));
+            new Command("pos1", "/pos1 [x y z]", "Set the first corner (default: the block you aim at)"),
+            new Command("pos2", "/pos2 [x y z]", "Set the second corner"),
+            new Command("sel", "/sel", "Clear the region"),
+            new Command("size", "/size", "Size and volume of the region"),
+            new Command("count", "/count <mask>", "Count blocks in the region (e.g. /count stone,dirt)"),
+            new Command("distr", "/distr", "What the region is made of"),
+            new Command("set", "/set <pattern>", "Fill the region (e.g. /set stone, /set 70%stone,30%andesite, /set hand)"),
+            new Command("replace", "/replace [from] <to>", "Replace blocks (just <to>: every non-air block)"),
+            new Command("walls", "/walls <pattern>", "The four side walls of the region"),
+            new Command("faces", "/faces <pattern>", "All six faces of the region (alias /outline)"),
+            new Command("overlay", "/overlay <pattern>", "A layer on top of the highest block of each column"),
+            new Command("move", "/move [n] [dir] [-a]", "Move the contents (-a: don't move air), the region follows"),
+            new Command("stack", "/stack [count] [dir] [-a]", "Repeat the contents next to itself"),
+            new Command("copy", "/copy", "Copy the region, relative to pos1"),
+            new Command("cut", "/cut", "Copy, then clear the region"),
+            new Command("paste", "/paste [-a] [-s]", "Paste at pos1 (-a: skip air, -s: select what was pasted)"),
+            new Command("rotate", "/rotate <90|180|270>", "Turn the clipboard clockwise (seen from above)"),
+            new Command("flip", "/flip [dir]", "Mirror the clipboard along a direction (default: where you look)"),
+            new Command("expand", "/expand <n> [dir] | /expand vert", "Grow the region that way"),
+            new Command("contract", "/contract <n> [dir]", "Pull that side of the region in"),
+            new Command("shift", "/shift <n> [dir]", "Move the region (not its blocks)"),
+            new Command("outset", "/outset <n>", "Grow every side"),
+            new Command("inset", "/inset <n>", "Shrink every side"),
+            new Command("line", "/line <pattern> [thickness]", "A line from pos1 to pos2"),
+            new Command("sphere", "/sphere <pattern> <radius>", "Solid sphere around pos1 (/hsphere: hollow)"),
+            new Command("hsphere", "/hsphere <pattern> <radius>", "Hollow sphere around pos1"),
+            new Command("cyl", "/cyl <pattern> <radius> [height]", "Solid cylinder up from pos1 (/hcyl: hollow)"),
+            new Command("hcyl", "/hcyl <pattern> <radius> [height]", "Hollow cylinder up from pos1"),
+            new Command("pyramid", "/pyramid <pattern> <size>", "Solid pyramid on pos1 (/hpyramid: hollow)"),
+            new Command("hpyramid", "/hpyramid <pattern> <size>", "Hollow pyramid on pos1"),
+            new Command("smooth", "/smooth [passes]", "Smooth the terrain's surface in the region (heightmap)"),
+            new Command("naturalize", "/naturalize", "Grass on top, three dirt, then stone (only stone / dirt / grass change)"),
+            new Command("hollow", "/hollow [thickness] [pattern]", "Hollow out solid shapes, keeping a shell (default 1)"),
+            new Command("center", "/center <pattern>", "Mark the middle of the region (1–2 blocks per axis)"),
+            new Command("undo", "/undo", "Undo the last change"),
+            new Command("redo", "/redo", "Redo"),
+            new Command("help", "/help [command]", "List the commands"));
 
     private static final Map<String, String> ALIASES = Map.of("outline", "faces", "desel", "sel", "deselect", "sel",
             "hpos1", "pos1", "hpos2", "pos2", "cls", "sel", "?", "help");
@@ -151,7 +155,7 @@ public final class WorldEdit {
     public Result run(String line, Context c) {
         String s = line.strip();
         while (s.startsWith("/")) s = s.substring(1);
-        if (s.isEmpty()) return Result.error("Type a command, e.g. //set stone (//help lists them)");
+        if (s.isEmpty()) return Result.error("Type a command, e.g. /set stone (/help lists them)");
         List<String> args = new ArrayList<>(List.of(s.split("\\s+")));
         String name = args.removeFirst().toLowerCase(Locale.ROOT);
         name = ALIASES.getOrDefault(name, name);
@@ -188,13 +192,17 @@ public final class WorldEdit {
                 case "expand", "contract", "shift" -> resize(name, args, c);
                 case "outset", "inset" -> outset(name.equals("outset"), args);
                 case "line" -> line(args, c);
+                case "smooth" -> smoothRegion(args, c);
+                case "naturalize" -> naturalize(c);
+                case "hollow" -> hollow(args, c);
+                case "center", "centre" -> center(args, c);
                 case "sphere", "hsphere" -> sphere(args, c, name.startsWith("h"));
                 case "cyl", "hcyl" -> cyl(args, c, name.startsWith("h"));
                 case "pyramid", "hpyramid" -> pyramid(args, c, name.startsWith("h"));
                 case "undo" -> new Result(true, "Undone.", 0, false, Special.UNDO);
                 case "redo" -> new Result(true, "Redone.", 0, false, Special.REDO);
                 case "help" -> help(args);
-                default -> Result.error("Unknown command //" + name + " · //help lists them");
+                default -> Result.error("Unknown command /" + name + " · /help lists them");
             };
         } catch (IllegalArgumentException e) {
             return Result.error(e.getMessage());
@@ -205,10 +213,10 @@ public final class WorldEdit {
         if (!args.isEmpty()) {
             String n = ALIASES.getOrDefault(args.getFirst().replace("/", ""), args.getFirst().replace("/", ""));
             for (Command cmd : COMMANDS) if (cmd.name().equals(n)) return Result.ok(cmd.usage() + " · " + cmd.description(), 0);
-            return Result.error("No command //" + n);
+            return Result.error("No command /" + n);
         }
         StringBuilder sb = new StringBuilder("Commands:");
-        for (Command cmd : COMMANDS) sb.append(" //").append(cmd.name());
+        for (Command cmd : COMMANDS) sb.append(" /").append(cmd.name());
         return Result.ok(sb.toString(), 0);
     }
 
@@ -250,7 +258,7 @@ public final class WorldEdit {
     }
 
     private Result count(List<String> args, Context c) {
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //count <mask>");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /count <mask>");
         Box b = needRegion();
         Predicate<BlockState> mask = mask(String.join(" ", args), c);
         long n = 0;
@@ -278,7 +286,7 @@ public final class WorldEdit {
     }
 
     private Result set(List<String> args, Context c) {
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //set <pattern>");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /set <pattern>");
         Box b = needRegion();
         Pattern pat = pattern(String.join(" ", args), c);
         int n = 0;
@@ -287,7 +295,7 @@ public final class WorldEdit {
     }
 
     private Result replace(List<String> args, Context c) {
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //replace [from] <to>");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /replace [from] <to>");
         Box b = needRegion();
         Predicate<BlockState> from = args.size() >= 2 ? mask(args.getFirst(), c) : s -> !s.isAir();
         Pattern to = pattern(args.getLast(), c);
@@ -297,7 +305,7 @@ public final class WorldEdit {
     }
 
     private Result shell(List<String> args, Context c, boolean wallsOnly) {
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //" + (wallsOnly ? "walls" : "faces") + " <pattern>");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /" + (wallsOnly ? "walls" : "faces") + " <pattern>");
         Box b = needRegion();
         Pattern pat = pattern(String.join(" ", args), c);
         int n = 0;
@@ -310,7 +318,7 @@ public final class WorldEdit {
     }
 
     private Result overlay(List<String> args, Context c) {
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //overlay <pattern>");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /overlay <pattern>");
         Box b = needRegion();
         Pattern pat = pattern(String.join(" ", args), c);
         int n = 0;
@@ -372,11 +380,11 @@ public final class WorldEdit {
         if (cut) for (BlockPos p : cells(b)) n += put(c, p, BlockState.AIR);
         clipboard = cb;
         return cut ? new Result(true, String.format("%,d blocks cut.", b.volume()), n, false, Special.NONE)
-                : Result.ok(String.format("%,d blocks copied (relative to pos1). Set pos1 somewhere and //paste.", b.volume()), 0);
+                : Result.ok(String.format("%,d blocks copied (relative to pos1). Set pos1 somewhere and /paste.", b.volume()), 0);
     }
 
     private Result paste(List<String> flags, Context c) {
-        if (clipboard == null) throw new IllegalArgumentException("The clipboard is empty: //copy first");
+        if (clipboard == null) throw new IllegalArgumentException("The clipboard is empty: /copy first");
         BlockPos at = needPos1();
         boolean skipAir = flags.contains("a");
         int n = 0;
@@ -396,8 +404,8 @@ public final class WorldEdit {
     }
 
     private Result rotate(List<String> args) {
-        if (clipboard == null) throw new IllegalArgumentException("The clipboard is empty: //copy first");
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //rotate <90|180|270>");
+        if (clipboard == null) throw new IllegalArgumentException("The clipboard is empty: /copy first");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /rotate <90|180|270>");
         int deg = integer(args.getFirst());
         if (deg % 90 != 0) throw new IllegalArgumentException("Rotate by 90, 180 or 270");
         clipboard = transformed(Transform.rotation(Math.floorMod(deg / 90, 4)));
@@ -405,7 +413,7 @@ public final class WorldEdit {
     }
 
     private Result flip(List<String> args, Context c) {
-        if (clipboard == null) throw new IllegalArgumentException("The clipboard is empty: //copy first");
+        if (clipboard == null) throw new IllegalArgumentException("The clipboard is empty: /copy first");
         Dir d = direction(args.isEmpty() ? null : args.getFirst(), c);
         if (d.y != 0) {
             Map<BlockPos, BlockState> out = new LinkedHashMap<>();
@@ -448,7 +456,7 @@ public final class WorldEdit {
             }
             return Result.region("Region expanded from Y " + lo + " to " + hi + ".");
         }
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //" + op + " <n> [dir]");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /" + op + " <n> [dir]");
         int n = integer(args.getFirst());
         Dir d = direction(args.size() >= 2 ? args.get(1) : null, c);
         if (op.equals("shift")) {
@@ -479,8 +487,137 @@ public final class WorldEdit {
         return Result.region("Region " + (out ? "outset" : "inset") + " by " + n + ".");
     }
 
+    /** WorldEdit's /smooth: blurs the heightmap of the region's columns and raises / lowers them to match. */
+    private Result smoothRegion(List<String> args, Context c) {
+        Box b = needRegion();
+        int passes = args.isEmpty() ? 1 : integer(args.getFirst());
+        if (passes < 1 || passes > 50) throw new IllegalArgumentException("Passes must be 1–50");
+        int sx = b.sizeX(), sz = b.sizeZ();
+        double[] h = new double[sx * sz];
+        for (int x = 0; x < sx; x++)
+            for (int z = 0; z < sz; z++) {
+                h[x * sz + z] = Double.NaN;
+                for (int y = b.maxY(); y >= b.minY(); y--) {
+                    if (!c.world().get(new BlockPos(b.minX() + x, y, b.minZ() + z)).isAir()) {
+                        h[x * sz + z] = y;
+                        break;
+                    }
+                }
+            }
+        double[] cur = h.clone();
+        for (int p = 0; p < passes; p++) {
+            double[] nxt = cur.clone();
+            for (int x = 0; x < sx; x++)
+                for (int z = 0; z < sz; z++) {
+                    if (Double.isNaN(cur[x * sz + z])) continue;
+                    double t = 0, wsum = 0;
+                    for (int dx = -1; dx <= 1; dx++)
+                        for (int dz = -1; dz <= 1; dz++) {
+                            int xx = x + dx, zz = z + dz;
+                            if (xx < 0 || zz < 0 || xx >= sx || zz >= sz || Double.isNaN(cur[xx * sz + zz])) continue;
+                            double wgt = (2 - Math.abs(dx)) * (2 - Math.abs(dz));
+                            t += cur[xx * sz + zz] * wgt;
+                            wsum += wgt;
+                        }
+                    nxt[x * sz + z] = t / wsum;
+                }
+            cur = nxt;
+        }
+        int n = 0;
+        for (int x = 0; x < sx; x++)
+            for (int z = 0; z < sz; z++) {
+                if (Double.isNaN(h[x * sz + z])) continue;
+                int from = (int) h[x * sz + z], to = Math.clamp(Math.round(cur[x * sz + z]), b.minY(), b.maxY());
+                if (to == from) continue;
+                int cx = b.minX() + x, cz = b.minZ() + z;
+                BlockState top = c.world().get(new BlockPos(cx, from, cz)), below = c.world().get(new BlockPos(cx, from - 1, cz));
+                BlockState fill = below.isAir() ? top : below;
+                if (to > from) for (int y = from; y < to; y++) n += put(c, new BlockPos(cx, y, cz), fill);
+                else for (int y = from; y > to; y--) n += put(c, new BlockPos(cx, y, cz), BlockState.AIR);
+                n += put(c, new BlockPos(cx, to, cz), top);
+            }
+        return done(n);
+    }
+
+    private static final java.util.Set<String> NATURAL = java.util.Set.of("minecraft:stone", "minecraft:dirt", "minecraft:grass_block",
+            "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:mycelium", "minecraft:rooted_dirt");
+
+    /** WorldEdit's /naturalize: by depth below each column's surface, grass, three dirt, then stone. */
+    private Result naturalize(Context c) {
+        Box b = needRegion();
+        BlockState grass = BlockState.of("grass_block").withProperties(Map.of("snowy", "false")), dirt = BlockState.of("dirt"), stone = BlockState.of("stone");
+        int n = 0;
+        for (int x = b.minX(); x <= b.maxX(); x++)
+            for (int z = b.minZ(); z <= b.maxZ(); z++) {
+                int depth = -1;
+                for (int y = b.maxY(); y >= b.minY(); y--) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState s = c.world().get(p);
+                    if (s.isAir()) {
+                        depth = -1;
+                        continue;
+                    }
+                    depth++;
+                    if (!NATURAL.contains(s.name())) continue;
+                    n += put(c, p, depth == 0 ? grass : depth <= 3 ? dirt : stone);
+                }
+            }
+        return done(n);
+    }
+
+    /** WorldEdit's /hollow: keeps a shell of {@code thickness} around solid shapes and clears (or fills) the inside. */
+    private Result hollow(List<String> args, Context c) {
+        Box b = needRegion();
+        int thick = args.isEmpty() ? 1 : integer(args.getFirst());
+        if (thick < 1 || thick > 32) throw new IllegalArgumentException("Thickness must be 1–32");
+        Pattern inside = args.size() >= 2 ? pattern(args.get(1), c) : () -> BlockState.AIR;
+        // Distance (in face steps) from air or the region's outside, by breadth-first search.
+        Map<BlockPos, Integer> dist = new HashMap<>();
+        java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
+        for (BlockPos p : cells(b)) {
+            if (c.world().get(p).isAir()) continue;
+            boolean edge = false;
+            for (int[] f : new int[][]{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}) {
+                BlockPos q = p.add(f[0], f[1], f[2]);
+                if (!b.contains(q.x(), q.y(), q.z()) || c.world().get(q).isAir()) {
+                    edge = true;
+                    break;
+                }
+            }
+            if (edge) {
+                dist.put(p, 1);
+                queue.add(p);
+            }
+        }
+        while (!queue.isEmpty()) {
+            BlockPos p = queue.poll();
+            int d = dist.get(p);
+            for (int[] f : new int[][]{{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}) {
+                BlockPos q = p.add(f[0], f[1], f[2]);
+                if (!b.contains(q.x(), q.y(), q.z()) || dist.containsKey(q) || c.world().get(q).isAir()) continue;
+                dist.put(q, d + 1);
+                queue.add(q);
+            }
+        }
+        int n = 0;
+        for (var e : dist.entrySet()) if (e.getValue() > thick) n += put(c, e.getKey(), inside.next());
+        return done(n);
+    }
+
+    /** WorldEdit's /center: the middle block of the region (two per axis when that side is even). */
+    private Result center(List<String> args, Context c) {
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /center <pattern>");
+        Box b = needRegion();
+        Pattern pat = pattern(String.join(" ", args), c);
+        int n = 0;
+        for (int x = (b.minX() + b.maxX()) / 2; x <= (b.minX() + b.maxX() + 1) / 2; x++)
+            for (int y = (b.minY() + b.maxY()) / 2; y <= (b.minY() + b.maxY() + 1) / 2; y++)
+                for (int z = (b.minZ() + b.maxZ()) / 2; z <= (b.minZ() + b.maxZ() + 1) / 2; z++) n += put(c, new BlockPos(x, y, z), pat.next());
+        return done(n);
+    }
+
     private Result line(List<String> args, Context c) {
-        if (args.isEmpty()) throw new IllegalArgumentException("Usage: //line <pattern> [thickness]");
+        if (args.isEmpty()) throw new IllegalArgumentException("Usage: /line <pattern> [thickness]");
         if (pos1 == null || pos2 == null) needRegion();
         Pattern pat = pattern(args.getFirst(), c);
         int thick = args.size() >= 2 ? integer(args.get(1)) : 0;
@@ -501,7 +638,7 @@ public final class WorldEdit {
     }
 
     private Result sphere(List<String> args, Context c, boolean hollow) {
-        if (args.size() < 2) throw new IllegalArgumentException("Usage: //" + (hollow ? "h" : "") + "sphere <pattern> <radius>");
+        if (args.size() < 2) throw new IllegalArgumentException("Usage: /" + (hollow ? "h" : "") + "sphere <pattern> <radius>");
         BlockPos o = needPos1();
         Pattern pat = pattern(args.getFirst(), c);
         double r = number(args.get(1));
@@ -525,7 +662,7 @@ public final class WorldEdit {
     }
 
     private Result cyl(List<String> args, Context c, boolean hollow) {
-        if (args.size() < 2) throw new IllegalArgumentException("Usage: //" + (hollow ? "h" : "") + "cyl <pattern> <radius> [height]");
+        if (args.size() < 2) throw new IllegalArgumentException("Usage: /" + (hollow ? "h" : "") + "cyl <pattern> <radius> [height]");
         BlockPos o = needPos1();
         Pattern pat = pattern(args.getFirst(), c);
         double r = number(args.get(1));
@@ -543,7 +680,7 @@ public final class WorldEdit {
     }
 
     private Result pyramid(List<String> args, Context c, boolean hollow) {
-        if (args.size() < 2) throw new IllegalArgumentException("Usage: //" + (hollow ? "h" : "") + "pyramid <pattern> <size>");
+        if (args.size() < 2) throw new IllegalArgumentException("Usage: /" + (hollow ? "h" : "") + "pyramid <pattern> <size>");
         BlockPos o = needPos1();
         Pattern pat = pattern(args.getFirst(), c);
         int size = integer(args.get(1));

@@ -143,9 +143,14 @@ public final class ViewportPane extends StackPane {
 
     // Move / Rotate tools: the gizmo overlay, the handle under the mouse and the drag in progress
     private final Gizmo gizmo = new Gizmo();
+    // Paint brush / eraser: the options bar and the stroke being painted (one undo step)
+    private BrushBar brushBar;
+    private BrushPopup brushPopup;
+    private Stroke stroke;
+    private long lastBrushSound;
     // WorldEdit: pos1 / pos2 region, clipboard and the "/" command bar
     private final io.blockdesigner.core.worldedit.WorldEdit worldEdit = new io.blockdesigner.core.worldedit.WorldEdit();
-    private final CommandBar commandBar = new CommandBar(this::runCommand);
+    private final CommandBar commandBar = new CommandBar(this::runCommand, this::blockIds);
     private final javafx.scene.control.Button commandButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.TERMINAL));
     // Place / break feel: thuds, break chips, and flight velocity for momentum
     private final BlockSounds sounds = new BlockSounds();
@@ -200,19 +205,20 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(keysButton, Pos.TOP_RIGHT);
         StackPane.setMargin(keysButton, new javafx.geometry.Insets(52, 12, 0, 0));
         filterButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        filterButton.setTooltip(new javafx.scene.control.Tooltip("Select by type (T): select blocks by type, layer and properties"));
+        filterButton.setTooltip(new javafx.scene.control.Tooltip("Select by type (Alt+T): select blocks by type, layer and properties"));
         filterButton.setFocusTraversable(false);
         filterButton.setOnAction(e -> openSelectByType(null));
         StackPane.setAlignment(filterButton, Pos.TOP_RIGHT);
         StackPane.setMargin(filterButton, new javafx.geometry.Insets(94, 12, 0, 0));
         commandButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        commandButton.setTooltip(new javafx.scene.control.Tooltip("WorldEdit commands (/): //set, //replace, //walls, //copy, //paste, //stack, //sphere…"));
+        commandButton.setTooltip(new javafx.scene.control.Tooltip("WorldEdit commands (T or /): /set, /replace, /walls, /copy, /paste, /stack, /sphere…"));
         commandButton.setFocusTraversable(false);
         commandButton.setOnAction(e -> openCommandBar());
         StackPane.setAlignment(commandButton, Pos.TOP_RIGHT);
         StackPane.setMargin(commandButton, new javafx.geometry.Insets(136, 12, 0, 0));
-        StackPane.setAlignment(commandBar, Pos.BOTTOM_CENTER);
-        StackPane.setMargin(commandBar, new javafx.geometry.Insets(0, 0, 76, 0));
+        // Bottom-left, like Minecraft's chat (clear of the hotbar in the middle).
+        StackPane.setAlignment(commandBar, Pos.BOTTOM_LEFT);
+        StackPane.setMargin(commandBar, new javafx.geometry.Insets(0, 0, 74, 12));
         StackPane.setAlignment(hud, Pos.TOP_LEFT);
         StackPane.setMargin(hud, new javafx.geometry.Insets(12, 0, 0, 12));
         javafx.scene.shape.Rectangle ch = new javafx.scene.shape.Rectangle(18, 2), cv = new javafx.scene.shape.Rectangle(2, 18);
@@ -227,9 +233,22 @@ public final class ViewportPane extends StackPane {
         marquee.setMouseTransparent(true);
         marquee.setVisible(false);
         hotbar = new Hotbar(ws);
+        brushPopup = new BrushPopup(ws.settings(), () -> {
+            brushBar.sync();
+            requestRedraw();
+        });
+        brushBar = new BrushBar(ws.settings(), this::requestRedraw, () -> {
+            javafx.geometry.Point2D p = brushBar.localToScreen(0, -8);
+            if (p != null) {
+                brushPopup.sync();
+                brushPopup.show(getScene().getWindow(), p.getX(), p.getY() - 330);
+            }
+        });
+        StackPane.setAlignment(brushBar, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(brushBar, new javafx.geometry.Insets(0, 0, 76, 0));
         StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 14, 0));
-        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar);
+        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, brushBar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar);
         updateHotbarVisibility();
         applyViewSettings();
         toastFade.setFromValue(1);
@@ -255,6 +274,8 @@ public final class ViewportPane extends StackPane {
                 case VIEW -> "View mode";
                 case MOVE -> "Move · drag an arrow, square or the centre · G";
                 case ROTATE -> "Rotate · drag a ring to turn 90° · E";
+                case BRUSH -> "Brush · drag to paint · right-drag smooths · Alt+1…0 modes · Shift+right-click settings · - / = size · , / . strength";
+                case ERASER -> "Eraser · drag to remove blocks · - / = size · X";
             });
         });
         ws.editor().undoStack().addListener(this::requestRedraw);
@@ -337,6 +358,7 @@ public final class ViewportPane extends StackPane {
             particlesDrawn = particles.active();
         }
         holdStep();
+        strokeStep();
         if (sceneRenderer != null) sceneRenderer.sync();
         double scale = getScene() != null && getScene().getWindow() != null ? getScene().getWindow().getOutputScaleX() : 1;
         int w = (int) Math.max(1, Math.round(getWidth() * scale)), h = (int) Math.max(1, Math.round(getHeight() * scale));
@@ -412,6 +434,7 @@ public final class ViewportPane extends StackPane {
             }
         }
 
+        drawBrushPreview(lines);
         updateGizmo();
 
         Optional<Box> sb = ws.scene().worldBounds();
@@ -608,8 +631,28 @@ public final class ViewportPane extends StackPane {
 
     private Optional<Picker.Hit> pick(double x, double y) {
         Vector3f[] r = ray(x, y);
+        // During a draw or erase stroke the brush aims at the surface as it was when the stroke began: it looks
+        // through its own new blocks and treats the cells it erased as still there, so it glides along the surface.
+        java.util.function.Function<BlockPos, Boolean> override = null;
+        if (stroke != null && stroke.shapeOnly() && !stroke.touched.isEmpty()) {
+            Boolean forced = stroke.erase ? Boolean.TRUE : Boolean.FALSE;
+            java.util.Set<BlockPos> touched = stroke.touched;
+            override = p -> touched.contains(p) ? forced : null;
+        }
         return Picker.pick(ws.scene(), r[0], r[1], fly ? CREATIVE_REACH : 10000, l -> !l.locked() && !placing.contains(l),
-                sliceMin(), sliceMax());
+                sliceMin(), sliceMax(), override);
+    }
+
+    /** Alt+1…Alt+0: brush modes in order (Draw, Erase, Smooth, Erode, Fill, Pinch, Raise, Lower, Flatten, Slope). */
+    public void setBrushMode(int index) {
+        var modes = io.blockdesigner.core.edit.Sculpt.Mode.values();
+        if (index < 0 || index >= modes.length) return;
+        ws.settings().brushMode = modes[index].name();
+        if (ws.toolProperty().get() != ToolKind.BRUSH) ws.toolProperty().set(ToolKind.BRUSH);
+        brushBar.sync();
+        brushPopup.sync();
+        showToast("Brush: " + modes[index].label + " · " + modes[index].description);
+        requestRedraw();
     }
 
     private float groundY() {
@@ -680,6 +723,9 @@ public final class ViewportPane extends StackPane {
                 else setCorner(true);
             } else if (mode == ToolKind.SELECT && e.getButton() == MouseButton.SECONDARY) {
                 setCorner(false);
+            } else if ((mode == ToolKind.BRUSH || mode == ToolKind.ERASER)
+                    && (e.getButton() == MouseButton.PRIMARY || e.getButton() == MouseButton.SECONDARY)) {
+                startStroke(e.getButton() == MouseButton.SECONDARY ? io.blockdesigner.core.edit.Sculpt.Mode.SMOOTH : null, false, false);
             } else if (mode == ToolKind.BUILD) {
                 switch (e.getButton()) {
                     case PRIMARY -> startHold(Action.BREAK);
@@ -712,6 +758,14 @@ public final class ViewportPane extends StackPane {
             orbitPivot = viewSwing ? null : pivotUnder(e.getX(), e.getY());
             return;
         }
+        if (e.getButton() == MouseButton.SECONDARY && (mode == ToolKind.BRUSH || mode == ToolKind.ERASER) && placing.isEmpty()) {
+            // Right-drag smooths; Shift+right-click opens the brush settings instead (on release, see onRelease).
+            if (!e.isShiftDown()) {
+                updateHover(e.getX(), e.getY());
+                startStroke(io.blockdesigner.core.edit.Sculpt.Mode.SMOOTH, false, false);
+            }
+            return;
+        }
         if (e.getButton() == MouseButton.SECONDARY && mode == ToolKind.BUILD && placing.isEmpty()) {
             startHold(Action.PLACE);
             return;
@@ -734,6 +788,7 @@ public final class ViewportPane extends StackPane {
             case MOVE, ROTATE -> {
                 // A click on a layer selects it on release (see onRelease).
             }
+            case BRUSH, ERASER -> startStroke(null, e.isShiftDown(), e.isShortcutDown());
         }
     }
 
@@ -763,6 +818,11 @@ public final class ViewportPane extends StackPane {
             }
             return;
         }
+        if (stroke != null) {
+            // Brush strokes follow the mouse with either button; the frame loop stamps.
+            updateHover(e.getX(), e.getY());
+            return;
+        }
         if (dragButton != MouseButton.PRIMARY) return;
         if (gizmoDrag != null) {
             dragGizmo(e.getX(), e.getY());
@@ -781,6 +841,11 @@ public final class ViewportPane extends StackPane {
 
     private void onRelease(MouseEvent e) {
         boolean click = dragDistance <= CLICK_SLOP;
+        if (stroke != null && e.getButton() != MouseButton.MIDDLE) endStroke();
+        if (e.getButton() == MouseButton.SECONDARY && click && e.isShiftDown() && !fly && placing.isEmpty()
+                && (ws.toolProperty().get() == ToolKind.BRUSH || ws.toolProperty().get() == ToolKind.ERASER)) {
+            showBrushPopup(e.getScreenX(), e.getScreenY());
+        }
         if (holdButton == e.getButton()) {
             stopHold();
         }
@@ -906,9 +971,10 @@ public final class ViewportPane extends StackPane {
                 if (c != null) showContextMenu(c.getX(), c.getY());
             }
             case T -> {
-                if (e.isShortcutDown() || e.isAltDown() || !placing.isEmpty()) return;
-                Layer hl = hover != null ? hover.layer() : null;
-                openSelectByType(hl == null ? null : BlockTransformer.defaults().apply(hl.structure().get(hover.local()), hl.transform()));
+                // T opens the command line like Minecraft's chat; Alt+T is Select by type.
+                if (e.isShortcutDown() || !placing.isEmpty()) return;
+                if (e.isAltDown()) openSelectByTypeAtAim();
+                else openCommandBar();
             }
             case ESCAPE -> {
                 if (gizmoDrag != null) cancelGizmoDrag();
@@ -1195,6 +1261,17 @@ public final class ViewportPane extends StackPane {
                 p -> BlockTransformer.defaults().apply(l.structure().get(l.toLocal(p)), t), blocks);
     }
 
+    /**
+     * Brushes never build into the camera: no blocks within two blocks of the eye, or level with or behind it, so a
+     * stroke stops short of you instead of growing past the camera.
+     */
+    private boolean nearCamera(BlockPos p) {
+        Vector3f eye = camera.eye(), f = camera.forward();
+        float cx = p.x() + 0.5f - eye.x, cy = p.y() + 0.5f - eye.y, cz = p.z() + 0.5f - eye.z;
+        if (cx * cx + cy * cy + cz * cz < 2.0f * 2.0f) return true;
+        return cx * f.x + cy * f.y + cz * f.z < 1.0f;
+    }
+
     private boolean insideCamera(BlockPos p) {
         Vector3f e = camera.eye();
         return (int) Math.floor(e.x) == p.x() && (int) Math.floor(e.y) == p.y() && (int) Math.floor(e.z) == p.z();
@@ -1403,9 +1480,9 @@ public final class ViewportPane extends StackPane {
         if (worldEdit.region() != null) {
             var rb = worldEdit.region();
             contextMenu.getItems().addAll(
-                    item(String.format("Fill region %d×%d×%d with held block", rb.sizeX(), rb.sizeY(), rb.sizeZ()), "//set hand", () -> runCommand("//set hand")),
-                    item("Walls of region with held block", "//walls hand", () -> runCommand("//walls hand")),
-                    item("Copy region", "//copy", () -> runCommand("//copy")),
+                    item(String.format("Fill region %d×%d×%d with held block", rb.sizeX(), rb.sizeY(), rb.sizeZ()), "/set hand", () -> runCommand("/set hand")),
+                    item("Walls of region with held block", "/walls hand", () -> runCommand("/walls hand")),
+                    item("Copy region", "/copy", () -> runCommand("/copy")),
                     item("Clear region", "Esc", this::clearRegionAndSelection),
                     new javafx.scene.control.SeparatorMenuItem());
         }
@@ -1420,7 +1497,7 @@ public final class ViewportPane extends StackPane {
                     item("All " + typeName + " in visible layers", null, () -> quickSelectType(type, false, typeLayers(SelectByTypePanel.Scope.VISIBLE))),
                     item("Same exact state in " + hl.name(), null, () -> quickSelectType(type, true, List.of(hl))),
                     new javafx.scene.control.SeparatorMenuItem(),
-                    item("More options…", "T", () -> openSelectByType(type)));
+                    item("More options…", "Alt+T", () -> openSelectByType(type)));
             contextMenu.getItems().add(byType);
         }
         if (n > 0) {
@@ -1434,7 +1511,7 @@ public final class ViewportPane extends StackPane {
             if (!contextMenu.getItems().isEmpty()) contextMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
             contextMenu.getItems().addAll(
                     item("Select all in " + layer.name(), null, () -> selectAllIn(layer)),
-                    item("Select by type…", "T", () -> openSelectByType(null)),
+                    item("Select by type…", "Alt+T", () -> openSelectByType(null)),
                     item("Frame " + layer.name(), "F", () -> frameLayer(layer)),
                     item("Hide " + layer.name(), null, () -> ws.editor().modifyLayer(layer, "Hide " + layer.name(), null, x -> x.setVisible(false))),
                     item(layer.locked() ? "Unlock " + layer.name() : "Lock " + layer.name(), null,
@@ -1903,6 +1980,322 @@ public final class ViewportPane extends StackPane {
         return c == null ? 0 : Math.atan2(-(y - c[1]), x - c[0]);
     }
 
+    // ---- paint brush / eraser ----------------------------------------------------------------------------------
+
+    /** A brush stroke: its mode, where it last stamped, and the undo group it builds. */
+    private static final class Stroke {
+        final io.blockdesigner.core.edit.Sculpt.Mode mode;
+        final boolean invert, erase;
+        /** Where a slope stroke started (its base). */
+        BlockPos start;
+        /** The aimed face at the last stamp (smoothing a top face smooths the heightmap, a side face in 3D). */
+        BlockPos normal;
+        BlockPos last;
+        long lastStamp;
+        int changed;
+        /** Cells this stroke drew or erased (world): the brush won't stamp on its own paint or through its own hole. */
+        final java.util.Set<BlockPos> touched = new java.util.HashSet<>();
+
+        Stroke(io.blockdesigner.core.edit.Sculpt.Mode mode, boolean invert) {
+            this.mode = mode;
+            this.invert = invert;
+            this.erase = mode == io.blockdesigner.core.edit.Sculpt.Mode.ERASE;
+        }
+
+        boolean shapeOnly() {
+            return mode == io.blockdesigner.core.edit.Sculpt.Mode.DRAW || erase;
+        }
+    }
+
+    /** - / =: one brush size smaller or bigger. */
+    public void stepBrush(int d) {
+        brushBar.step(d);
+        brushPopup.sync();
+        int n = ws.settings().brushSize, w = n * 2 - 1;
+        showToast("Brush size " + n + (n == 1 ? " (1 block)" : " (" + w + "×" + w + "×" + w + ")"));
+    }
+
+    /** , / .: brush strength. */
+    public void stepBrushStrength(int d) {
+        ws.settings().brushStrength = Math.clamp(ws.settings().brushStrength + d, 1, 5);
+        brushBar.sync();
+        brushPopup.sync();
+        showToast("Brush strength " + ws.settings().brushStrength);
+    }
+
+    /** Right-click in Brush mode: the brush settings at the cursor. */
+    private void showBrushPopup(double screenX, double screenY) {
+        if (getScene() == null) return;
+        brushPopup.sync();
+        brushPopup.show(getScene().getWindow(), screenX + 4, screenY + 4);
+    }
+
+    /** The popup's keys (mode letters, size, strength) while it is open; used by the window's key filter. */
+    public boolean brushPopupKey(KeyEvent e) {
+        return brushPopup.key(e);
+    }
+
+    /** Where the brush is centred: the empty cell in front of the aimed face (draw) or the aimed block itself. */
+    private BlockPos brushCenter(io.blockdesigner.core.edit.Sculpt.Mode mode) {
+        boolean draw = mode == io.blockdesigner.core.edit.Sculpt.Mode.DRAW;
+        if (hover != null) return draw ? hover.adjacentWorld() : hover.world();
+        return draw ? hoverGround : null;
+    }
+
+    private io.blockdesigner.core.edit.Sculpt.Brush brush() {
+        return new io.blockdesigner.core.edit.Sculpt.Brush(ws.settings().brushSize, ws.settings().brushCube, ws.settings().brushStrength);
+    }
+
+    /** The cells of the brush shape around {@code c}, within the slice view. */
+    private List<BlockPos> brushCells(BlockPos c) {
+        int lo = sliceMin(), hi = sliceMax();
+        return io.blockdesigner.core.edit.Sculpt.shape(brush(), c).stream().filter(p -> p.y() >= lo && p.y() <= hi).toList();
+    }
+
+    /**
+     * Starts a stroke: {@code forced} (right-drag: smooth) or the chosen mode. Blender-style Shift smooths and Ctrl
+     * inverts, but not while flying, where those keys fly.
+     */
+    private void startStroke(io.blockdesigner.core.edit.Sculpt.Mode forced, boolean shift, boolean ctrl) {
+        if (!placing.isEmpty()) return;
+        endStroke();
+        var base = ws.toolProperty().get() == ToolKind.ERASER ? io.blockdesigner.core.edit.Sculpt.Mode.ERASE : BrushPopup.mode(ws.settings());
+        boolean invert = !fly && ctrl && forced == null;
+        var mode = forced != null ? forced : !fly && shift ? io.blockdesigner.core.edit.Sculpt.Mode.SMOOTH : invert ? base.inverse() : base;
+        if (mode == io.blockdesigner.core.edit.Sculpt.Mode.DRAW && ws.blockToPlace() == null) {
+            showToast("Empty hand · pick a block (middle-click), choose a hotbar slot or click one in the palette");
+            return;
+        }
+        stroke = new Stroke(mode, invert);
+        stroke.start = brushCenter(mode);
+        stroke.normal = hover != null ? hover.normal() : new BlockPos(0, 1, 0);
+        ws.editor().undoStack().beginGroup(mode.label);
+        if (mode != base) showToast(mode.label + (invert ? " (inverted)" : ""));
+        stamp();
+    }
+
+    /**
+     * Called every frame while the button is held. Draw and erase stamp when the brush moves to a new cell (never on
+     * their own work, so a still mouse can't build towards the camera or tunnel in); the sculpt modes also keep working
+     * a few times a second while held in place, like an airbrush.
+     */
+    private void strokeStep() {
+        if (stroke == null) return;
+        if (fly) updateHover(aimX(), aimY());
+        BlockPos c = brushCenter(stroke.mode);
+        if (c == null) return;
+        // Dabs are paced by the Brush speed setting; the path between them is filled in below, so strokes stay whole.
+        long interval = (long) (1e9 / Math.clamp(ws.settings().brushRate, 1, 60));
+        if (System.nanoTime() - stroke.lastStamp < interval) return;
+        if (c.equals(stroke.last)) {
+            // Held still: draw and erase wait for the mouse; the sculpt modes keep working, like an airbrush.
+            if (stroke.shapeOnly()) return;
+            stamp(c);
+            return;
+        }
+        // Fast drags jump several cells a frame: fill in the path so the stroke stays continuous.
+        BlockPos from = stroke.last;
+        if (from != null) {
+            int dx = c.x() - from.x(), dy = c.y() - from.y(), dz = c.z() - from.z();
+            int dist = Math.max(Math.abs(dx), Math.max(Math.abs(dy), Math.abs(dz)));
+            int spacing = Math.max(1, ws.settings().brushSize / 2);
+            for (int i = spacing; i < dist; i += spacing) {
+                double t = (double) i / dist;
+                stamp(new BlockPos((int) Math.round(from.x() + dx * t), (int) Math.round(from.y() + dy * t), (int) Math.round(from.z() + dz * t)));
+            }
+        }
+        stamp(c);
+    }
+
+    private void endStroke() {
+        if (stroke == null) return;
+        stroke = null;
+        ws.editor().undoStack().endGroup();
+        requestRedraw();
+    }
+
+    /** One dab of the brush at the current aim. */
+    private void stamp() {
+        BlockPos c = brushCenter(stroke.mode);
+        if (c != null) stamp(c);
+    }
+
+    /** One dab of the brush at {@code c}. */
+    private void stamp(BlockPos c) {
+        if (hover != null) stroke.normal = hover.normal();
+        stroke.last = c;
+        stroke.lastStamp = System.nanoTime();
+        int n = switch (stroke.mode) {
+            case DRAW -> paintCells(brushCells(c));
+            case ERASE -> eraseCells(c, brushCells(c));
+            default -> sculptCells(c);
+        };
+        stroke.changed += n;
+        if (n > 0 && ws.settings().blockSounds && System.nanoTime() - lastBrushSound > 70_000_000L) {
+            lastBrushSound = System.nanoTime();
+            boolean removing = switch (stroke.mode) {
+                case ERASE, ERODE, LOWER -> true;
+                case SLOPE -> stroke.invert;
+                default -> false;
+            };
+            if (removing) sounds.breakBlock(ws.settings().soundVolume);
+            else sounds.place(ws.settings().soundVolume);
+        }
+        updateHover(aimX(), aimY());
+        requestRedraw();
+    }
+
+    /** The sculpt modes, on the aimed block's layer (or the active one), read and written in world coordinates. */
+    private int sculptCells(BlockPos c) {
+        Layer l = hover != null ? hover.layer() : ws.activeLayerProperty().get();
+        if (l == null) return 0;
+        if (l.locked()) {
+            showToast("Layer is locked");
+            return 0;
+        }
+        Transform t = l.transform();
+        var mode = stroke.mode;
+        // Smoothing, erosion, fill and pinch keep the terrain's own blocks; the terrain brushes add the held block.
+        boolean natural = mode == io.blockdesigner.core.edit.Sculpt.Mode.SMOOTH || mode == io.blockdesigner.core.edit.Sculpt.Mode.FILL
+                || mode == io.blockdesigner.core.edit.Sculpt.Mode.ERODE || mode == io.blockdesigner.core.edit.Sculpt.Mode.PINCH;
+        java.util.function.Supplier<BlockState> material = natural ? null : ws::blockToPlace;
+        int lo = sliceMin(), hi = sliceMax();
+        List<BlockPos> changed;
+        try (SceneEditor.BlockSession s = ws.editor().edit(l, mode.label, null)) {
+            io.blockdesigner.core.edit.Sculpt.World w = new io.blockdesigner.core.edit.Sculpt.World() {
+                @Override
+                public BlockState get(BlockPos p) {
+                    BlockPos lp = l.toLocal(p);
+                    return BlockTransformer.defaults().apply(s.get(lp.x(), lp.y(), lp.z()), t);
+                }
+
+                @Override
+                public void set(BlockPos p, BlockState st) {
+                    if (!st.isAir() && nearCamera(p)) return;
+                    BlockPos lp = l.toLocal(p);
+                    s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(st, t.inverse()));
+                }
+            };
+            changed = io.blockdesigner.core.edit.Sculpt.apply(mode, stroke.invert, brush(), c, stroke.normal, w, material, stroke.start,
+                    y -> y >= lo && y <= hi);
+            reconnectIn(s, l, changed);
+        }
+        return changed.size();
+    }
+
+    /** Fills the empty cells with the held block (a random hotbar pick per block in shuffle mode), in the active layer. */
+    private int paintCells(List<BlockPos> cells) {
+        Layer l = ws.activeLayerProperty().get();
+        if (l == null) {
+            l = new Layer("Layer " + (ws.scene().layers().size() + 1), new io.blockdesigner.core.model.Structure());
+            ws.editor().addLayer(l);
+        }
+        if (l.locked()) {
+            showToast("Active layer is locked");
+            return 0;
+        }
+        Layer target = l;
+        Transform t = l.transform();
+        List<BlockPos> set = new ArrayList<>();
+        try (SceneEditor.BlockSession s = ws.editor().edit(l, "Paint", null)) {
+            for (BlockPos w : cells) {
+                if (nearCamera(w)) continue;
+                BlockPos lp = l.toLocal(w);
+                if (!s.get(lp.x(), lp.y(), lp.z()).isAir()) continue;
+                BlockState st = ws.blockToPlace();
+                if (st == null || st.isAir()) continue;
+                s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(st, t.inverse()));
+                set.add(w);
+                stroke.touched.add(w);
+            }
+            reconnectIn(s, target, set);
+        }
+        return set.size();
+    }
+
+    /** Removes every block in the cells from the visible, unlocked layers. */
+    private int eraseCells(BlockPos center, List<BlockPos> cells) {
+        int n = 0;
+        BlockState burst = null;
+        for (Layer l : ws.scene().layers()) {
+            if (!l.visible() || l.locked() || placing.contains(l)) continue;
+            List<BlockPos> removed = new ArrayList<>();
+            try (SceneEditor.BlockSession s = ws.editor().edit(l, "Erase", null)) {
+                for (BlockPos w : cells) {
+                    BlockPos lp = l.toLocal(w);
+                    BlockState st = s.get(lp.x(), lp.y(), lp.z());
+                    if (st.isAir()) continue;
+                    if (burst == null) burst = BlockTransformer.defaults().apply(st, l.transform());
+                    s.set(lp.x(), lp.y(), lp.z(), BlockState.AIR);
+                    removed.add(w);
+                    stroke.touched.add(w);
+                }
+                reconnectIn(s, l, removed);
+            }
+            n += removed.size();
+        }
+        if (burst != null && ws.settings().breakParticles) {
+            BlockAssets assets = ws.assets();
+            particles.burst(center.x(), center.y(), center.z(), assets == null ? null : BlockIcons.icon(assets, burst));
+            particlesDrawn = true;
+        }
+        return n;
+    }
+
+    /** Fences, walls, redstone, rails and stairs around the changed cells update, as when placing by hand. */
+    private void reconnectIn(SceneEditor.BlockSession s, Layer l, List<BlockPos> changed) {
+        if (changed.isEmpty() || changed.size() > 4096) return;
+        Transform t = l.transform();
+        var updates = BlockPlacement.reconnect(changed, p -> {
+            BlockPos lp = l.toLocal(p);
+            return BlockTransformer.defaults().apply(s.get(lp.x(), lp.y(), lp.z()), t);
+        });
+        for (var en : updates.entrySet()) {
+            BlockPos lp = l.toLocal(en.getKey());
+            s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(en.getValue(), t.inverse()));
+        }
+    }
+
+    /** The brush outline under the cursor: green to paint, red to erase; spheres get three rings. */
+    private void drawBrushPreview(List<FrameRequest.Line> lines) {
+        ToolKind tool = ws.toolProperty().get();
+        if (tool != ToolKind.BRUSH && tool != ToolKind.ERASER || !placing.isEmpty()) return;
+        var mode = stroke != null ? stroke.mode : tool == ToolKind.ERASER ? io.blockdesigner.core.edit.Sculpt.Mode.ERASE : BrushPopup.mode(ws.settings());
+        BlockPos c = brushCenter(mode);
+        if (c == null) return;
+        // Green adds, red removes, blue reshapes.
+        int color = switch (mode) {
+            case DRAW, FILL, RAISE -> 0xFF46C46E;
+            case ERASE, ERODE, LOWER -> 0xFFE5484D;
+            default -> 0xFF3E9BFF;
+        };
+        int r = ws.settings().brushSize - 1;
+        float cx = c.x() + 0.5f, cy = c.y() + 0.5f, cz = c.z() + 0.5f, h = r + 0.5f + 0.02f;
+        if (mode.terrain()) {
+            // Terrain brushes work on columns: a ring on the surface.
+            int seg = 48;
+            for (int i = 0; i < seg; i++) {
+                double a0 = 2 * Math.PI * i / seg, a1 = 2 * Math.PI * (i + 1) / seg;
+                lines.add(new FrameRequest.Line(cx + (float) Math.cos(a0) * h, cy + 0.55f, cz + (float) Math.sin(a0) * h,
+                        cx + (float) Math.cos(a1) * h, cy + 0.55f, cz + (float) Math.sin(a1) * h, color));
+            }
+            Overlays.block(lines, c.x(), c.y(), c.z(), color);
+            return;
+        }
+        if (ws.settings().brushCube || r == 0) {
+            Overlays.box(lines, cx - h, cy - h, cz - h, cx + h, cy + h, cz + h, color);
+            return;
+        }
+        int seg = 48;
+        for (int i = 0; i < seg; i++) {
+            double a0 = 2 * Math.PI * i / seg, a1 = 2 * Math.PI * (i + 1) / seg;
+            float c0 = (float) Math.cos(a0) * h, s0 = (float) Math.sin(a0) * h, c1 = (float) Math.cos(a1) * h, s1 = (float) Math.sin(a1) * h;
+            lines.add(new FrameRequest.Line(cx + c0, cy, cz + s0, cx + c1, cy, cz + s1, color));
+            lines.add(new FrameRequest.Line(cx + c0, cy + s0, cz, cx + c1, cy + s1, cz, color));
+            lines.add(new FrameRequest.Line(cx, cy + c0, cz + s0, cx, cy + c1, cz + s1, color));
+        }
+    }
+
     // ---- select by type -------------------------------------------------------------------------------------
 
     private interface TypeVisitor {
@@ -1952,7 +2345,13 @@ public final class ViewportPane extends StackPane {
                 q.slice() ? sliceMin() : Integer.MIN_VALUE, q.slice() ? sliceMax() : Integer.MAX_VALUE, v);
     }
 
-    /** Opens the Select by type dialog (T), with {@code preselect}'s block (world-facing) ticked if given. */
+    /** Alt+T: Select by type, starting from the block under the cursor. */
+    public void openSelectByTypeAtAim() {
+        Layer hl = hover != null ? hover.layer() : null;
+        openSelectByType(hl == null ? null : BlockTransformer.defaults().apply(hl.structure().get(hover.local()), hl.transform()));
+    }
+
+    /** Opens the Select by type dialog (Alt+T), with {@code preselect}'s block (world-facing) ticked if given. */
     public void openSelectByType(BlockState preselect) {
         if (!placing.isEmpty()) return;
         setFly(false);
@@ -2099,7 +2498,7 @@ public final class ViewportPane extends StackPane {
         Box r = worldEdit.region();
         regionChanged();
         boolean both = worldEdit.pos1() != null && worldEdit.pos2() != null;
-        showToast((first ? "pos1 " : "pos2 ") + p + (both ? String.format(" · %d×%d×%d = %,d blocks · / for commands", r.sizeX(), r.sizeY(), r.sizeZ(), r.volume())
+        showToast((first ? "pos1 " : "pos2 ") + p + (both ? String.format(" · %d×%d×%d = %,d blocks · T for commands", r.sizeX(), r.sizeY(), r.sizeZ(), r.volume())
                 : first ? " · right-click pos2" : " · left-click pos1"));
     }
 
@@ -2146,7 +2545,13 @@ public final class ViewportPane extends StackPane {
         if (b != null) Overlays.box(lines, b.x() - 0.06f, b.y() - 0.06f, b.z() - 0.06f, b.x() + 1.06f, b.y() + 1.06f, b.z() + 1.06f, 0xFF3E9BFF);
     }
 
-    /** "/" or the terminal button: the WorldEdit command bar. */
+    /** Block ids for completing command patterns (vanilla ones without "minecraft:"). */
+    private List<String> blockIds() {
+        BlockAssets a = ws.assets();
+        return a == null ? List.of() : a.registry().all().stream().map(i -> i.id().startsWith("minecraft:") ? i.path() : i.id()).toList();
+    }
+
+    /** T, "/" or the terminal button: the WorldEdit command bar, like Minecraft's chat. */
     public void openCommandBar() {
         if (fly) setFly(false);
         commandBar.open();
@@ -2179,30 +2584,54 @@ public final class ViewportPane extends StackPane {
                 : ax > az ? (f.x > 0 ? BlockPlacement.Dir.EAST : BlockPlacement.Dir.WEST) : (f.z > 0 ? BlockPlacement.Dir.SOUTH : BlockPlacement.Dir.NORTH);
         BlockPos aim = hover != null ? hover.world() : hoverGround;
 
-        // The layer and its edit session are opened on the first write, so read-only commands change nothing.
+        // Commands see every visible, unlocked layer merged, like the view does. Changing a cell changes it in the layer
+        // that holds a block there (and clears it from any other layer), so /set really replaces what was there; empty
+        // cells are filled in the active layer (a new one when there is none). Sessions open on the first write.
+        List<Layer> layers = ws.scene().layers().stream().filter(l -> l.visible() && !l.locked() && !placing.contains(l)).toList();
         Layer[] target = {active};
-        SceneEditor.BlockSession[] session = {null};
+        java.util.Map<Layer, SceneEditor.BlockSession> sessions = new java.util.LinkedHashMap<>();
+        List<BlockPos> written = new ArrayList<>();
+        java.util.function.BiFunction<Layer, BlockPos, BlockState> read = (l, p) -> {
+            BlockPos lp = l.toLocal(p);
+            SceneEditor.BlockSession s = sessions.get(l);
+            BlockState st = s != null ? s.get(lp.x(), lp.y(), lp.z()) : l.structure().get(lp);
+            return BlockTransformer.defaults().apply(st, l.transform());
+        };
+        java.util.function.BiConsumer<Layer, java.util.Map.Entry<BlockPos, BlockState>> write = (l, e) -> {
+            SceneEditor.BlockSession s = sessions.computeIfAbsent(l, x -> ws.editor().edit(x, line.strip(), null));
+            BlockPos lp = l.toLocal(e.getKey());
+            s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(e.getValue(), l.transform().inverse()));
+        };
         io.blockdesigner.core.worldedit.WorldEdit.World world = new io.blockdesigner.core.worldedit.WorldEdit.World() {
             @Override
             public BlockState get(BlockPos p) {
-                Layer l = target[0];
-                if (l == null) return BlockState.AIR;
-                BlockPos lp = l.toLocal(p);
-                BlockState st = session[0] != null ? session[0].get(lp.x(), lp.y(), lp.z()) : l.structure().get(lp);
-                return BlockTransformer.defaults().apply(st, l.transform());
+                // The top-most layer with a block here wins, as it does on screen.
+                for (int i = layers.size() - 1; i >= 0; i--) {
+                    BlockState st = read.apply(layers.get(i), p);
+                    if (!st.isAir()) return st;
+                }
+                return target[0] != null && !layers.contains(target[0]) ? read.apply(target[0], p) : BlockState.AIR;
             }
 
             @Override
             public void set(BlockPos p, BlockState st) {
-                if (target[0] == null) {
-                    Layer l = new Layer("Layer " + (ws.scene().layers().size() + 1), new io.blockdesigner.core.model.Structure());
-                    ws.editor().addLayer(l);
-                    target[0] = l;
+                boolean placed = false;
+                for (int i = layers.size() - 1; i >= 0; i--) {
+                    Layer l = layers.get(i);
+                    if (read.apply(l, p).isAir()) continue;
+                    // Replace in the top-most layer holding a block here; clear the cell in any layer under it.
+                    write.accept(l, java.util.Map.entry(p, placed ? BlockState.AIR : st));
+                    placed = true;
                 }
-                Layer l = target[0];
-                if (session[0] == null) session[0] = ws.editor().edit(l, line.strip(), null);
-                BlockPos lp = l.toLocal(p);
-                session[0].set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(st, l.transform().inverse()));
+                if (!placed && !st.isAir()) {
+                    if (target[0] == null) {
+                        Layer l = new Layer("Layer " + (ws.scene().layers().size() + 1), new io.blockdesigner.core.model.Structure());
+                        ws.editor().addLayer(l);
+                        target[0] = l;
+                    }
+                    write.accept(target[0], java.util.Map.entry(p, st));
+                }
+                written.add(p);
             }
         };
         var undo = ws.editor().undoStack();
@@ -2210,8 +2639,15 @@ public final class ViewportPane extends StackPane {
         undo.beginGroup(line.strip());
         try {
             r = worldEdit.run(line, new io.blockdesigner.core.worldedit.WorldEdit.Context(world, look, aim, ws.selectedBlockProperty().get(), resolve));
+            // Fences, walls, panes, redstone, rails and stairs join up with what the command built, as when placing by hand.
+            if (!written.isEmpty() && written.size() <= 200_000) {
+                var updates = BlockPlacement.reconnect(written, world::get);
+                int n = written.size();
+                updates.forEach(world::set);
+                written.subList(n, written.size()).clear();
+            }
         } finally {
-            if (session[0] != null) session[0].close();
+            sessions.values().forEach(SceneEditor.BlockSession::close);
             undo.endGroup();
         }
         switch (r.special()) {
@@ -2401,7 +2837,12 @@ public final class ViewportPane extends StackPane {
 
     /** The hotbar shows in Build mode. */
     private void updateHotbarVisibility() {
-        hotbar.setVisible(ws.toolProperty().get() == ToolKind.BUILD);
+        ToolKind t = ws.toolProperty().get();
+        hotbar.setVisible(t == ToolKind.BUILD || t == ToolKind.BRUSH);
+        boolean brush = t == ToolKind.BRUSH || t == ToolKind.ERASER;
+        brushBar.setVisible(brush);
+        if (brush) brushBar.show(t == ToolKind.ERASER);
+        if (!brush) endStroke();
     }
 
     /** Alt+K: the keyboard shortcuts card over the viewport. */

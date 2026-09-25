@@ -707,6 +707,15 @@ public final class MainWindow {
 
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (scene.getFocusOwner() instanceof TextInputControl) return;
+            // While flying, W A S D, Space, Shift and Ctrl belong to flight: no shortcut may take them (Ctrl+D, Ctrl+A…).
+            if (viewport.isFlying() && (e.getCode() == KeyCode.W || e.getCode() == KeyCode.A || e.getCode() == KeyCode.S
+                    || e.getCode() == KeyCode.D || e.getCode() == KeyCode.SPACE || e.getCode() == KeyCode.SHIFT
+                    || e.getCode() == KeyCode.CONTROL)) return;
+            // The brush popup's own keys (mode letters, size, strength) while it is open.
+            if (viewport.brushPopupKey(e)) {
+                e.consume();
+                return;
+            }
             if (startScreen.isVisible()) {
                 if (e.getCode() == KeyCode.ESCAPE) startScreen.close();
                 e.consume();
@@ -723,8 +732,39 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
-            if ((e.getCode() == KeyCode.SLASH || e.getCode() == KeyCode.DIVIDE) && !e.isShortcutDown() && !e.isAltDown()) {
+            // T or / opens the command line, like Minecraft's chat. Alt+T is Select by type.
+            if ((e.getCode() == KeyCode.SLASH || e.getCode() == KeyCode.DIVIDE || e.getCode() == KeyCode.T) && !e.isShortcutDown() && !e.isAltDown()
+                    && !viewport.isPlacing()) {
                 viewport.openCommandBar();
+                e.consume();
+                return;
+            }
+            if (e.getCode() == KeyCode.T && e.isAltDown() && !e.isShortcutDown()) {
+                viewport.openSelectByTypeAtAim();
+                e.consume();
+                return;
+            }
+            // - / = resize the paint brush and eraser.
+            ToolKind tool = ws.toolProperty().get();
+            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && !e.isShortcutDown() && !e.isAltDown()
+                    && (e.getCode() == KeyCode.MINUS || e.getCode() == KeyCode.EQUALS || e.getCode() == KeyCode.SUBTRACT || e.getCode() == KeyCode.ADD)) {
+                viewport.stepBrush(e.getCode() == KeyCode.MINUS || e.getCode() == KeyCode.SUBTRACT ? -1 : 1);
+                e.consume();
+                return;
+            }
+            // Alt+1…Alt+0 pick the brush mode (Alt isn't a flight key, so this works while flying too).
+            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && e.isAltDown() && !e.isShortcutDown()
+                    && e.getCode().isDigitKey() && !e.getCode().isKeypadKey()) {
+                String name = e.getCode().getName();
+                int d = name.charAt(name.length() - 1) - '0';
+                viewport.setBrushMode(d == 0 ? 9 : d - 1);
+                e.consume();
+                return;
+            }
+            // , / . change the brush strength.
+            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && !e.isShortcutDown() && !e.isAltDown()
+                    && (e.getCode() == KeyCode.COMMA || e.getCode() == KeyCode.PERIOD)) {
+                viewport.stepBrushStrength(e.getCode() == KeyCode.COMMA ? -1 : 1);
                 e.consume();
                 return;
             }
@@ -777,6 +817,8 @@ public final class MainWindow {
                 case Q -> ToolKind.SELECT;
                 case G -> ToolKind.MOVE;
                 case E -> ToolKind.ROTATE;
+                case U -> ToolKind.BRUSH;
+                case X -> ToolKind.ERASER;
                 default -> null;
             };
             if (t != null) {

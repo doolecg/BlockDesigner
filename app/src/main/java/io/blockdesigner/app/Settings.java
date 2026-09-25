@@ -39,6 +39,14 @@ public final class Settings {
     public int breakDelayMs = 250;
     /** Creative flight speed in blocks per second (Minecraft: ~10.9, sprinting ~21.6). */
     public double flySpeed = 10.9;
+    /** Paint brush / eraser size (1 = one block, n = a (2n-1)-block wide shape) and shape (cube, else sphere). */
+    public int brushSize = 2;
+    public boolean brushCube;
+    /** Brush mode (a Sculpt.Mode name) and strength 1–5. */
+    public String brushMode = "DRAW";
+    public int brushStrength = 2;
+    /** Brush dabs per second while painting (the path between dabs is still filled in). */
+    public double brushRate = 8;
     /** Flight glides to a stop (and eases up to speed) instead of stopping dead. */
     public boolean flyMomentum = true;
     /** Place / break thuds and their volume (0..1). */
@@ -72,6 +80,7 @@ public final class Settings {
         breakDelayMs = d.breakDelayMs;
         flySpeed = d.flySpeed;
         flyMomentum = d.flyMomentum;
+        brushRate = d.brushRate;
         blockSounds = d.blockSounds;
         soundVolume = d.soundVolume;
         breakParticles = d.breakParticles;

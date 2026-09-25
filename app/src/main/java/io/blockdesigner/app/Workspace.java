@@ -24,9 +24,9 @@ import java.nio.file.Path;
 public final class Workspace {
     /**
      * Viewport modes: look around only, select and slide layers, build Minecraft-style (left break, right place), or
-     * move / rotate the selected layers with Blender-style gizmos.
+     * move / rotate the selected layers with Blender-style gizmos, or paint and erase blocks with a brush.
      */
-    public enum ToolKind { VIEW, SELECT, BUILD, MOVE, ROTATE }
+    public enum ToolKind { VIEW, SELECT, BUILD, MOVE, ROTATE, BRUSH, ERASER }
 
     public static final int HOTBAR_SIZE = 9;
 

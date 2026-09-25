@@ -34,6 +34,15 @@ public final class Picker {
 
     /** As above, ignoring blocks whose world Y is outside {@code minY..maxY} (the slice view hides them). */
     public static Optional<Hit> pick(Scene scene, Vector3f origin, Vector3f dir, float maxDist, Predicate<Layer> filter, int minY, int maxY) {
+        return pick(scene, origin, dir, maxDist, filter, minY, maxY, null);
+    }
+
+    /**
+     * As above, with {@code override} deciding cells by world position first: TRUE counts a cell as solid, FALSE as
+     * empty, null leaves it to the blocks. A brush stroke uses it to aim at the surface as it was before the stroke.
+     */
+    public static Optional<Hit> pick(Scene scene, Vector3f origin, Vector3f dir, float maxDist, Predicate<Layer> filter, int minY, int maxY,
+                                     java.util.function.Function<BlockPos, Boolean> override) {
         Hit best = null;
         for (Layer l : scene.layers()) {
             if (!l.visible() || !filter.test(l)) continue;
@@ -45,14 +54,15 @@ public final class Picker {
             long base = l.ghost() ? 0 : l.offset().y();
             int lo = l.ghost() ? Integer.MIN_VALUE : (int) Math.max(Integer.MIN_VALUE, minY - base);
             int hi = l.ghost() ? Integer.MAX_VALUE : (int) Math.min(Integer.MAX_VALUE, maxY - base);
-            Hit h = march(l, o, d, limit, model, lo, hi);
+            Hit h = march(l, o, d, limit, model, lo, hi, override);
             if (h != null && (best == null || h.distance < best.distance)) best = h;
         }
         return Optional.ofNullable(best);
     }
 
     /** Amanatides–Woo voxel traversal in layer-local space. */
-    private static Hit march(Layer l, Vector3f o, Vector3f d, float maxDist, Matrix4f model, int minY, int maxY) {
+    private static Hit march(Layer l, Vector3f o, Vector3f d, float maxDist, Matrix4f model, int minY, int maxY,
+                             java.util.function.Function<BlockPos, Boolean> override) {
         var s = l.structure();
         var bounds = s.bounds();
         if (bounds.isEmpty()) return null;
@@ -81,7 +91,8 @@ public final class Picker {
         float tcur = t0;
         float tEnd = Math.min(maxDist, t[1]);
         while (tcur <= tEnd) {
-            if (y >= minY && y <= maxY && !s.get(x, y, z).isAir()) {
+            Boolean forced = override == null || y < minY || y > maxY ? null : override.apply(l.toWorld(x, y, z));
+            if (y >= minY && y <= maxY && (forced != null ? forced : !s.get(x, y, z).isAir())) {
                 BlockPos local = new BlockPos(x, y, z);
                 Vector3f wn = model.transformDirection(new Vector3f(nx, ny, nz));
                 return new Hit(l, local, l.toWorld(local), new BlockPos(Math.round(wn.x), Math.round(wn.y), Math.round(wn.z)), tcur);
