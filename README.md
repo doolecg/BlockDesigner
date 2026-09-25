@@ -1,6 +1,6 @@
 # BlockDesigner
 
-A Minecraft structure designer. Build block by block in a live 3D view with Minecraft-style controls, arrange schematics as layers, then export the result as a schematic or as a worldgen data pack. An AI assistant that builds from a description or a reference image is coming in a future release.
+A Minecraft structure designer. Build block by block in a live 3D view with Minecraft-style controls, arrange schematics as layers, then export the result as a schematic or as a worldgen data pack.
 
 ## Run
 
@@ -36,13 +36,15 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
 - **Formats:**
   - Import and export Create / structure-block `.nbt`, Litematica `.litematic` (multi-region) and WorldEdit `.schem` (Sponge v2/v3).
   - Directional blocks stay correct through rotation and mirroring.
-- **Worldgen export:** writes a data pack with a jigsaw structure, template pool, structure set and biome tag. It can save it as a zip or install it straight into a world; test it in-game with `/place structure <ns>:<name>`.
+- **Export window (Ctrl+E):** cards for Litematica, WorldEdit, Create / structure `.nbt`, worldgen and plugin formats. Each card shows what will be exported (layers, blocks, size, block types) and saves straight into a detected instance's `schematics` or `config/worldedit/schematics` folder. It remembers your last choices.
+- **Format icons:** Create (cog), Litematica (hologram cube), WorldEdit (wand axe), worldgen (grass block) and plugin (puzzle piece) icons appear in the export menu and window, on imported layers and in the start screen's recent files.
+- **Worldgen export:** writes a data pack that generates in new chunks, either as a single structure (with random variants) or **village-style**. For a village, you mark each layer as the centre, a street or a building. BlockDesigner adds jigsaw blocks (entrances found from doors) and can generate streets and crossroads, so the centre, streets and houses grow together like vanilla villages. It can save the pack as a zip or install it straight into a world; test it in-game with `/place structure <ns>:<name>`.
+- **Themes and Settings (Ctrl+, or the gear):** the Claude (warm ivory and terracotta), Blue, Green, Red, Orange and Zen themes, each in dark or light, or matching Windows' app mode. A theme colours every window, menu and dialog, plus the sky and grid of the 3D view. The Settings window also has general options: author, start screen, Minecraft assets and plugins.
+- **Plugins:** third-party jars can add schematic formats, exporters, menu actions and `/commands`. See [PLUGINS.md](PLUGINS.md) and `examples/hello-plugin`.
 - **Modded blocks:** pick a Prism, CurseForge, Modrinth or official-launcher instance and its mods and resource packs render too.
 - **Feel:** place and break sounds, break particles and smooth view transitions.
 - **Undo and redo** cover every action.
-- **Coming soon:**
-  - **AI Assistant:** describe a build or show a reference image, and the assistant builds it block by block. It will work with Claude or any OpenAI-compatible server (OpenAI, Ollama, LM Studio). The code is in the `ai` module; it stays switched off (`AI_ASSISTANT` in `BlockDesignerApp`) until it has been tested end to end.
-  - **Resource Tracker:** the materials a build needs, what you have gathered and what is left.
+- **Coming soon:** the **Resource Tracker**: the materials a build needs, what you have gathered and what is left.
 
 ## Controls and keybinds
 
@@ -117,7 +119,7 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 |---|---|
 | Left-click / right-click | Set pos1 / pos2; the box's blocks become the selection |
 | Shift+click / Ctrl+click | Add a block to / remove it from the selection |
-| Drag | Marquee select |
+| Drag | Marquee select; pos1 and pos2 are set to the corners of the box around the selection |
 | Shift+right-click or Menu key | Context menu |
 | Alt+T | Select by type |
 | Ctrl+A / Alt+A | Select every block of the active layer / deselect |
@@ -190,9 +192,10 @@ Commands take one slash and work on every visible, unlocked layer:
 | `core` | NBT, block states, sparse structures, layers and scenes, undo, transforms, schematic formats, `.bdproj` projects |
 | `assets` | Finds installs; loads blockstates, models and textures from game, mod and resource-pack jars; bakes models; builds the texture atlas |
 | `render` | LWJGL/OpenGL offscreen renderer (MSAA, smooth AO, sorted translucency), meshing on worker threads, picking |
-| `ai` | Provider interface, Claude and OpenAI-compatible providers, build tools, agent loop |
-| `worldgen` | Data pack exporter |
-| `app` | JavaFX UI (AtlantaFX theme) |
+| `worldgen` | Data pack exporter: single structures and village-style jigsaw layouts |
+| `plugin-api` | The API third-party plugins compile against |
+| `app` | JavaFX UI (AtlantaFX theme), plugin manager |
+| `examples/hello-plugin` | A sample plugin, also used by the tests |
 
 ## Tests
 

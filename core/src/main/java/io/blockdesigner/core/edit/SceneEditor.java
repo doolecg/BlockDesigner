@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * The single entry point for undoable edits to a {@link Scene}. UI tools and AI tools both go through here, so every
+ * The single entry point for undoable edits to a {@link Scene}. UI tools, commands and plugins all go through here, so every
  * change lands on the undo stack and fires scene events.
  */
 public final class SceneEditor {
@@ -42,7 +42,9 @@ public final class SceneEditor {
         private final Layer layer;
         private final Transaction tx;
         private final BlockChange change;
-        private Box pendingDirty;
+        /** Bounds of edits not yet announced (min > max when there are none). */
+        private int dMinX = Integer.MAX_VALUE, dMinY = Integer.MAX_VALUE, dMinZ = Integer.MAX_VALUE;
+        private int dMaxX = Integer.MIN_VALUE, dMaxY = Integer.MIN_VALUE, dMaxZ = Integer.MIN_VALUE;
         private boolean closed;
 
         private BlockSession(Layer layer, String label, String mergeKey) {
@@ -73,14 +75,19 @@ public final class SceneEditor {
             Structure s = layer.structure();
             BlockPos p = new BlockPos(x, y, z);
             BlockState before = s.get(x, y, z);
-            CompoundTag beforeNbt = s.blockEntity(p);
+            boolean anyNbt = blockEntity != null || !s.blockEntities().isEmpty();
+            CompoundTag beforeNbt = anyNbt ? s.blockEntity(p) : null;
             if (beforeNbt != null) beforeNbt = beforeNbt.copy();
             s.set(x, y, z, state);
             if (blockEntity != null) s.setBlockEntity(p, blockEntity.copy());
-            CompoundTag afterNbt = s.blockEntity(p);
+            CompoundTag afterNbt = anyNbt ? s.blockEntity(p) : null;
             change.record(p, before, beforeNbt, state, afterNbt == null ? null : afterNbt.copy());
-            Box b = new Box(x, y, z, x, y, z);
-            pendingDirty = pendingDirty == null ? b : pendingDirty.union(b);
+            if (x < dMinX) dMinX = x;
+            if (y < dMinY) dMinY = y;
+            if (z < dMinZ) dMinZ = z;
+            if (x > dMaxX) dMaxX = x;
+            if (y > dMaxY) dMaxY = y;
+            if (z > dMaxZ) dMaxZ = z;
         }
 
         public void fill(Box box, BlockState state) {
@@ -95,9 +102,11 @@ public final class SceneEditor {
 
         /** Fires a blocks-changed event covering everything edited since the last flush. */
         public void flush() {
-            if (pendingDirty != null) {
-                scene.fireBlocksChanged(layer, pendingDirty);
-                pendingDirty = null;
+            if (dMinX <= dMaxX) {
+                Box dirty = new Box(dMinX, dMinY, dMinZ, dMaxX, dMaxY, dMaxZ);
+                dMinX = dMinY = dMinZ = Integer.MAX_VALUE;
+                dMaxX = dMaxY = dMaxZ = Integer.MIN_VALUE;
+                scene.fireBlocksChanged(layer, dirty);
             }
         }
 

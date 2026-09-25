@@ -51,6 +51,9 @@ public final class Workspace {
     private final ObservableList<Layer> selectedLayers = FXCollections.observableArrayList();
     private final ObservableList<Layer> layers = FXCollections.observableArrayList();
     private final BooleanProperty dark = new SimpleBooleanProperty(true);
+    /** Colour theme id (see AppTheme) and how dark/light is picked (DARK, LIGHT, SYSTEM). */
+    private final StringProperty theme = new SimpleStringProperty("BLUE");
+    private final StringProperty themeMode = new SimpleStringProperty("DARK");
     private final StringProperty projectName = new SimpleStringProperty("Untitled");
     private final ObjectProperty<Path> projectFile = new SimpleObjectProperty<>();
     private final StringProperty status = new SimpleStringProperty("");
@@ -58,6 +61,10 @@ public final class Workspace {
     public Workspace(Settings settings) {
         this.settings = settings;
         dark.set(settings.darkTheme);
+        theme.set(settings.theme == null ? "BLUE" : settings.theme);
+        themeMode.set(settings.themeMode != null ? settings.themeMode : settings.darkTheme ? "DARK" : "LIGHT");
+        theme.addListener((o, a, b) -> settings.theme = b);
+        themeMode.addListener((o, a, b) -> settings.themeMode = b);
         initHotbar();
         scene.addListener(new Scene.Listener() {
             @Override
@@ -245,8 +252,17 @@ public final class Workspace {
         return layers;
     }
 
+    /** Whether the UI is currently dark (resolved from the theme mode). */
     public BooleanProperty darkProperty() {
         return dark;
+    }
+
+    public StringProperty themeProperty() {
+        return theme;
+    }
+
+    public StringProperty themeModeProperty() {
+        return themeMode;
     }
 
     public StringProperty projectNameProperty() {

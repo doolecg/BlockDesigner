@@ -48,15 +48,15 @@ public final class WorldEdit {
      * @param region    the region moved or changed shape (the view redraws it and the selection follows)
      */
     public record Result(boolean ok, String message, int changed, boolean region, Special special) {
-        static Result ok(String msg, int changed) {
+        public static Result ok(String msg, int changed) {
             return new Result(true, msg, changed, false, Special.NONE);
         }
 
-        static Result region(String msg) {
+        public static Result region(String msg) {
             return new Result(true, msg, 0, true, Special.NONE);
         }
 
-        static Result error(String msg) {
+        public static Result error(String msg) {
             return new Result(false, msg, 0, false, Special.NONE);
         }
     }
@@ -103,6 +103,44 @@ public final class WorldEdit {
             new Command("undo", "/undo", "Undo the last change"),
             new Command("redo", "/redo", "Redo"),
             new Command("help", "/help [command]", "List the commands"));
+
+    /** A command added from outside the editor (by a plugin). */
+    @FunctionalInterface
+    public interface Extension {
+        /**
+         * @param args   arguments after the command name, flags removed
+         * @param flags  single-letter flags given as {@code -x}, lower case
+         * @param region the selected region, or null when no corner is set
+         */
+        Result run(List<String> args, List<String> flags, Context c, Box region);
+    }
+
+    private static final Map<String, Extension> EXTENSIONS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final List<Command> EXTRA_COMMANDS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Adds a command (name without the slash). Names of built-in commands and their aliases can't be taken. */
+    public static void register(Command command, Extension handler) {
+        String n = command.name().toLowerCase(Locale.ROOT);
+        if (ALIASES.containsKey(n) || COMMANDS.stream().anyMatch(c -> c.name().equals(n)) || EXTENSIONS.containsKey(n)) {
+            throw new IllegalArgumentException("The command /" + n + " already exists");
+        }
+        EXTENSIONS.put(n, handler);
+        EXTRA_COMMANDS.add(command);
+    }
+
+    public static void unregister(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        EXTENSIONS.remove(n);
+        EXTRA_COMMANDS.removeIf(c -> c.name().equals(n));
+    }
+
+    /** Built-in commands followed by plugin commands, for help and completion. */
+    public static List<Command> commands() {
+        if (EXTRA_COMMANDS.isEmpty()) return COMMANDS;
+        List<Command> all = new ArrayList<>(COMMANDS);
+        all.addAll(EXTRA_COMMANDS);
+        return all;
+    }
 
     private static final Map<String, String> ALIASES = Map.of("outline", "faces", "desel", "sel", "deselect", "sel",
             "hpos1", "pos1", "hpos2", "pos2", "cls", "sel", "?", "help");
@@ -202,7 +240,10 @@ public final class WorldEdit {
                 case "undo" -> new Result(true, "Undone.", 0, false, Special.UNDO);
                 case "redo" -> new Result(true, "Redone.", 0, false, Special.REDO);
                 case "help" -> help(args);
-                default -> Result.error("Unknown command /" + name + " · /help lists them");
+                default -> {
+                    Extension ext = EXTENSIONS.get(name);
+                    yield ext != null ? ext.run(args, flags, c, region()) : Result.error("Unknown command /" + name + " · /help lists them");
+                }
             };
         } catch (IllegalArgumentException e) {
             return Result.error(e.getMessage());
@@ -212,11 +253,11 @@ public final class WorldEdit {
     private Result help(List<String> args) {
         if (!args.isEmpty()) {
             String n = ALIASES.getOrDefault(args.getFirst().replace("/", ""), args.getFirst().replace("/", ""));
-            for (Command cmd : COMMANDS) if (cmd.name().equals(n)) return Result.ok(cmd.usage() + " · " + cmd.description(), 0);
+            for (Command cmd : commands()) if (cmd.name().equals(n)) return Result.ok(cmd.usage() + " · " + cmd.description(), 0);
             return Result.error("No command /" + n);
         }
         StringBuilder sb = new StringBuilder("Commands:");
-        for (Command cmd : COMMANDS) sb.append(" /").append(cmd.name());
+        for (Command cmd : commands()) sb.append(" /").append(cmd.name());
         return Result.ok(sb.toString(), 0);
     }
 

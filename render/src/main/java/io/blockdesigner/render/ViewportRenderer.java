@@ -6,7 +6,10 @@ import io.blockdesigner.render.gl.Shader;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GLCapabilities;
+import org.joml.FrustumIntersection;
+import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -59,10 +62,15 @@ public final class ViewportRenderer implements AutoCloseable {
     private final Map<String, Map<Long, GpuSection>> meshes = new HashMap<>();
     private final List<IntBuffer> pool = new ArrayList<>();
     private IntBuffer readBuf;
+    // Per-frame scratch for frustum culling (render thread only).
+    private final FrustumIntersection frustum = new FrustumIntersection();
+    private final Matrix4f cullVp = new Matrix4f(), cullModel = new Matrix4f(), cullMvp = new Matrix4f();
+    private int sectionsDrawn, sectionsTotal;
 
     private static final class GpuSection {
         final int[] vao = new int[3], vbo = new int[3], quads = new int[3];
         float cx, cy, cz;
+        float sortKey;
     }
 
     public ViewportRenderer(TextureAtlas atlas, Consumer<Frame> onFrame) {
@@ -86,7 +94,7 @@ public final class ViewportRenderer implements AutoCloseable {
         tasks.offer(WAKE);
     }
 
-    /** Renders one frame outside the viewport flow (e.g. for AI screenshots or thumbnails). */
+    /** Renders one frame outside the viewport flow (e.g. for screenshots). */
     public CompletableFuture<Frame> capture(FrameRequest r) {
         CompletableFuture<Frame> f = new CompletableFuture<>();
         tasks.offer(() -> {
@@ -275,8 +283,14 @@ public final class ViewportRenderer implements AutoCloseable {
             glBindVertexArray(s.vao[i]);
             glBindBuffer(GL_ARRAY_BUFFER, s.vbo[i]);
             ByteBuffer src = data.vertices(rl);
-            ByteBuffer direct = ByteBuffer.allocateDirect(src.remaining()).order(ByteOrder.nativeOrder()).put(src).flip();
-            glBufferData(GL_ARRAY_BUFFER, direct, GL_STATIC_DRAW);
+            // Staged through malloc'd memory: allocateDirect per upload is slow and leaves cleanup to the GC.
+            ByteBuffer direct = MemoryUtil.memAlloc(src.remaining());
+            try {
+                direct.put(src).flip();
+                glBufferData(GL_ARRAY_BUFFER, direct, GL_STATIC_DRAW);
+            } finally {
+                MemoryUtil.memFree(direct);
+            }
             glEnableVertexAttribArray(0);
             glVertexAttribPointer(0, 3, GL_FLOAT, false, MeshData.STRIDE, 0);
             glEnableVertexAttribArray(1);
@@ -376,11 +390,16 @@ public final class ViewportRenderer implements AutoCloseable {
 
         List<FrameRequest.LayerDraw> solidLayers = new ArrayList<>(), ghostLayers = new ArrayList<>();
         for (FrameRequest.LayerDraw ld : r.layers()) (ld.opacity() < 0.999f ? ghostLayers : solidLayers).add(ld);
+        // Frustum-cull each draw's sections once; every pass below reuses the result.
+        Map<FrameRequest.LayerDraw, List<GpuSection>> visible = new java.util.IdentityHashMap<>();
+        sectionsDrawn = sectionsTotal = 0;
+        cullVp.set(vp);
+        for (FrameRequest.LayerDraw ld : r.layers()) visible.put(ld, visibleSections(ld));
 
         for (FrameRequest.LayerDraw ld : solidLayers) {
             bindLayer(ld, 1f);
-            drawLayer(ld.layerId(), RenderLayer.SOLID, 0f);
-            drawLayer(ld.layerId(), RenderLayer.CUTOUT, 0.5f);
+            drawLayer(visible.get(ld), RenderLayer.SOLID, 0f);
+            drawLayer(visible.get(ld), RenderLayer.CUTOUT, 0.5f);
         }
 
         // 3. Ground grid (blended, no depth writes so it never hides blocks)
@@ -412,24 +431,25 @@ public final class ViewportRenderer implements AutoCloseable {
         blockShader.use();
         for (FrameRequest.LayerDraw ld : solidLayers) {
             bindLayer(ld, 1f);
-            drawSorted(ld, r.eye());
+            drawSorted(ld, visible.get(ld), r.eye());
         }
 
         // 5. Ghost layers: depth prepass so only the nearest surface shows, then a blended colour pass
         for (FrameRequest.LayerDraw ld : ghostLayers) {
             glDepthMask(true);
             glColorMask(false, false, false, false);
+            List<GpuSection> vis = visible.get(ld);
             bindLayer(ld, 1f);
-            drawLayer(ld.layerId(), RenderLayer.SOLID, 0f);
-            drawLayer(ld.layerId(), RenderLayer.CUTOUT, 0.5f);
+            drawLayer(vis, RenderLayer.SOLID, 0f);
+            drawLayer(vis, RenderLayer.CUTOUT, 0.5f);
             glColorMask(true, true, true, false);
             glDepthMask(false);
             glDepthFunc(GL_EQUAL);
             bindLayer(ld, ld.opacity());
-            drawLayer(ld.layerId(), RenderLayer.SOLID, 0f);
-            drawLayer(ld.layerId(), RenderLayer.CUTOUT, 0.5f);
+            drawLayer(vis, RenderLayer.SOLID, 0f);
+            drawLayer(vis, RenderLayer.CUTOUT, 0.5f);
             glDepthFunc(GL_LEQUAL);
-            drawSorted(ld, r.eye());
+            drawSorted(ld, vis, r.eye());
         }
         glFrontFace(GL_CCW);
 
@@ -480,27 +500,48 @@ public final class ViewportRenderer implements AutoCloseable {
         glFrontFace(ld.mirrored() ? GL_CW : GL_CCW);
     }
 
-    private void drawLayer(String layerId, RenderLayer rl, float cutoff) {
-        Map<Long, GpuSection> m = meshes.get(layerId);
-        if (m == null) return;
+    /** Sections of a draw whose 16³ box intersects the view frustum (in the draw's model space). */
+    private List<GpuSection> visibleSections(FrameRequest.LayerDraw ld) {
+        Map<Long, GpuSection> m = meshes.get(ld.layerId());
+        if (m == null || m.isEmpty()) return List.of();
+        cullModel.set(ld.model());
+        cullVp.mul(cullModel, cullMvp);
+        frustum.set(cullMvp, false);
+        List<GpuSection> out = new ArrayList<>(m.size());
+        for (GpuSection s : m.values()) {
+            if (frustum.testAab(s.cx - 8, s.cy - 8, s.cz - 8, s.cx + 8, s.cy + 8, s.cz + 8)) out.add(s);
+        }
+        sectionsTotal += m.size();
+        sectionsDrawn += out.size();
+        return out;
+    }
+
+    /** Sections drawn / held in the last frame (after frustum culling). Render thread value; for diagnostics. */
+    public String cullStats() {
+        return sectionsDrawn + "/" + sectionsTotal;
+    }
+
+    private void drawLayer(List<GpuSection> sections, RenderLayer rl, float cutoff) {
+        if (sections.isEmpty()) return;
         blockShader.set("uAlphaCutoff", cutoff);
         int i = rl.ordinal();
-        for (GpuSection s : m.values()) {
+        for (GpuSection s : sections) {
             if (s.quads[i] == 0) continue;
             glBindVertexArray(s.vao[i]);
             glDrawElements(GL_TRIANGLES, s.quads[i] * 6, GL_UNSIGNED_INT, 0);
         }
     }
 
-    private void drawSorted(FrameRequest.LayerDraw ld, float[] eye) {
-        Map<Long, GpuSection> m = meshes.get(ld.layerId());
-        if (m == null) return;
+    private void drawSorted(FrameRequest.LayerDraw ld, List<GpuSection> sections, float[] eye) {
+        if (sections.isEmpty()) return;
         int i = RenderLayer.TRANSLUCENT.ordinal();
         float[] model = ld.model();
         List<GpuSection> list = new ArrayList<>();
-        for (GpuSection s : m.values()) if (s.quads[i] > 0) list.add(s);
+        for (GpuSection s : sections) if (s.quads[i] > 0) list.add(s);
         if (list.isEmpty()) return;
-        list.sort((a, b) -> Float.compare(distTo(model, b, eye), distTo(model, a, eye)));
+        // Distance once per section, not per comparison.
+        for (GpuSection s : list) s.sortKey = distTo(model, s, eye);
+        list.sort((a, b) -> Float.compare(b.sortKey, a.sortKey));
         blockShader.set("uAlphaCutoff", 0.004f);
         glDisable(GL_CULL_FACE);
         for (GpuSection s : list) {

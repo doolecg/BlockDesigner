@@ -1,0 +1,9 @@
+{
+  "id": "hello",
+  "name": "Hello Plugin",
+  "version": "1.0.0",
+  "author": "BlockDesigner",
+  "description": "Example plugin: a /pillar command, a bill of materials exporter and a plain-text schematic format.",
+  "main": "com.example.hello.HelloPlugin",
+  "api": 1
+}

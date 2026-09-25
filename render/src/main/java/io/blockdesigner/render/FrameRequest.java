@@ -20,6 +20,7 @@ public record FrameRequest(int width, int height, float[] viewProj, float[] eye,
                            Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence, float fogDistance) {
 
     /**
+     * @param layerId  id of the GPU mesh to draw; layers with identical content share one (instancing)
      * @param model    column-major model matrix (offset + rotation/mirror)
      * @param mirrored the transform flips handedness, so front faces wind the other way
      * @param opacity  1 for normal layers, lower for ghosts

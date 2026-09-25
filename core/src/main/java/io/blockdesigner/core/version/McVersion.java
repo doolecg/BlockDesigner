@@ -36,6 +36,11 @@ public record McVersion(String id, int dataVersion, int dataPackMajor, int dataP
         return dataPackMajor >= SINGULAR_FOLDERS_FORMAT ? "block" : "blocks";
     }
 
+    /** Folder under {@code data/<namespace>/} holding loot tables ({@code loot_table} vs legacy {@code loot_tables}). */
+    public String lootTableFolder() {
+        return dataPackMajor >= SINGULAR_FOLDERS_FORMAT ? "loot_table" : "loot_tables";
+    }
+
     public boolean usesMinMaxPackFormat() {
         return dataPackMajor >= MIN_MAX_FORMAT;
     }

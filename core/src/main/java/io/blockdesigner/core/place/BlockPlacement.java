@@ -457,7 +457,9 @@ public final class BlockPlacement {
                 }
                 return set(ws, wi.properties(), "facing", facing.id());
             }
-            return set(s, allowed, "rotation", Integer.toString(rotation16(c.yaw() + 180)));
+            // Signs and banners face back at you (+180°); a head's model already faces you at the player's own yaw.
+            boolean head = p.endsWith("_skull") || p.endsWith("_head");
+            return set(s, allowed, "rotation", Integer.toString(rotation16(c.yaw() + (head ? 0 : 180))));
         }
 
         if (s.has("face") && values(allowed, s, "face").contains("floor")) {

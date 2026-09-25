@@ -160,7 +160,7 @@ final class CommandBar extends VBox {
 
     private List<WorldEdit.Command> matches() {
         String n = typedName();
-        return WorldEdit.COMMANDS.stream().filter(c -> c.name().startsWith(n)).toList();
+        return WorldEdit.commands().stream().filter(c -> c.name().startsWith(n)).toList();
     }
 
     /** The block name being typed: the end of the text after the last space, comma or percent sign. */
