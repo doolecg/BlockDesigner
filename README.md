@@ -10,6 +10,12 @@ An AI-assisted Minecraft structure designer. Describe a build or show a referenc
 
 Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On first launch, pick the Minecraft version whose textures and models to use. You can also pick a modded instance (Prism, CurseForge, Modrinth or the official launcher) so modded blocks, such as Create's, render too. Nothing from Minecraft is copied or shipped.
 
+## Windows builds
+
+- `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-0.1.0-portable.zip`. Nothing needs installing, the Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
+- `./gradlew :app:installer` builds `dist/BlockDesigner-0.1.0.exe`, a per-user setup with Start menu and desktop shortcuts. It also makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
+- The icon is drawn by `packaging/make_icon.py` (needs Pillow). Rerun it after changing the design.
+
 ## Features
 
 - **Formats**

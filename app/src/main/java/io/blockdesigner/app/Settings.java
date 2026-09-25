@@ -88,7 +88,13 @@ public final class Settings {
     public String openAiKeyProtected;
     public String openAiModels = "";
 
+    /**
+     * Where settings live: {@code %APPDATA%/BlockDesigner}, or the folder named by {@code -Dblockdesigner.dataDir}
+     * (the portable build points it next to its exe so it leaves nothing behind on the PC).
+     */
     public static Path dir() {
+        String override = System.getProperty("blockdesigner.dataDir");
+        if (override != null && !override.isBlank()) return Path.of(override).toAbsolutePath().normalize();
         String appData = System.getenv("APPDATA");
         return Path.of(appData != null ? appData : System.getProperty("user.home"), "BlockDesigner");
     }

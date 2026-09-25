@@ -148,6 +148,7 @@ public final class MainWindow {
         stage.titleProperty().bind(ws.projectNameProperty().concat(" — BlockDesigner"));
         stage.setMinWidth(1000);
         stage.setMinHeight(640);
+        stage.getIcons().setAll(appIcons());
 
         ws.scene().addListener(new Scene.Listener() {
             @Override
@@ -243,6 +244,16 @@ public final class MainWindow {
 
     public Stage stage() {
         return stage;
+    }
+
+    /** The BlockDesigner icon at every size (drawn by packaging/make_icon.py); the same art marks .bdproj saves. */
+    public static List<javafx.scene.image.Image> appIcons() {
+        List<javafx.scene.image.Image> out = new java.util.ArrayList<>();
+        for (int size : new int[]{16, 24, 32, 48, 64, 128, 256, 512}) {
+            var url = MainWindow.class.getResource("/io/blockdesigner/app/icons/icon-" + size + ".png");
+            if (url != null) out.add(new javafx.scene.image.Image(url.toExternalForm()));
+        }
+        return out;
     }
 
     public void show() {
