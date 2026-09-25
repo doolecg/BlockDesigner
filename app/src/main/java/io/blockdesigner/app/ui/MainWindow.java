@@ -181,7 +181,7 @@ public final class MainWindow {
         // Both tabs can be closed; closed tabs wait in the bar on the right edge. With none open the panel folds away.
         assistantTab.setContent(node);
         assistantTab.setGraphic(new FontIcon(Feather.MESSAGE_SQUARE));
-        resourcesTab.setContent(new ResourceTrackerPanel());
+        resourcesTab.setContent(ComingSoonPanel.resourceTracker());
         resourcesTab.setGraphic(new FontIcon(Feather.PACKAGE));
         sideTabs.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.ALL_TABS);
         sideTabs.getStyleClass().add("side-tabs");

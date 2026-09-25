@@ -1,6 +1,6 @@
 # BlockDesigner
 
-An AI-assisted Minecraft structure designer. Describe a build or show a reference image, and it appears block by block in a live 3D view. You refine it by chatting or by editing it yourself, then export it as a schematic or as a worldgen data pack.
+A Minecraft structure designer. Build block by block in a live 3D view with Minecraft-style controls, arrange schematics as layers, then export the result as a schematic or as a worldgen data pack. An AI assistant that builds from a description or a reference image is coming in a future release.
 
 ## Run
 
@@ -40,10 +40,9 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
   - Camera: middle-drag orbits around the point under the mouse, Shift+middle-drag pans, wheel zooms.
   - Three modes: View (V) only looks around; Select (Q) never edits: click a block to select it or drag a marquee (Shift adds, Ctrl removes, Delete removes the selected blocks, Esc clears); Build (B, which toggles back to the previous mode and also works while flying in creative mode) works like Minecraft: left-click breaks, right-click places (hold to repeat), middle-click picks the block.
   - Undo and redo cover every action.
-- **Assistant**
-  - Uses Claude (default model: Claude Opus 5) or any OpenAI-compatible server (OpenAI, Ollama, LM Studio).
-  - Builds with dedicated tools: fill, set_blocks, sphere, cylinder, roof, copy/rotate, replace, layers, and render_view so it can look at its own work.
-  - Each assistant turn is one undo step and adds a snapshot to the iteration timeline.
+- **Coming soon**
+  - AI Assistant: describe a build or show a reference image, and the assistant builds it block by block. It will work with Claude or any OpenAI-compatible server (OpenAI, Ollama, LM Studio). The code is in the `ai` module; it stays switched off (`AI_ASSISTANT` in `BlockDesignerApp`) until it has been tested end to end.
+  - Resource Tracker: the materials a build needs, what you have gathered and what is left.
 - **Worldgen export**
   - Writes a data pack with a jigsaw structure, template pool, structure set and biome tag, in the layout the chosen version expects.
   - Can save it as a zip or install it straight into a world. Test it in-game with `/place structure <ns>:<name>`.

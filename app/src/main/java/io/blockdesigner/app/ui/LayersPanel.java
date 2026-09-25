@@ -99,7 +99,7 @@ public final class LayersPanel extends VBox {
     }
 
     private Region placeholder() {
-        Label l = new Label("No layers yet.\nImport a schematic, drop one here,\nor ask the assistant to build something.");
+        Label l = new Label("No layers yet.\nImport a schematic, drop one here,\nor start building in Build mode (B).");
         l.getStyleClass().add("placeholder-text");
         l.setWrapText(true);
         return new VBox(l);
