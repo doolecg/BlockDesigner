@@ -57,7 +57,7 @@ class RenderSmokeIT {
                 var lines = new java.util.ArrayList<FrameRequest.Line>();
                 Overlays.box(lines, b.minX(), b.minY(), b.minZ(), b.maxX() + 1, b.maxY() + 1, b.maxZ() + 1, 0xFF7C9CFF);
                 FrameRequest req = new FrameRequest(w, h, vp, new float[]{eye.x, eye.y, eye.z}, sr.layerDraws(null), lines,
-                        FrameRequest.Theme.DARK, true, 0, new float[]{(b.minX() + b.maxX()) / 2f, (b.minZ() + b.maxZ()) / 2f}, 1);
+                        FrameRequest.Theme.DARK, true, 0, new float[]{(b.minX() + b.maxX()) / 2f, (b.minZ() + b.maxZ()) / 2f}, 1, 900f);
                 ViewportRenderer.Frame frame = gpu.capture(req).get(20, TimeUnit.SECONDS);
                 BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
                 int[] px = new int[w * h];

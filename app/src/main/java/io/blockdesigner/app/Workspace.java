@@ -22,7 +22,10 @@ import java.nio.file.Path;
  * Touch only from the JavaFX thread.
  */
 public final class Workspace {
-    public enum ToolKind { SELECT, BUILD, PLACE, ERASE, PAINT, PICK, BOX, MOVE }
+    /** Viewport modes: look around only, select and slide layers, or build Minecraft-style (left break, right place). */
+    public enum ToolKind { VIEW, SELECT, BUILD }
+
+    public static final int HOTBAR_SIZE = 9;
 
     private final Settings settings;
     private final Scene scene = new Scene();
@@ -31,6 +34,11 @@ public final class Workspace {
     private final ObjectProperty<McVersion> targetVersion = new SimpleObjectProperty<>(McVersion.latestKnown());
     private final ObjectProperty<BlockState> selectedBlock = new SimpleObjectProperty<>(BlockState.of("stone_bricks"));
     private final ObjectProperty<ToolKind> tool = new SimpleObjectProperty<>(ToolKind.SELECT);
+    /** Nine hotbar slots (null = empty): a record of picked and dragged-in blocks. */
+    private final ObservableList<BlockState> hotbar = FXCollections.observableArrayList();
+    /** The held slot, or -1 when the selected block did not come from the hotbar. */
+    private final javafx.beans.property.IntegerProperty hotbarSlot = new javafx.beans.property.SimpleIntegerProperty(-1);
+    private ToolKind beforeBuild = ToolKind.SELECT;
     private final ObjectProperty<Layer> activeLayer = new SimpleObjectProperty<>();
     /** Layers selected in the layer list (for multi-layer moves); always includes the active layer when non-empty. */
     private final ObservableList<Layer> selectedLayers = FXCollections.observableArrayList();
@@ -43,6 +51,7 @@ public final class Workspace {
     public Workspace(Settings settings) {
         this.settings = settings;
         dark.set(settings.darkTheme);
+        initHotbar();
         scene.addListener(new Scene.Listener() {
             @Override
             public void layerAdded(Layer layer, int index) {
@@ -93,6 +102,91 @@ public final class Workspace {
 
     public ObjectProperty<BlockState> selectedBlockProperty() {
         return selectedBlock;
+    }
+
+    private void initHotbar() {
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            BlockState st = null;
+            String saved = i < settings.hotbar.size() ? settings.hotbar.get(i) : null;
+            if (saved != null && !saved.isBlank()) {
+                try {
+                    st = BlockState.parse(saved);
+                } catch (RuntimeException ignored) {
+                    // unreadable entry: leave the slot empty
+                }
+            }
+            hotbar.add(st);
+        }
+        // The highlighted slot follows the selected block wherever it was chosen.
+        selectedBlock.addListener((o, a, b) -> hotbarSlot.set(b == null ? -1 : hotbar.indexOf(b)));
+        hotbar.addListener((javafx.collections.ListChangeListener<BlockState>) c -> {
+            java.util.ArrayList<String> out = new java.util.ArrayList<>();
+            for (BlockState st : hotbar) out.add(st == null ? "" : st.toString());
+            settings.hotbar = out;
+        });
+    }
+
+    public ObservableList<BlockState> hotbar() {
+        return hotbar;
+    }
+
+    public javafx.beans.property.ReadOnlyIntegerProperty hotbarSlotProperty() {
+        return hotbarSlot;
+    }
+
+    /** Holds the block in slot {@code i}; empty slots are ignored. */
+    public void selectHotbarSlot(int i) {
+        if (i < 0 || i >= HOTBAR_SIZE || hotbar.get(i) == null) return;
+        selectedBlock.set(hotbar.get(i));
+        hotbarSlot.set(i);
+    }
+
+    /** Minecraft's scroll-to-change-slot over the filled slots: {@code step} +1 moves right, -1 left, wrapping. */
+    public void scrollHotbar(int step) {
+        int start = hotbarSlot.get() < 0 ? (step > 0 ? -1 : 0) : hotbarSlot.get();
+        for (int n = 1; n <= HOTBAR_SIZE; n++) {
+            int i = Math.floorMod(start + step * n, HOTBAR_SIZE);
+            if (hotbar.get(i) != null) {
+                selectHotbarSlot(i);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Records a block (middle-click pick): jumps to its slot if it is already there, otherwise fills the first empty
+     * slot, or the held one when the bar is full; then holds it.
+     */
+    public void recordInHotbar(BlockState state) {
+        int i = hotbar.indexOf(state);
+        if (i < 0) i = hotbar.indexOf(null);
+        if (i < 0) i = Math.max(0, hotbarSlot.get());
+        putInHotbar(i, state);
+    }
+
+    /** Puts a block in a specific slot (dragged from the palette) and holds it. */
+    public void putInHotbar(int i, BlockState state) {
+        int existing = hotbar.indexOf(state);
+        if (existing >= 0 && existing != i) hotbar.set(existing, null);
+        hotbar.set(i, state);
+        selectHotbarSlot(i);
+    }
+
+    /** Alt+C: empties every slot (the held block stays selected). */
+    public void clearHotbar() {
+        for (int i = 0; i < HOTBAR_SIZE; i++) hotbar.set(i, null);
+        hotbarSlot.set(-1);
+    }
+
+    /** B: switches Build on, or back off to the mode used before it (works while flying too). */
+    public void toggleBuild() {
+        ToolKind now = tool.get();
+        if (now == ToolKind.BUILD) {
+            tool.set(beforeBuild);
+        } else {
+            beforeBuild = now;
+            tool.set(ToolKind.BUILD);
+        }
     }
 
     public ObjectProperty<ToolKind> toolProperty() {

@@ -165,9 +165,16 @@ public final class BlockPalette extends VBox {
         Tooltip.install(p, new Tooltip(b.displayName() + "\n" + b.id()));
         p.setOnMouseClicked(e -> {
             ws.selectedBlockProperty().set(b.defaultState());
-            if (ws.toolProperty().get() == Workspace.ToolKind.SELECT || ws.toolProperty().get() == Workspace.ToolKind.PICK) {
-                ws.toolProperty().set(Workspace.ToolKind.PLACE);
-            }
+            ws.toolProperty().set(Workspace.ToolKind.BUILD);
+        });
+        // Drag onto the hotbar to keep it there.
+        p.setOnDragDetected(e -> {
+            javafx.scene.input.Dragboard db = p.startDragAndDrop(javafx.scene.input.TransferMode.COPY);
+            javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+            content.putString(Hotbar.DRAG_PREFIX + b.defaultState());
+            db.setContent(content);
+            db.setDragView(iv.getImage());
+            e.consume();
         });
         return p;
     }

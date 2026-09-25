@@ -372,7 +372,7 @@ public final class ViewportRenderer implements AutoCloseable {
         blockShader.set("uSunDir", 0.45f, 0.8f, 0.35f);
         blockShader.set("uEye", r.eye()[0], r.eye()[1], r.eye()[2]);
         blockShader.setRgb("uFogColor", theme.horizon());
-        blockShader.set("uFogDistance", 900f);
+        blockShader.set("uFogDistance", Float.isFinite(r.fogDistance()) ? r.fogDistance() : 1e9f);
 
         List<FrameRequest.LayerDraw> solidLayers = new ArrayList<>(), ghostLayers = new ArrayList<>();
         for (FrameRequest.LayerDraw ld : r.layers()) (ld.opacity() < 0.999f ? ghostLayers : solidLayers).add(ld);

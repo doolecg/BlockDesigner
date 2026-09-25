@@ -29,6 +29,11 @@ public final class Picker {
     }
 
     public static Optional<Hit> pick(Scene scene, Vector3f origin, Vector3f dir, float maxDist, Predicate<Layer> filter) {
+        return pick(scene, origin, dir, maxDist, filter, Integer.MIN_VALUE, Integer.MAX_VALUE);
+    }
+
+    /** As above, ignoring blocks whose world Y is outside {@code minY..maxY} (the slice view hides them). */
+    public static Optional<Hit> pick(Scene scene, Vector3f origin, Vector3f dir, float maxDist, Predicate<Layer> filter, int minY, int maxY) {
         Hit best = null;
         for (Layer l : scene.layers()) {
             if (!l.visible() || !filter.test(l)) continue;
@@ -37,14 +42,17 @@ public final class Picker {
             Vector3f o = inv.transformPosition(new Vector3f(origin));
             Vector3f d = inv.transformDirection(new Vector3f(dir)).normalize();
             float limit = best == null ? maxDist : best.distance;
-            Hit h = march(l, o, d, limit, model);
+            long base = l.ghost() ? 0 : l.offset().y();
+            int lo = l.ghost() ? Integer.MIN_VALUE : (int) Math.max(Integer.MIN_VALUE, minY - base);
+            int hi = l.ghost() ? Integer.MAX_VALUE : (int) Math.min(Integer.MAX_VALUE, maxY - base);
+            Hit h = march(l, o, d, limit, model, lo, hi);
             if (h != null && (best == null || h.distance < best.distance)) best = h;
         }
         return Optional.ofNullable(best);
     }
 
     /** Amanatides–Woo voxel traversal in layer-local space. */
-    private static Hit march(Layer l, Vector3f o, Vector3f d, float maxDist, Matrix4f model) {
+    private static Hit march(Layer l, Vector3f o, Vector3f d, float maxDist, Matrix4f model, int minY, int maxY) {
         var s = l.structure();
         var bounds = s.bounds();
         if (bounds.isEmpty()) return null;
@@ -73,7 +81,7 @@ public final class Picker {
         float tcur = t0;
         float tEnd = Math.min(maxDist, t[1]);
         while (tcur <= tEnd) {
-            if (!s.get(x, y, z).isAir()) {
+            if (y >= minY && y <= maxY && !s.get(x, y, z).isAir()) {
                 BlockPos local = new BlockPos(x, y, z);
                 Vector3f wn = model.transformDirection(new Vector3f(nx, ny, nz));
                 return new Hit(l, local, l.toWorld(local), new BlockPos(Math.round(wn.x), Math.round(wn.y), Math.round(wn.z)), tcur);

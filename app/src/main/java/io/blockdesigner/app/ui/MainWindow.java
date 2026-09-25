@@ -225,21 +225,13 @@ public final class MainWindow {
         undo.setDisable(true);
         redo.setDisable(true);
 
-        ToggleButton grid = new ToggleButton(null, new FontIcon(Feather.GRID));
-        grid.getStyleClass().addAll("flat", "icon-toggle");
-        grid.setSelected(ws.settings().showGrid);
-        grid.setTooltip(new Tooltip("Ground grid"));
-        grid.setOnAction(e -> {
-            ws.settings().showGrid = grid.isSelected();
-            viewport.requestRedraw();
-        });
         Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark", () -> ws.darkProperty().set(!ws.darkProperty().get()));
         Button assets = LayersPanel.iconButton(Feather.SETTINGS, "Minecraft assets & mods", () -> startAssetLoading(true));
         assetBadge.getStyleClass().add("badge");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, grid, theme, assetBadge, assets, imp, export);
+        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, theme, assetBadge, assets, imp, export);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("top-bar");
         return bar;
@@ -567,17 +559,29 @@ public final class MainWindow {
         acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN), () -> exportDialog(null));
 
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
-            if (e.isShortcutDown() || e.isAltDown()) return;
             if (scene.getFocusOwner() instanceof TextInputControl) return;
+            if (e.getCode() == KeyCode.C && e.isAltDown() && !e.isShortcutDown()) {
+                ws.clearHotbar();
+                viewport.showToast("Hotbar cleared");
+                e.consume();
+                return;
+            }
+            if (e.isShortcutDown() || e.isAltDown()) return;
+            if (e.getCode().isDigitKey() && e.getCode() != KeyCode.DIGIT0 && e.getCode() != KeyCode.NUMPAD0) {
+                // 1-9 hold a hotbar slot, like Minecraft.
+                String name = e.getCode().getName();
+                ws.selectHotbarSlot(name.charAt(name.length() - 1) - '1');
+                e.consume();
+                return;
+            }
+            if (e.getCode() == KeyCode.B) {
+                ws.toggleBuild();
+                e.consume();
+                return;
+            }
             ToolKind t = switch (e.getCode()) {
+                case V -> ToolKind.VIEW;
                 case Q -> ToolKind.SELECT;
-                case M -> ToolKind.MOVE;
-                case B -> ToolKind.BUILD;
-                case V -> ToolKind.PLACE;
-                case E -> ToolKind.ERASE;
-                case P -> ToolKind.PAINT;
-                case X -> ToolKind.BOX;
-                case I -> ToolKind.PICK;
                 default -> null;
             };
             if (t != null) {

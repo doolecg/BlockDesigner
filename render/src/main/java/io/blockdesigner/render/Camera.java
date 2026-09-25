@@ -11,6 +11,7 @@ public final class Camera {
     private float pitch = (float) Math.toRadians(30);
     private float distance = 30;
     private float fovDeg = 50;
+    private float clipEnd = 4000;
     /** In fly mode {@link #target} is the eye position and the camera looks along {@link #forward()}. */
     private boolean fly;
 
@@ -37,6 +38,20 @@ public final class Camera {
     public void setDistance(float d) {
         if (fly) return;
         distance = Math.clamp(d, 1.5f, 2000f);
+    }
+
+    /** Vertical field of view in degrees. */
+    public float fov() {
+        return fovDeg;
+    }
+
+    public void setFov(float degrees) {
+        fovDeg = Math.clamp(degrees, 10f, 140f);
+    }
+
+    /** Far clipping distance in blocks (always kept past the orbit target). */
+    public void setClipEnd(float blocks) {
+        clipEnd = Math.max(16f, blocks);
     }
 
     public boolean isFly() {
@@ -111,7 +126,7 @@ public final class Camera {
 
     public Matrix4f projection(float aspect) {
         float near = fly ? 0.05f : Math.max(0.05f, distance / 500f);
-        return new Matrix4f().perspective((float) Math.toRadians(fovDeg), aspect, near, Math.max(4000f, distance * 20));
+        return new Matrix4f().perspective((float) Math.toRadians(fovDeg), aspect, near, Math.max(clipEnd, fly ? 0 : distance * 2));
     }
 
     public Matrix4f viewProjection(float aspect) {
@@ -167,6 +182,7 @@ public final class Camera {
         pitch = o.pitch;
         distance = o.distance;
         fovDeg = o.fovDeg;
+        clipEnd = o.clipEnd;
         fly = o.fly;
     }
 
@@ -177,6 +193,7 @@ public final class Camera {
         c.pitch = pitch;
         c.distance = distance;
         c.fovDeg = fovDeg;
+        c.clipEnd = clipEnd;
         c.fly = fly;
         return c;
     }

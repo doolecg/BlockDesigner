@@ -24,6 +24,11 @@ public final class SectionSnapshot {
     }
 
     public static SectionSnapshot capture(Structure s, int sx, int sy, int sz) {
+        return capture(s, sx, sy, sz, Integer.MIN_VALUE, Integer.MAX_VALUE);
+    }
+
+    /** As {@link #capture(Structure, int, int, int)}, treating blocks outside local {@code minY..maxY} as air (slice view). */
+    public static SectionSnapshot capture(Structure s, int sx, int sy, int sz, int minY, int maxY) {
         BlockState[] st = new BlockState[PADDED * PADDED * PADDED];
         int bx = sx * SIZE - 1, by = sy * SIZE - 1, bz = sz * SIZE - 1;
         boolean empty = true;
@@ -31,7 +36,8 @@ public final class SectionSnapshot {
         for (int y = 0; y < PADDED; y++) {
             for (int z = 0; z < PADDED; z++) {
                 for (int x = 0; x < PADDED; x++, i++) {
-                    BlockState b = s.get(bx + x, by + y, bz + z);
+                    int ly = by + y;
+                    BlockState b = ly < minY || ly > maxY ? BlockState.AIR : s.get(bx + x, ly, bz + z);
                     st[i] = b;
                     if (empty && !b.isAir() && x > 0 && y > 0 && z > 0 && x <= SIZE && y <= SIZE && z <= SIZE) empty = false;
                 }

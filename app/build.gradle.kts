@@ -25,5 +25,10 @@ dependencies {
 
 application {
     mainClass = "io.blockdesigner.app.Main"
-    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "-Dprism.forceGPU=true")
+    // JavaFX sits on the module path and LWJGL on the class path; both load native code. JOML reads memory via Unsafe.
+    applicationDefaultJvmArgs = listOf(
+        "--enable-native-access=javafx.graphics,ALL-UNNAMED",
+        "--sun-misc-unsafe-memory-access=allow",
+        "-Dprism.forceGPU=true",
+    )
 }

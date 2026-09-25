@@ -14,9 +14,10 @@ import java.util.List;
  * @param theme   colours for background and grid
  * @param gridY   height of the ground grid
  * @param gridCenter grid centre (x, z)
+ * @param fogDistance distance where fog starts; {@link Float#POSITIVE_INFINITY} for none
  */
 public record FrameRequest(int width, int height, float[] viewProj, float[] eye, List<LayerDraw> layers, List<Line> lines,
-                           Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence) {
+                           Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence, float fogDistance) {
 
     /**
      * @param model    column-major model matrix (offset + rotation/mirror)

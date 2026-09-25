@@ -3,7 +3,6 @@ package io.blockdesigner.app.ui;
 import io.blockdesigner.app.Workspace;
 import io.blockdesigner.app.Workspace.ToolKind;
 import io.blockdesigner.assets.BlockAssets;
-import io.blockdesigner.core.edit.LayerChange;
 import io.blockdesigner.core.edit.SceneEditor;
 import io.blockdesigner.core.model.BlockPos;
 import io.blockdesigner.core.model.BlockState;
@@ -11,6 +10,7 @@ import io.blockdesigner.core.model.Box;
 import io.blockdesigner.core.model.Layer;
 import io.blockdesigner.core.model.Scene;
 import io.blockdesigner.core.transform.BlockTransformer;
+import io.blockdesigner.core.transform.Tilt;
 import io.blockdesigner.core.transform.Transform;
 import io.blockdesigner.render.Camera;
 import io.blockdesigner.render.FrameRequest;
@@ -51,8 +51,17 @@ import java.util.concurrent.atomic.AtomicReference;
  * The 3D view. Renders through {@link ViewportRenderer} into a {@link PixelBuffer}-backed image and turns mouse and
  * keyboard input into camera moves, tool actions and layer nudges.
  *
- * <p>Layer nudging: <b>Ctrl+scroll</b> moves up/down, <b>Alt+scroll</b> left/right and <b>Shift+scroll</b>
- * back/forward, relative to the camera. Arrow keys and PgUp/PgDn do the same; hold Tab for bigger steps.
+ * <p>Layer nudging: <b>Ctrl+scroll</b> over a layer moves along the axis of the face under the cursor (scrolling up
+ * pulls it out of that face, towards you); elsewhere it moves left/right. <b>Ctrl+Shift+scroll</b> moves up/down and
+ * <b>Shift+scroll</b> back/forward, relative to the camera. Arrow keys do the same horizontally; hold Tab for bigger steps.
+ *
+ * <p>Turning: <b>Alt+scroll</b> over a layer's top (or bottom) spins it about the vertical axis, clockwise from above
+ * when scrolling up. Over a side it flips the layer a quarter turn about that side's horizontal edge: scrolling up
+ * rolls the side you are looking at up to face the sky (bottom comes towards you, top goes away), scrolling down
+ * rolls it down. Flipping rewrites the blocks. While placing, Alt+scroll spins the ghost.
+ *
+ * <p>Slice view: <b>PgUp/PgDn</b> step through Y levels. By default levels build up (everything at or below the
+ * current level shows); <b>Insert</b> toggles single-level mode, which shows only the current level.
  */
 public final class ViewportPane extends StackPane {
     private static final int ACCENT = 0xFF7C9CFF;
@@ -62,6 +71,10 @@ public final class ViewportPane extends StackPane {
     private final ImageView view = new ImageView();
     private final Label toast = new Label();
     private final Label hint = new Label();
+    private final Label sliceBadge = new Label();
+    private final Hotbar hotbar;
+    private final javafx.scene.control.Button settingsButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.SLIDERS));
+    private atlantafx.base.controls.Popover settingsPopover;
     private final FadeTransition toastFade = new FadeTransition(Duration.millis(900), toast);
     private final PauseTransition toastHold = new PauseTransition(Duration.millis(900));
     private final PauseTransition nudgeSeal = new PauseTransition(Duration.millis(650));
@@ -97,7 +110,6 @@ public final class ViewportPane extends StackPane {
     // creative flight
     private boolean fly;
     private final java.util.Set<KeyCode> flyKeys = java.util.EnumSet.noneOf(KeyCode.class);
-    private double flySpeedFactor = 1;
     private javafx.scene.robot.Robot robot;
     private double centerX, centerY;
     private boolean ignoreNextMove;
@@ -105,17 +117,23 @@ public final class ViewportPane extends StackPane {
     private final List<Runnable> flyChanged = new ArrayList<>();
     private final BlockInfoHud hud = new BlockInfoHud();
     private final StackPane crosshair = new StackPane();
-    private BlockPos boxStart, boxEnd;
     private Box flashBox;
     private final PauseTransition flashTimer = new PauseTransition(Duration.millis(1400));
-    private LayerChange.Props moveBefore;
-    private BlockPos moveStartGround, moveStartOffset;
+
+    // Select mode: selected blocks per layer id (packed layer-local positions) and the marquee being dragged
+    private final java.util.Map<String, java.util.Set<Long>> blockSel = new java.util.LinkedHashMap<>();
+    private final javafx.scene.shape.Rectangle marquee = new javafx.scene.shape.Rectangle();
+    private static final int SEL_OUTLINE_LIMIT = 4000;
 
     // placement (ghost follows the cursor until clicked)
     private final List<Layer> placing = new ArrayList<>();
     private final List<BlockPos> placingRelative = new ArrayList<>();
     private BlockPos placementNudge = BlockPos.ORIGIN;
     private Runnable placementDone;
+
+    // slice view: null shows everything; otherwise the current Y level (alone, or with everything below it)
+    private Integer sliceY;
+    private boolean sliceSingle;
 
     public ViewportPane(Workspace ws) {
         this.ws = ws;
@@ -132,6 +150,17 @@ public final class ViewportPane extends StackPane {
         hint.getStyleClass().add("viewport-hint");
         hint.setMouseTransparent(true);
         StackPane.setAlignment(hint, Pos.BOTTOM_LEFT);
+        sliceBadge.getStyleClass().add("viewport-badge");
+        sliceBadge.setMouseTransparent(true);
+        sliceBadge.setVisible(false);
+        StackPane.setAlignment(sliceBadge, Pos.TOP_RIGHT);
+        StackPane.setMargin(sliceBadge, new javafx.geometry.Insets(14, 58, 0, 0));
+        settingsButton.getStyleClass().addAll("flat", "viewport-settings-button");
+        settingsButton.setTooltip(new javafx.scene.control.Tooltip("Viewport settings: field of view, clipping, fog, overlays, controls"));
+        settingsButton.setFocusTraversable(false);
+        settingsButton.setOnAction(e -> toggleSettings());
+        StackPane.setAlignment(settingsButton, Pos.TOP_RIGHT);
+        StackPane.setMargin(settingsButton, new javafx.geometry.Insets(10, 12, 0, 0));
         StackPane.setAlignment(hud, Pos.TOP_LEFT);
         StackPane.setMargin(hud, new javafx.geometry.Insets(12, 0, 0, 12));
         javafx.scene.shape.Rectangle ch = new javafx.scene.shape.Rectangle(18, 2), cv = new javafx.scene.shape.Rectangle(2, 18);
@@ -141,7 +170,16 @@ public final class ViewportPane extends StackPane {
         crosshair.setMouseTransparent(true);
         crosshair.setMaxSize(18, 18);
         crosshair.setVisible(false);
-        getChildren().addAll(hud, crosshair, toast, hint);
+        marquee.getStyleClass().add("marquee");
+        marquee.setManaged(false);
+        marquee.setMouseTransparent(true);
+        marquee.setVisible(false);
+        hotbar = new Hotbar(ws);
+        StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 38, 0));
+        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hint, hotbar, settingsButton);
+        updateHotbarVisibility();
+        applyViewSettings();
         toastFade.setFromValue(1);
         toastFade.setToValue(0);
         toastHold.setOnFinished(e -> toastFade.playFromStart());
@@ -156,8 +194,14 @@ public final class ViewportPane extends StackPane {
         ws.activeLayerProperty().addListener((o, a, b) -> requestRedraw());
         ws.selectedLayers().addListener((javafx.collections.ListChangeListener<Layer>) c -> requestRedraw());
         ws.toolProperty().addListener((o, a, b) -> {
+            updateHotbarVisibility();
             updateHint();
             requestRedraw();
+            showToast(switch (b) {
+                case BUILD -> "Build mode · left break · right place · middle pick · B to leave";
+                case SELECT -> "Select mode";
+                case VIEW -> "View mode";
+            });
         });
         ws.editor().undoStack().addListener(this::requestRedraw);
         ws.scene().addListener(new Scene.Listener() {
@@ -169,6 +213,7 @@ public final class ViewportPane extends StackPane {
 
             @Override
             public void layerRemoved(Layer layer) {
+                blockSel.remove(layer.id());
                 requestRedraw();
             }
 
@@ -202,6 +247,7 @@ public final class ViewportPane extends StackPane {
             if (old != null) gpu.recycle(old);
         });
         sceneRenderer = new SceneRenderer(ws.scene(), assets, gpu, this::requestRedraw);
+        sceneRenderer.setSlice(sliceMin(), sliceMax());
         requestRedraw();
         return gpu.ready();
     }
@@ -267,6 +313,8 @@ public final class ViewportPane extends StackPane {
     }
 
     private FrameRequest buildFrame(int w, int h) {
+        camera.setFov((float) ws.settings().fovDeg);
+        camera.setClipEnd((float) ws.settings().clipEnd);
         float aspect = w / (float) h;
         float[] vp = new float[16];
         camera.viewProjection(aspect).get(vp);
@@ -276,7 +324,7 @@ public final class ViewportPane extends StackPane {
         List<FrameRequest.Line> lines = new ArrayList<>();
 
         for (Layer l : ws.scene().layers()) {
-            if (!l.visible()) continue;
+            if (!l.visible() || (!ws.settings().showOutlines && !placing.contains(l))) continue;
             Optional<Box> b = l.worldBounds();
             if (b.isEmpty()) continue;
             Box wb = b.get();
@@ -293,26 +341,24 @@ public final class ViewportPane extends StackPane {
             Box f = flashBox;
             Overlays.box(lines, f.minX() - 0.02f, f.minY() - 0.02f, f.minZ() - 0.02f, f.maxX() + 1.02f, f.maxY() + 1.02f, f.maxZ() + 1.02f, 0xFFFFC85A);
         }
-        if (placing.isEmpty()) {
-            ToolKind tool = ws.toolProperty().get();
-            if (tool == ToolKind.BOX && boxStart != null && boxEnd != null) {
-                Box b = Box.of(boxStart, boxEnd);
-                Overlays.box(lines, b.minX(), b.minY(), b.minZ(), b.maxX() + 1, b.maxY() + 1, b.maxZ() + 1, 0xFFFFC85A);
-            } else if (hover != null) {
-                boolean adjacent = !fly && (tool == ToolKind.PLACE || tool == ToolKind.BOX);
-                BlockPos p = adjacent ? hover.adjacentWorld() : hover.world();
-                Overlays.block(lines, p.x(), p.y(), p.z(), adjacent ? 0xFFFFC85A : 0xE6FFFFFF);
-            } else if (hoverGround != null && (fly || tool == ToolKind.PLACE || tool == ToolKind.BOX || tool == ToolKind.BUILD)) {
+        drawBlockSelection(lines);
+        if (placing.isEmpty() && ws.toolProperty().get() != ToolKind.VIEW) {
+            boolean build = ws.toolProperty().get() == ToolKind.BUILD;
+            if (hover != null) {
+                BlockPos p = hover.world();
+                Overlays.block(lines, p.x(), p.y(), p.z(), 0xE6FFFFFF);
+            } else if (hoverGround != null && build) {
                 Overlays.block(lines, hoverGround.x(), hoverGround.y(), hoverGround.z(), 0xFFFFC85A);
             }
         }
 
         Optional<Box> sb = ws.scene().worldBounds();
-        float gridY = sb.map(b -> (float) b.minY()).orElse(0f);
+        float gridY = sliceY != null ? sliceY : sb.map(b -> (float) b.minY()).orElse(0f);
         float[] gc = sb.map(b -> new float[]{(b.minX() + b.maxX()) / 2f, (b.minZ() + b.maxZ()) / 2f}).orElse(new float[]{0, 0});
         return new FrameRequest(w, h, vp, new float[]{eye.x, eye.y, eye.z}, draws, lines,
                 ws.darkProperty().get() ? FrameRequest.Theme.DARK : FrameRequest.Theme.LIGHT,
-                ws.settings().showGrid, gridY, gc, ++sequence);
+                ws.settings().showGrid, gridY, gc, ++sequence,
+                ws.settings().fog ? (float) ws.settings().fogDistance : Float.POSITIVE_INFINITY);
     }
 
     /** Renders the current scene from the given camera for screenshots (AI vision, thumbnails). */
@@ -325,7 +371,7 @@ public final class ViewportPane extends StackPane {
         copyCamera(saved, camera);
         // Drop overlays for clean captures.
         FrameRequest clean = new FrameRequest(req.width(), req.height(), req.viewProj(), req.eye(), req.layers(), List.of(), req.theme(),
-                req.showGrid(), req.gridY(), req.gridCenter(), req.sequence());
+                req.showGrid(), req.gridY(), req.gridCenter(), req.sequence(), req.fogDistance());
         return gpu.capture(clean);
     }
 
@@ -364,6 +410,7 @@ public final class ViewportPane extends StackPane {
     /** A camera framing the whole scene from a named viewpoint (iso_se, iso_sw, iso_ne, iso_nw, top, north, south, east, west). */
     public Camera presetCamera(String view) {
         Camera c = new Camera();
+        c.setFov((float) ws.settings().fovDeg);
         float yaw, pitch = 30;
         switch (view == null ? "iso_se" : view) {
             case "iso_sw" -> yaw = 45;
@@ -420,7 +467,7 @@ public final class ViewportPane extends StackPane {
     // ---- input --------------------------------------------------------------------------------------------------
 
     /** Repeatable block actions (hold the button to repeat after a delay, like Minecraft). */
-    private enum Action { PLACE, BREAK, PAINT }
+    private enum Action { PLACE, BREAK }
 
     private void installInput() {
         addEventHandler(MouseEvent.MOUSE_PRESSED, this::onPress);
@@ -466,10 +513,12 @@ public final class ViewportPane extends StackPane {
 
     private Optional<Picker.Hit> pick(double x, double y) {
         Vector3f[] r = ray(x, y);
-        return Picker.pick(ws.scene(), r[0], r[1], fly ? FLY_REACH : 2000, l -> !l.locked() && !placing.contains(l));
+        return Picker.pick(ws.scene(), r[0], r[1], fly ? FLY_REACH : 2000, l -> !l.locked() && !placing.contains(l),
+                sliceMin(), sliceMax());
     }
 
     private float groundY() {
+        if (sliceY != null) return sliceY;
         return ws.scene().worldBounds().map(b -> (float) b.minY()).orElse(0f);
     }
 
@@ -528,19 +577,24 @@ public final class ViewportPane extends StackPane {
         dragButton = e.getButton();
         dragDistance = 0;
 
+        ToolKind mode = ws.toolProperty().get();
         if (fly) {
-            // Minecraft controls: left break, right place, middle pick.
-            switch (e.getButton()) {
-                case PRIMARY -> startHold(Action.BREAK, true);
-                case SECONDARY -> startHold(Action.PLACE, true);
-                case MIDDLE -> pickBlock();
-                default -> {
+            // Minecraft controls in Build mode: left break, right place, middle pick. Select mode selects the aimed block.
+            if (mode == ToolKind.SELECT && e.getButton() == MouseButton.PRIMARY) {
+                clickSelect(e.isShiftDown(), e.isShortcutDown());
+            } else if (mode == ToolKind.BUILD) {
+                switch (e.getButton()) {
+                    case PRIMARY -> startHold(Action.BREAK, true);
+                    case SECONDARY -> startHold(Action.PLACE, true);
+                    case MIDDLE -> pickBlock();
+                    default -> {
+                    }
                 }
             }
             e.consume();
             return;
         }
-        if (e.getButton() == MouseButton.SECONDARY && ws.toolProperty().get() == ToolKind.BUILD && placing.isEmpty()) {
+        if (e.getButton() == MouseButton.SECONDARY && mode == ToolKind.BUILD && placing.isEmpty()) {
             // Right button also orbits: place on a quick click or after holding still; dragging orbits instead.
             startHold(Action.PLACE, false);
             return;
@@ -552,32 +606,14 @@ public final class ViewportPane extends StackPane {
             return;
         }
         updateHover(e.getX(), e.getY());
-        switch (ws.toolProperty().get()) {
+        switch (mode) {
+            case VIEW -> {
+                // Left-drag orbits (see onDrag).
+            }
             case SELECT -> {
-                if (hover != null) {
-                    if (e.isShiftDown() || e.isShortcutDown()) toggleSelected(hover.layer());
-                    else selectOnly(hover.layer());
-                }
+                // Selection happens on release: a click selects one block, a drag draws a marquee.
             }
-            case BUILD, ERASE -> startHold(Action.BREAK, true);
-            case PLACE -> startHold(Action.PLACE, true);
-            case PAINT -> startHold(Action.PAINT, true);
-            case PICK -> {
-                if (pickBlock()) ws.toolProperty().set(ToolKind.PLACE);
-            }
-            case BOX -> {
-                boxStart = hover != null ? hover.adjacentWorld() : hoverGround;
-                boxEnd = boxStart;
-            }
-            case MOVE -> {
-                Layer target = hover != null ? hover.layer() : ws.activeLayerProperty().get();
-                if (target != null && !target.locked()) {
-                    ws.scene().setActive(target);
-                    moveBefore = LayerChange.Props.of(target);
-                    moveStartOffset = target.offset();
-                    moveStartGround = pickGround(e.getX(), e.getY(), target.worldBounds().map(b -> (float) b.minY()).orElse(0f)).orElse(null);
-                }
-            }
+            case BUILD -> startHold(Action.BREAK, true);
         }
     }
 
@@ -588,13 +624,15 @@ public final class ViewportPane extends StackPane {
         }
         double dx = e.getX() - lastX, dy = e.getY() - lastY;
         dragDistance += Math.abs(dx) + Math.abs(dy);
-        boolean orbit = dragButton == MouseButton.SECONDARY || (dragButton == MouseButton.PRIMARY && e.isAltDown());
+        boolean orbit = dragButton == MouseButton.SECONDARY
+                || (dragButton == MouseButton.PRIMARY && (e.isAltDown() || ws.toolProperty().get() == ToolKind.VIEW));
         if (orbit) {
             lastX = e.getX();
             lastY = e.getY();
             if (dragDistance > CLICK_SLOP) {
                 if (holdAction == Action.PLACE && holdButton == MouseButton.SECONDARY) stopHold();
-                camera.orbit((float) (dx * 0.008), (float) (dy * 0.008));
+                float k = (float) (0.008 * ws.settings().orbitSensitivity);
+                camera.orbit((float) dx * k, (float) dy * k);
                 requestRedraw();
             }
             return;
@@ -610,39 +648,14 @@ public final class ViewportPane extends StackPane {
         }
         if (dragButton != MouseButton.PRIMARY) return;
         updateHover(e.getX(), e.getY());
-        switch (ws.toolProperty().get()) {
-            case BOX -> {
-                if (boxStart != null) {
-                    // Extend on the start block's horizontal plane; hold Shift to extend vertically instead.
-                    if (e.isShiftDown()) {
-                        Vector3f[] r = ray(e.getX(), e.getY());
-                        float t = (boxStart.z() + 0.5f - r[0].z) / (Math.abs(r[1].z) < 1e-5 ? 1e-5f : r[1].z);
-                        int y = (int) Math.floor(r[0].y + r[1].y * t);
-                        boxEnd = new BlockPos(boxEnd.x(), y, boxEnd.z());
-                    } else {
-                        pickGround(e.getX(), e.getY(), boxStart.y()).ifPresent(g -> boxEnd = new BlockPos(g.x(), boxEnd.y(), g.z()));
-                    }
-                    showToast(Box.of(boxStart, boxEnd).sizeX() + " × " + Box.of(boxStart, boxEnd).sizeY() + " × " + Box.of(boxStart, boxEnd).sizeZ());
-                    requestRedraw();
-                }
-            }
-            case MOVE -> {
-                Layer l = ws.activeLayerProperty().get();
-                if (l != null && moveStartGround != null) {
-                    pickGround(e.getX(), e.getY(), moveStartGround.y()).ifPresent(g -> {
-                        BlockPos off = moveStartOffset.add(g.x() - moveStartGround.x(), 0, g.z() - moveStartGround.z());
-                        if (!off.equals(l.offset())) {
-                            l.setOffset(off);
-                            ws.scene().firePropertiesChanged(l);
-                            showToast("Offset " + off);
-                        }
-                    });
-                }
-            }
-            default -> {
-                // Held place/break/paint repeat from the frame loop, rate-limited by the configured delays.
-            }
+        if (ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty() && dragDistance > CLICK_SLOP) {
+            marquee.setX(Math.min(pressX, e.getX()));
+            marquee.setY(Math.min(pressY, e.getY()));
+            marquee.setWidth(Math.abs(e.getX() - pressX));
+            marquee.setHeight(Math.abs(e.getY() - pressY));
+            marquee.setVisible(true);
         }
+        // Held place/break repeat from the frame loop, rate-limited by the configured delays.
     }
 
     private void onRelease(MouseEvent e) {
@@ -657,24 +670,16 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (e.getButton() == MouseButton.MIDDLE && click) pickBlock();
-        if (ws.toolProperty().get() == ToolKind.BOX && boxStart != null && boxEnd != null && e.getButton() == MouseButton.PRIMARY) {
-            fillBox(Box.of(boxStart, boxEnd), e.isShortcutDown() ? BlockState.AIR : ws.selectedBlockProperty().get());
-            boxStart = boxEnd = null;
-        }
-        if (moveBefore != null) {
-            Layer l = ws.activeLayerProperty().get();
-            if (l != null) {
-                LayerChange.Props after = LayerChange.Props.of(l);
-                LayerChange.Props before = moveBefore;
-                if (!after.equals(before)) {
-                    // Revert to "before", then re-apply through the editor so the move lands on the undo stack.
-                    l.setOffset(before.offset());
-                    ws.editor().modifyLayer(l, "Move " + l.name(), null, x -> x.setOffset(after.offset()));
-                }
+        if (e.getButton() == MouseButton.PRIMARY && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty() && !e.isAltDown()) {
+            if (marquee.isVisible()) {
+                marqueeSelect(Math.min(pressX, e.getX()), Math.min(pressY, e.getY()), Math.max(pressX, e.getX()), Math.max(pressY, e.getY()),
+                        e.isShiftDown(), e.isShortcutDown());
+            } else if (click) {
+                updateHover(e.getX(), e.getY());
+                clickSelect(e.isShiftDown(), e.isShortcutDown());
             }
-            moveBefore = null;
-            moveStartGround = null;
         }
+        marquee.setVisible(false);
         dragButton = null;
         requestRedraw();
     }
@@ -684,19 +689,26 @@ public final class ViewportPane extends StackPane {
         double delta = e.getDeltaY() != 0 ? e.getDeltaY() : e.getDeltaX();
         if (delta == 0) return;
         int sign = delta > 0 ? 1 : -1;
-        if (e.isControlDown()) {
+        if (e.isControlDown() && e.isShiftDown()) {
             nudge(0, sign, 0);
-        } else if (e.isAltDown()) {
+        } else if (e.isControlDown() && hover != null && placing.isEmpty()) {
+            BlockPos n = hover.normal();
+            nudge(n.x() * sign, n.y() * sign, n.z() * sign);
+        } else if (e.isControlDown()) {
             int[] r = camera.screenRightAxis();
             nudge(r[0] * sign, 0, r[1] * sign);
+        } else if (e.isAltDown()) {
+            if (!placing.isEmpty()) rotatePlacement(sign);
+            else if (hover != null) turnLayer(hover.layer(), sign, hover.normal());
+            else showToast("Hover over a layer to turn it");
         } else if (e.isShiftDown()) {
             int[] f = camera.screenForwardAxis();
             nudge(f[0] * sign, 0, f[1] * sign);
         } else if (fly) {
-            flySpeedFactor = Math.clamp(flySpeedFactor * (sign > 0 ? 1.25 : 0.8), 0.1, 16);
-            showToast(String.format("Flying speed %.1f×", flySpeedFactor));
+            // Minecraft: wheel down moves to the next hotbar slot. Fly speed lives in the viewport settings.
+            ws.scrollHotbar(-sign);
         } else {
-            camera.zoom((float) Math.pow(1.0018, -delta));
+            camera.zoom((float) Math.pow(1.0018, -delta * ws.settings().zoomSpeed));
             requestRedraw();
         }
         e.consume();
@@ -730,18 +742,21 @@ public final class ViewportPane extends StackPane {
                 int s = k == KeyCode.UP ? 1 : -1;
                 nudge(f[0] * s, 0, f[1] * s);
             }
-            case PAGE_UP -> nudge(0, 1, 0);
-            case PAGE_DOWN -> nudge(0, -1, 0);
+            case PAGE_UP -> stepSlice(1);
+            case PAGE_DOWN -> stepSlice(-1);
+            case INSERT -> toggleSingleSlice();
             case ESCAPE -> {
                 if (fly) setFly(false);
                 else if (!placing.isEmpty()) cancelPlacement();
-                else {
-                    boxStart = boxEnd = null;
-                    ws.toolProperty().set(ToolKind.SELECT);
-                }
+                else if (!blockSel.isEmpty()) clearBlockSelection();
+                else ws.toolProperty().set(ToolKind.SELECT);
+            }
+            case DELETE, BACK_SPACE -> {
+                if (blockSel.isEmpty()) return;
+                deleteSelectedBlocks();
             }
             case R -> {
-                if (!placing.isEmpty()) rotatePlacement();
+                if (!placing.isEmpty()) rotatePlacement(1);
                 else return;
             }
             case F -> {
@@ -780,11 +795,12 @@ public final class ViewportPane extends StackPane {
         if (enable) {
             requestFocus();
             recenterMouse();
-            showToast("Flying · WASD move · Space/Shift up/down · Ctrl sprint · left break · right place · middle pick · Esc exit");
+            showToast("Flying · WASD move (W/S follow the view) · Space/Shift up/down · Ctrl sprint · B toggles building · Esc exit");
         } else {
             showToast("Orbit camera");
         }
         flyChanged.forEach(Runnable::run);
+        updateHotbarVisibility();
         updateHint();
         updateHover(aimX(), aimY());
         requestRedraw();
@@ -813,14 +829,16 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (dx == 0 && dy == 0) return;
-        camera.orbit((float) (dx * 0.0032), (float) (dy * 0.0032));
+        float k = (float) (0.0032 * ws.settings().lookSensitivity);
+        camera.orbit((float) dx * k, (float) dy * k);
         recenterMouse();
         updateHover(aimX(), aimY());
     }
 
     private void flyStep(double dt) {
         if (!fly || flyKeys.isEmpty()) return;
-        Vector3f f = camera.flatForward(), r = new Vector3f(-f.z, 0, f.x);
+        // Forward follows the look direction, pitch included (spectator / UE-style); strafing stays level.
+        Vector3f flat = camera.flatForward(), f = camera.forward(), r = new Vector3f(-flat.z, 0, flat.x);
         Vector3f move = new Vector3f();
         if (flyKeys.contains(KeyCode.W)) move.add(f);
         if (flyKeys.contains(KeyCode.S)) move.sub(f);
@@ -830,7 +848,7 @@ public final class ViewportPane extends StackPane {
         if (flyKeys.contains(KeyCode.SPACE)) move.y += 1;
         if (flyKeys.contains(KeyCode.SHIFT)) move.y -= 1;
         if (move.lengthSquared() == 0) return;
-        double speed = ws.settings().flySpeed * flySpeedFactor * (flyKeys.contains(KeyCode.CONTROL) ? 2 : 1);
+        double speed = ws.settings().flySpeed * (flyKeys.contains(KeyCode.CONTROL) ? 2 : 1);
         move.mul((float) (speed * dt));
         camera.translate(move.x, move.y, move.z);
         updateHover(aimX(), aimY());
@@ -905,15 +923,6 @@ public final class ViewportPane extends StackPane {
                     s.set(local.x(), local.y(), local.z(), st);
                 }
             }
-            case PAINT -> {
-                if (hover == null) return;
-                Layer l = hover.layer();
-                BlockState st = BlockTransformer.defaults().apply(ws.selectedBlockProperty().get(), l.transform().inverse());
-                if (l.structure().get(hover.local()) == st) return;
-                try (SceneEditor.BlockSession s = ws.editor().edit(l, "Paint block", key)) {
-                    s.set(hover.local().x(), hover.local().y(), hover.local().z(), st);
-                }
-            }
         }
         updateHover(aimX(), aimY());
     }
@@ -927,7 +936,7 @@ public final class ViewportPane extends StackPane {
     private boolean pickBlock() {
         if (hover == null) return false;
         BlockState s = BlockTransformer.defaults().apply(hover.layer().structure().get(hover.local()), hover.layer().transform());
-        ws.selectedBlockProperty().set(s);
+        ws.recordInHotbar(s);
         showToast("Picked " + BlockInfoHud.pretty(s.path()));
         return true;
     }
@@ -961,32 +970,274 @@ public final class ViewportPane extends StackPane {
         showToast("Δ " + fmt(burstDelta[0]) + ", " + fmt(burstDelta[1]) + ", " + fmt(burstDelta[2]));
     }
 
+    /**
+     * Alt+scroll over a layer, given the hovered face's world normal {@code face}: over the top or bottom, a spin
+     * (clockwise from above when {@code sign} is 1); over a side, a flip that rolls that side up ({@code sign} 1) or
+     * down. A quick burst undoes as one step.
+     */
+    private void turnLayer(Layer l, int sign, BlockPos face) {
+        if (l.locked()) {
+            showToast("Layer is locked");
+            return;
+        }
+        Optional<Box> lb = l.structure().bounds();
+        if (lb.isEmpty()) return;
+        if (face.y() != 0) spinLayer(l, lb.get(), sign);
+        else tipLayer(l, lb.get(), sign, face);
+        nudgeSeal.playFromStart();
+        updateHover(aimX(), aimY());
+    }
+
+    /** Horizontal quarter turn about the middle block, via the layer's transform (no blocks rewritten). */
+    private void spinLayer(Layer l, Box b, int dir) {
+        BlockPos pivotLocal = new BlockPos(Math.floorDiv(b.minX() + b.maxX(), 2), 0, Math.floorDiv(b.minZ() + b.maxZ(), 2));
+        BlockPos pivotWorld = l.toWorld(pivotLocal);
+        Transform t = l.transform().then(Transform.rotation(dir));
+        BlockPos turned = t.apply(pivotLocal);
+        BlockPos off = new BlockPos(pivotWorld.x() - turned.x(), l.offset().y(), pivotWorld.z() - turned.z());
+        ws.editor().modifyLayer(l, "Rotate " + l.name(), "rotate-" + l.id(), x -> {
+            x.setTransform(t);
+            x.setOffset(off);
+        });
+        showToast("Rotated " + l.name() + " to " + t.rotation() * 90 + "°");
+    }
+
+    /**
+     * Flips the layer a quarter turn about the horizontal edge of the side facing {@code face}, rewriting its blocks in
+     * place. {@code sign} 1 turns that side to face up.
+     */
+    private void tipLayer(Layer l, Box b, int sign, BlockPos face) {
+        // Edge axis = face × up, so a positive (right-hand) turn about it takes the face to +Y.
+        BlockPos edge = new BlockPos(-face.z(), 0, face.x());
+        // The axis in layer-local space; a mirrored layer turns the other way round it.
+        BlockPos axis = l.transform().inverse().apply(edge);
+        int handed = l.transform().mirror() == Transform.Mirror.NONE ? 1 : -1;
+        Tilt tilt = new Tilt(axis, sign * handed);
+        BlockPos pivot = new BlockPos(Math.floorDiv(b.minX() + b.maxX(), 2), Math.floorDiv(b.minY() + b.maxY(), 2),
+                Math.floorDiv(b.minZ() + b.maxZ(), 2));
+        java.util.function.Predicate<BlockState> valid = validStates();
+        java.util.Map<BlockState, BlockState> turned = new java.util.HashMap<>();
+        List<BlockPos> from = new ArrayList<>();
+        List<BlockPos> to = new ArrayList<>();
+        List<BlockState> states = new ArrayList<>();
+        l.structure().forEachBlock((x, y, z, st) -> {
+            BlockPos p = new BlockPos(x, y, z);
+            from.add(p);
+            to.add(tilt.apply(p, pivot));
+            states.add(turned.computeIfAbsent(st, k -> tilt.apply(k, valid)));
+        });
+        java.util.Map<BlockPos, io.blockdesigner.core.nbt.CompoundTag> entities = new java.util.HashMap<>();
+        l.structure().blockEntities().forEach((p, nbt) -> entities.put(p, nbt.copy()));
+        try (SceneEditor.BlockSession s = ws.editor().edit(l, "Tip " + l.name(), "tip-" + l.id())) {
+            for (BlockPos p : from) s.set(p.x(), p.y(), p.z(), BlockState.AIR);
+            for (int i = 0; i < from.size(); i++) {
+                BlockPos p = to.get(i);
+                s.set(p.x(), p.y(), p.z(), states.get(i), entities.get(from.get(i)));
+            }
+        }
+        showToast("Flipped " + l.name() + (sign > 0 ? " up" : " down"));
+    }
+
+    /** Whether a state's property values all exist for its block (per the loaded assets; anything goes without them). */
+    private java.util.function.Predicate<BlockState> validStates() {
+        BlockAssets assets = ws.assets();
+        if (assets == null) return s -> true;
+        return s -> assets.registry().get(s.name()).map(info -> s.properties().entrySet().stream().allMatch(e -> {
+            List<String> values = info.properties().get(e.getKey());
+            return values == null || values.contains(e.getValue());
+        })).orElse(true);
+    }
+
     private static String fmt(int v) {
         return v > 0 ? "+" + v : Integer.toString(v);
     }
 
-    // ---- block tools ----------------------------------------------------------------------------------------
+    // ---- slice view -----------------------------------------------------------------------------------------
 
-    private void fillBox(Box worldBox, BlockState state) {
-        Layer layer = ws.activeLayerProperty().get();
-        if (layer == null) {
-            layer = new Layer("Layer " + (ws.scene().layers().size() + 1), new io.blockdesigner.core.model.Structure());
-            ws.editor().addLayer(layer);
-        }
-        if (layer.locked()) {
-            showToast("Layer is locked");
+    private int sliceMin() {
+        return sliceY == null || !sliceSingle ? Integer.MIN_VALUE : sliceY;
+    }
+
+    private int sliceMax() {
+        return sliceY == null ? Integer.MAX_VALUE : sliceY;
+    }
+
+    /** PgUp/PgDn: from the full view, up starts at the bottom level and down hides the top one. */
+    private void stepSlice(int dir) {
+        Optional<Box> sb = ws.scene().worldBounds();
+        if (sb.isEmpty()) {
+            showToast("Nothing to slice");
             return;
         }
-        BlockState s = BlockTransformer.defaults().apply(state, layer.transform().inverse());
-        try (SceneEditor.BlockSession session = ws.editor().edit(layer, state.isAir() ? "Clear box" : "Fill box")) {
-            for (int y = worldBox.minY(); y <= worldBox.maxY(); y++)
-                for (int z = worldBox.minZ(); z <= worldBox.maxZ(); z++)
-                    for (int x = worldBox.minX(); x <= worldBox.maxX(); x++) {
-                        BlockPos l = layer.toLocal(new BlockPos(x, y, z));
-                        session.set(l.x(), l.y(), l.z(), s);
-                    }
+        int min = sb.get().minY(), max = sb.get().maxY();
+        int step = fastNudge ? Math.max(1, ws.settings().fastNudgeStep) : 1;
+        if (sliceY == null) {
+            sliceY = Math.clamp(dir > 0 ? min : sliceSingle ? max : max - 1, min, max);
+        } else if (!sliceSingle && dir > 0 && sliceY + step > max) {
+            sliceY = null;  // built all the way up: back to the full view
+        } else {
+            sliceY = Math.clamp((long) sliceY + (long) dir * step, min, max);
         }
-        showToast((state.isAir() ? "Cleared " : "Filled ") + worldBox.volume() + " blocks");
+        applySlice();
+    }
+
+    /** Insert: toggles between showing only the current level and building up everything below it. */
+    private void toggleSingleSlice() {
+        sliceSingle = !sliceSingle;
+        if (sliceY == null) {
+            if (hover != null) sliceY = hover.world().y();
+            else sliceY = ws.scene().worldBounds().map(Box::minY).orElse(null);
+        }
+        applySlice();
+    }
+
+    private void applySlice() {
+        if (sceneRenderer != null) sceneRenderer.setSlice(sliceMin(), sliceMax());
+        String mode = sliceSingle ? "single layer" : "layers build up";
+        if (sliceY == null) {
+            sliceBadge.setVisible(false);
+            showToast("All layers · " + mode);
+        } else {
+            sliceBadge.setText((sliceSingle ? "Y " : "Y ≤ ") + sliceY);
+            sliceBadge.setVisible(true);
+            showToast("Layer Y " + sliceY + " · " + mode);
+        }
+        updateHover(aimX(), aimY());
+        requestRedraw();
+    }
+
+    // ---- selection ------------------------------------------------------------------------------------------
+
+    /** Click in Select mode: plain replaces the block selection, Shift adds, Ctrl toggles. Empty space clears. */
+    private void clickSelect(boolean add, boolean toggle) {
+        if (hover == null) {
+            if (!add && !toggle) clearBlockSelection();
+            return;
+        }
+        Layer l = hover.layer();
+        long key = hover.local().pack();
+        if (!add && !toggle) blockSel.clear();
+        java.util.Set<Long> set = blockSel.computeIfAbsent(l.id(), k -> new java.util.HashSet<>());
+        if (toggle && set.contains(key)) set.remove(key);
+        else set.add(key);
+        if (set.isEmpty()) blockSel.remove(l.id());
+        if (add || toggle) {
+            if (!ws.selectedLayers().contains(l)) ws.selectedLayers().add(l);
+            ws.scene().setActive(l);
+        } else {
+            selectOnly(l);
+        }
+        selectionChanged();
+    }
+
+    /**
+     * Selects every block of the visible, unlocked layers whose centre falls inside the screen rectangle (x-ray: hidden
+     * blocks behind others count too). Shift adds, Ctrl removes; blocks hidden by the slice view are skipped.
+     */
+    private void marqueeSelect(double x0, double y0, double x1, double y1, boolean add, boolean subtract) {
+        if (!add && !subtract) blockSel.clear();
+        float w = (float) getWidth(), h = (float) getHeight();
+        org.joml.Matrix4f vp = camera.viewProjection(w / h);
+        // Screen rectangle in normalised device coordinates (y up).
+        float nx0 = (float) (x0 / w * 2 - 1), nx1 = (float) (x1 / w * 2 - 1);
+        float ny0 = (float) (1 - y1 / h * 2), ny1 = (float) (1 - y0 / h * 2);
+        int lo = sliceMin(), hi = sliceMax();
+        List<Layer> touched = new ArrayList<>();
+        for (Layer l : ws.scene().layers()) {
+            if (!l.visible() || l.locked() || placing.contains(l)) continue;
+            org.joml.Matrix4f m = new org.joml.Matrix4f(vp).mul(new org.joml.Matrix4f().set(SceneRenderer.modelMatrix(l.offset(), l.transform())));
+            int base = l.offset().y();
+            java.util.Set<Long> set = blockSel.computeIfAbsent(l.id(), k -> new java.util.HashSet<>());
+            int before = set.size();
+            boolean[] hit = {false};
+            org.joml.Vector4f v = new org.joml.Vector4f();
+            l.structure().forEachBlock((x, y, z, st) -> {
+                if (y + base < lo || y + base > hi) return;
+                v.set(x + 0.5f, y + 0.5f, z + 0.5f, 1).mul(m);
+                if (v.w <= 0) return;
+                float sx = v.x / v.w, sy = v.y / v.w;
+                if (sx < nx0 || sx > nx1 || sy < ny0 || sy > ny1) return;
+                long key = BlockPos.pack(x, y, z);
+                if (subtract) set.remove(key);
+                else set.add(key);
+                hit[0] = true;
+            });
+            if (set.isEmpty()) blockSel.remove(l.id());
+            if (hit[0] && !subtract && set.size() != before) touched.add(l);
+        }
+        if (!touched.isEmpty()) {
+            if (add) {
+                for (Layer l : touched) if (!ws.selectedLayers().contains(l)) ws.selectedLayers().add(l);
+            } else {
+                ws.selectedLayers().setAll(touched);
+            }
+            ws.scene().setActive(touched.getLast());
+        }
+        selectionChanged();
+    }
+
+    private void clearBlockSelection() {
+        if (blockSel.isEmpty()) return;
+        blockSel.clear();
+        selectionChanged();
+    }
+
+    private int selectedBlockCount() {
+        int n = 0;
+        for (java.util.Set<Long> set : blockSel.values()) n += set.size();
+        return n;
+    }
+
+    private void selectionChanged() {
+        int n = selectedBlockCount();
+        showToast(n == 0 ? "Selection cleared" : String.format("%,d block%s selected · Delete removes · Esc clears", n, n == 1 ? "" : "s"));
+        requestRedraw();
+    }
+
+    /** Deletes the selected blocks as one undo step. */
+    private void deleteSelectedBlocks() {
+        String key = "delete-selection-" + (++holdCounter);
+        int n = 0;
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l == null || l.locked()) continue;
+            try (SceneEditor.BlockSession s = ws.editor().edit(l, "Delete selection", key)) {
+                for (long packed : e.getValue()) {
+                    BlockPos p = BlockPos.unpack(packed);
+                    if (!s.get(p.x(), p.y(), p.z()).isAir()) {
+                        s.set(p.x(), p.y(), p.z(), BlockState.AIR);
+                        n++;
+                    }
+                }
+            }
+        }
+        ws.editor().undoStack().sealTop();
+        blockSel.clear();
+        showToast(String.format("Deleted %,d blocks", n));
+        requestRedraw();
+    }
+
+    /** Outlines selected blocks (or, for big selections, their bounds per layer). */
+    private void drawBlockSelection(List<FrameRequest.Line> lines) {
+        if (blockSel.isEmpty()) return;
+        int color = 0xFFFF9F2E;
+        boolean each = selectedBlockCount() <= SEL_OUTLINE_LIMIT;
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l == null || !l.visible()) continue;
+            Box bounds = null;
+            for (long packed : e.getValue()) {
+                BlockPos local = BlockPos.unpack(packed);
+                if (l.structure().get(local).isAir()) continue;
+                BlockPos w = l.toWorld(local);
+                if (each) Overlays.block(lines, w.x(), w.y(), w.z(), color);
+                else bounds = bounds == null ? new Box(w.x(), w.y(), w.z(), w.x(), w.y(), w.z()) : bounds.union(new Box(w.x(), w.y(), w.z(), w.x(), w.y(), w.z()));
+            }
+            if (bounds != null) {
+                Overlays.box(lines, bounds.minX() - 0.02f, bounds.minY() - 0.02f, bounds.minZ() - 0.02f,
+                        bounds.maxX() + 1.02f, bounds.maxY() + 1.02f, bounds.maxZ() + 1.02f, color);
+            }
+        }
     }
 
     private void selectOnly(Layer l) {
@@ -994,11 +1245,6 @@ public final class ViewportPane extends StackPane {
         ws.selectedLayers().setAll(l);
     }
 
-    private void toggleSelected(Layer l) {
-        if (ws.selectedLayers().contains(l)) ws.selectedLayers().remove(l);
-        else ws.selectedLayers().add(l);
-        ws.scene().setActive(l);
-    }
 
     // ---- placement ------------------------------------------------------------------------------------------
 
@@ -1023,7 +1269,7 @@ public final class ViewportPane extends StackPane {
             frameAll();
             return;
         }
-        showToast("Click to place · R rotate · Ctrl/Alt/Shift+scroll adjust · Esc cancel");
+        showToast("Click to place · R or Alt+scroll rotate · Ctrl/Shift+scroll adjust · Esc cancel");
         requestFocus();
     }
 
@@ -1047,11 +1293,12 @@ public final class ViewportPane extends StackPane {
         }
     }
 
-    private void rotatePlacement() {
+    /** Turns the ghosts a quarter turn: {@code dir} 1 is clockwise from above, -1 anticlockwise. */
+    private void rotatePlacement(int dir) {
         for (int i = 0; i < placing.size(); i++) {
             Layer l = placing.get(i);
-            l.setTransform(l.transform().then(Transform.rotation(1)));
-            placingRelative.set(i, Transform.rotation(1).apply(placingRelative.get(i)));
+            l.setTransform(l.transform().then(Transform.rotation(dir)));
+            placingRelative.set(i, Transform.rotation(dir).apply(placingRelative.get(i)));
             ws.scene().firePropertiesChanged(l);
         }
         movePlacement(lastX, lastY);
@@ -1086,6 +1333,31 @@ public final class ViewportPane extends StackPane {
         return !placing.isEmpty();
     }
 
+    // ---- viewport settings ------------------------------------------------------------------------------------
+
+    private void toggleSettings() {
+        if (settingsPopover != null && settingsPopover.isShowing()) {
+            settingsPopover.hide();
+            return;
+        }
+        settingsPopover = ViewportSettings.popover(ws.settings(), () -> {
+            applyViewSettings();
+            requestRedraw();
+        });
+        settingsPopover.show(settingsButton);
+    }
+
+    /** The hotbar shows in Select and Build (it is also the drop target for palette drags) and while flying. */
+    private void updateHotbarVisibility() {
+        hotbar.setVisible(fly || ws.toolProperty().get() != ToolKind.VIEW);
+    }
+
+    /** Applies overlay visibility from the settings (called when they change). */
+    private void applyViewSettings() {
+        hud.setVisible(ws.settings().showHud);
+        hint.setVisible(ws.settings().showHints);
+    }
+
     // ---- feedback -------------------------------------------------------------------------------------------
 
     /** Briefly outlines a world-space box (e.g. where the assistant just built). */
@@ -1108,19 +1380,19 @@ public final class ViewportPane extends StackPane {
 
     private void updateHint() {
         if (fly) {
-            hint.setText("Flying    ·    WASD move · Space/Shift up/down · Ctrl sprint · wheel speed · left break · right place · middle pick · C/Esc stop flying");
+            String mode = switch (ws.toolProperty().get()) {
+                case BUILD -> "Building · left break · right place · middle pick · B stop building";
+                case SELECT -> "Selecting · left-click select · B build";
+                case VIEW -> "B build";
+            };
+            hint.setText("Flying    ·    WASD move · Space/Shift up/down · Ctrl sprint · wheel/1-9 hotbar · " + mode + " · C/Esc stop flying");
             return;
         }
         String tool = switch (ws.toolProperty().get()) {
-            case SELECT -> "Click a layer to select · Shift-click to multi-select";
-            case BUILD -> "Left-click break · right-click place (hold to repeat) · middle-click pick";
-            case PLACE -> "Click to place · drag to paint";
-            case ERASE -> "Click or drag to erase";
-            case PAINT -> "Click or drag to repaint blocks";
-            case PICK -> "Click a block to pick it";
-            case BOX -> "Drag to fill a box · Shift = height · Ctrl = clear";
-            case MOVE -> "Drag a layer across the ground";
+            case VIEW -> "View · Left- or right-drag orbit";
+            case SELECT -> "Select · Click a block · Drag a marquee · Shift add · Ctrl remove · Delete removes blocks · Esc clears";
+            case BUILD -> "Build · Left-click break · Right-click place (hold to repeat) · Middle-click pick";
         };
-        hint.setText(tool + "    ·    Right-drag orbit · Middle-drag pan · Middle-click pick · Wheel zoom · Ctrl/Alt/Shift+wheel move layer · C fly · F frame");
+        hint.setText(tool + "    ·    Right-drag orbit · Middle-drag pan · Middle-click pick · Wheel zoom · Ctrl+wheel move along hovered face · Shift/Ctrl+Shift+wheel move layer · Alt+wheel over a layer spins (top) or flips (side) · PgUp/PgDn slice · Ins single slice · C fly · F frame");
     }
 }

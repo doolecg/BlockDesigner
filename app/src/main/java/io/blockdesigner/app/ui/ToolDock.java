@@ -27,15 +27,9 @@ public final class ToolDock extends VBox {
         setMaxHeight(USE_PREF_SIZE);
         setMaxWidth(USE_PREF_SIZE);
         ToggleGroup group = new ToggleGroup();
-        add(ws, group, ToolKind.SELECT, Feather.MOUSE_POINTER, "Select layer (Q)");
-        add(ws, group, ToolKind.MOVE, Feather.MOVE, "Move layer (M)");
-        getChildren().add(new Separator());
-        add(ws, group, ToolKind.BUILD, Feather.TOOL, "Build like Minecraft (B): left break, right place, middle pick");
-        add(ws, group, ToolKind.PLACE, Feather.PLUS_SQUARE, "Place / drag to paint blocks (V)");
-        add(ws, group, ToolKind.ERASE, Feather.DELETE, "Erase (E)");
-        add(ws, group, ToolKind.PAINT, Feather.DROPLET, "Paint / replace (P)");
-        add(ws, group, ToolKind.BOX, Feather.BOX, "Box fill (X)");
-        add(ws, group, ToolKind.PICK, Feather.CROSSHAIR, "Pick block (I)");
+        add(ws, group, ToolKind.VIEW, Feather.EYE, "View mode (V): look around, no editing");
+        add(ws, group, ToolKind.SELECT, Feather.MOUSE_POINTER, "Select mode (Q): click to select layers, drag to slide them");
+        add(ws, group, ToolKind.BUILD, Feather.TOOL, "Build mode (B toggles, also while flying): left break, right place, middle pick");
         getChildren().add(new Separator());
         flyToggle.getStyleClass().addAll("flat", "tool-button");
         flyToggle.setTooltip(new Tooltip("Creative flight (C): WASD, Space/Shift, mouse look"));

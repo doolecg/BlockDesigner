@@ -34,6 +34,9 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
     private final Map<String, Map<Long, Integer>> versions = new HashMap<>();
     private final AtomicInteger inFlight = new AtomicInteger();
     private final Runnable onMeshReady;
+    // World-space Y slice (inclusive); ghost layers are never clipped. Tracks each layer's clip origin to spot moves.
+    private int sliceMin = Integer.MIN_VALUE, sliceMax = Integer.MAX_VALUE;
+    private final Map<String, Integer> clipBase = new HashMap<>();
 
     /**
      * @param onMeshReady invoked from a worker thread after a mesh has been queued for upload; request a redraw
@@ -65,11 +68,21 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
 
     @Override
     public void layerAdded(Layer layer, int index) {
+        clipBase.put(layer.id(), clipBase(layer));
         markAll(layer);
     }
 
     @Override
+    public void layerPropertiesChanged(Layer layer) {
+        // A clipped layer that moves vertically (or stops being a ghost) shows a different part of itself.
+        if (!sliced()) return;
+        Integer base = clipBase(layer), old = clipBase.put(layer.id(), base);
+        if (!java.util.Objects.equals(base, old)) markAll(layer);
+    }
+
+    @Override
     public void layerRemoved(Layer layer) {
+        clipBase.remove(layer.id());
         dirty.remove(layer.id());
         synchronized (versions) {
             versions.remove(layer.id());
@@ -91,6 +104,49 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
         dirty.computeIfAbsent(layer.id(), k -> new HashSet<>()).addAll(layer.structure().sectionKeys());
     }
 
+    /**
+     * Only draws blocks whose world Y lies in {@code minY..maxY} (inclusive); pass {@link Integer#MIN_VALUE} /
+     * {@link Integer#MAX_VALUE} to show everything. Re-meshes only the sections whose visible content changes.
+     */
+    public void setSlice(int minY, int maxY) {
+        if (minY == sliceMin && maxY == sliceMax) return;
+        int oMin = sliceMin, oMax = sliceMax;
+        sliceMin = minY;
+        sliceMax = maxY;
+        for (Layer l : scene.layers()) {
+            Integer base = clipBase(l);
+            clipBase.put(l.id(), base);
+            if (base == null) continue;
+            Set<Long> set = null;
+            for (long key : l.structure().sectionKeys()) {
+                // World span of the section plus the one-block border its culling reads.
+                int y0 = BlockPos.unpack(key).y() * S + base - 1, y1 = y0 + S + 1;
+                if (changed(y0, y1, oMin, oMax, minY, maxY)) {
+                    if (set == null) set = dirty.computeIfAbsent(l.id(), k -> new HashSet<>());
+                    set.add(key);
+                }
+            }
+        }
+    }
+
+    private boolean sliced() {
+        return sliceMin != Integer.MIN_VALUE || sliceMax != Integer.MAX_VALUE;
+    }
+
+    /** Layer-local → world Y shift for clipping, or null when the layer is drawn unclipped. */
+    private static Integer clipBase(Layer l) {
+        return l.ghost() ? null : l.offset().y();
+    }
+
+    /** Whether any Y in {@code y0..y1} is inside one range but not the other. */
+    private static boolean changed(int y0, int y1, int aMin, int aMax, int bMin, int bMax) {
+        int lo = Math.max(y0, Math.min(aMin, bMin)), hi = Math.min(y1, Math.max(aMax, bMax));
+        for (long y = lo; y <= hi; y++) {
+            if ((y >= aMin && y <= aMax) != (y >= bMin && y <= bMax)) return true;
+        }
+        return false;
+    }
+
     /** Re-meshes everything (e.g. after assets change). */
     public void rebuildAll() {
         for (Layer l : scene.layers()) {
@@ -107,7 +163,10 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
             if (layer == null) continue;
             for (long key : e.getValue()) {
                 BlockPos sp = BlockPos.unpack(key);
-                SectionSnapshot snap = SectionSnapshot.capture(layer.structure(), sp.x(), sp.y(), sp.z());
+                Integer base = clipBase(layer);
+                SectionSnapshot snap = base == null || !sliced()
+                        ? SectionSnapshot.capture(layer.structure(), sp.x(), sp.y(), sp.z())
+                        : SectionSnapshot.capture(layer.structure(), sp.x(), sp.y(), sp.z(), clipLocal(sliceMin, -base), clipLocal(sliceMax, -base));
                 int v;
                 synchronized (versions) {
                     v = versions.computeIfAbsent(layer.id(), k -> new HashMap<>()).merge(key, 1, Integer::sum);
@@ -128,6 +187,10 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
             }
         }
         dirty.clear();
+    }
+
+    private static int clipLocal(int worldY, int shift) {
+        return Math.clamp((long) worldY + shift, Integer.MIN_VALUE, Integer.MAX_VALUE);
     }
 
     private boolean isCurrent(String id, long key, int v) {

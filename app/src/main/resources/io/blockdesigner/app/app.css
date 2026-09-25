@@ -262,6 +262,93 @@
     -fx-translate-y: 16;
 }
 
+.viewport-settings-button {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 10;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 10;
+    -fx-padding: 7;
+    -fx-effect: dropshadow(gaussian, -bd-shadow, 18, 0.2, 0, 4);
+}
+
+.viewport-settings-button .ikonli-font-icon {
+    -fx-icon-size: 16;
+}
+
+.viewport-settings {
+    -fx-padding: 4 6 6 6;
+}
+
+.viewport-settings-section {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-opacity: 0.65;
+    -fx-padding: 10 0 2 0;
+}
+
+.viewport-settings-value {
+    -fx-font-family: monospace;
+    -fx-font-size: 11.5px;
+    -fx-opacity: 0.85;
+}
+
+.hotbar {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 10;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 10;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, -bd-shadow, 18, 0.2, 0, 4);
+}
+
+.hotbar-slot {
+    -fx-background-color: rgba(0, 0, 0, 0.22);
+    -fx-background-radius: 6;
+    -fx-border-color: transparent;
+    -fx-border-width: 2;
+    -fx-border-radius: 6;
+    -fx-cursor: hand;
+}
+
+.hotbar-slot:selected {
+    -fx-border-color: white;
+    -fx-background-color: rgba(255, 255, 255, 0.14);
+}
+
+.hotbar-slot:drop-target {
+    -fx-border-color: -bd-accent;
+}
+
+.hotbar-number {
+    -fx-font-size: 9.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(one-pass-box, black, 2, 0.8, 0, 0);
+    -fx-padding: 0 3 1 0;
+}
+
+.hotbar-fallback {
+    -fx-font-size: 8px;
+    -fx-wrap-text: true;
+}
+
+.marquee {
+    -fx-fill: rgba(255, 159, 46, 0.12);
+    -fx-stroke: #FF9F2E;
+    -fx-stroke-width: 1;
+    -fx-stroke-dash-array: 5 3;
+}
+
+.viewport-badge {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 999;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 999;
+    -fx-padding: 5 12 5 12;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
 .viewport-hint {
     -fx-text-fill: rgba(220, 228, 245, 0.55);
     -fx-font-size: 11px;

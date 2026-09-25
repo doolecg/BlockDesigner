@@ -33,6 +33,43 @@ public final class Settings {
     public int breakDelayMs = 250;
     /** Creative flight speed in blocks per second (Minecraft: ~10.9, sprinting ~21.6). */
     public double flySpeed = 10.9;
+    /** Hotbar block states (nine slots, "" for empty). */
+    public List<String> hotbar = new ArrayList<>();
+
+    // ---- Viewport (the sliders popover over the 3D view) ----
+    /** Vertical field of view in degrees. */
+    public double fovDeg = 50;
+    /** Far clipping distance in blocks. */
+    public double clipEnd = 4000;
+    public boolean fog = true;
+    /** Distance at which fog starts, in blocks. */
+    public double fogDistance = 900;
+    public double orbitSensitivity = 1;
+    public double lookSensitivity = 1;
+    public double zoomSpeed = 1;
+    public boolean showOutlines = true;
+    public boolean showHud = true;
+    public boolean showHints = true;
+
+    /** Puts every viewport setting (view, overlays and controls) back to its default. */
+    public void resetViewport() {
+        Settings d = new Settings();
+        showGrid = d.showGrid;
+        fastNudgeStep = d.fastNudgeStep;
+        placeDelayMs = d.placeDelayMs;
+        breakDelayMs = d.breakDelayMs;
+        flySpeed = d.flySpeed;
+        fovDeg = d.fovDeg;
+        clipEnd = d.clipEnd;
+        fog = d.fog;
+        fogDistance = d.fogDistance;
+        orbitSensitivity = d.orbitSensitivity;
+        lookSensitivity = d.lookSensitivity;
+        zoomSpeed = d.zoomSpeed;
+        showOutlines = d.showOutlines;
+        showHud = d.showHud;
+        showHints = d.showHints;
+    }
 
     // ---- AI assistant ----
     public String aiProvider = "anthropic";

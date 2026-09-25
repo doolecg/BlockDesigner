@@ -18,14 +18,17 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
 - **Layers**
   - Every schematic, imported or new, is a layer, with visibility, lock and ghost toggles, rename, reorder, duplicate and merge.
   - Nudge the selected layers relative to the camera:
-    - Ctrl+wheel: up/down
-    - Alt+wheel: left/right
+    - Ctrl+wheel over a layer: along the axis of the hovered face (wheel up pulls it out towards you); elsewhere left/right
+    - Ctrl+Shift+wheel: up/down
     - Shift+wheel: back/forward
-    - Arrow keys and PgUp/PgDn do the same
+    - Arrow keys move left/right and back/forward
     - Hold Tab for 8-block steps
+  - Alt+wheel over a layer turns it. Over the top it spins around the vertical axis. Over a side it flips a quarter turn around that side's horizontal edge: wheel up rolls the side you're looking at up to face the sky. Flipping rewrites the blocks; stairs, slabs and other blocks with no sideways form keep their old orientation.
+  - Hotbar: nine Minecraft-style slots that record the blocks you middle-click and the ones you drag in from the block palette (drop on a slot to put it there). Press 1-9, click a slot, or use the wheel while flying to hold one. Alt+C clears it. Fly speed is in the viewport settings.
+  - Slice view: PgUp/PgDn step through Y levels. By default each level shows with everything below it; Insert switches to showing a single level.
   - Imports appear as a ghost that follows the cursor. Click to place, R to rotate, Esc to cancel.
 - **Tools**
-  - Select (Q), move (M), place (B), erase (E), paint (P), box fill (X; Shift sets the height, Ctrl clears) and pick (I).
+  - Three modes: View (V) only looks around (left- or right-drag orbits); Select (Q) never edits: click a block to select it or drag a marquee (Shift adds, Ctrl removes, Delete removes the selected blocks, Esc clears); Build (B, which toggles back to the previous mode and also works while flying in creative mode) works like Minecraft: left-click breaks, right-click places (hold to repeat), middle-click picks the block.
   - Undo and redo cover every action.
 - **Assistant**
   - Uses Claude (default model: Claude Opus 5) or any OpenAI-compatible server (OpenAI, Ollama, LM Studio).

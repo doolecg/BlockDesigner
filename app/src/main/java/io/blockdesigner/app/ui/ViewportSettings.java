@@ -1,0 +1,133 @@
+package io.blockdesigner.app.ui;
+
+import atlantafx.base.controls.Popover;
+import io.blockdesigner.app.Settings;
+import javafx.geometry.HPos;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+
+import java.util.function.Consumer;
+import java.util.function.DoubleFunction;
+import java.util.function.Supplier;
+
+/**
+ * Blender-style viewport popover: view (field of view, clipping, fog), overlays and navigation settings. Changes apply
+ * live and are saved when the popover closes.
+ */
+final class ViewportSettings {
+    private ViewportSettings() {
+    }
+
+    static Popover popover(Settings s, Runnable changed) {
+        Popover p = new Popover();
+        p.setTitle("Viewport");
+        p.setHeaderAlwaysVisible(true);
+        p.setDetachable(false);
+        p.setArrowLocation(Popover.ArrowLocation.TOP_RIGHT);
+        p.setContentNode(content(s, changed, p));
+        p.setOnHidden(e -> s.save());
+        return p;
+    }
+
+    private static Node content(Settings s, Runnable changed, Popover p) {
+        GridPane g = new GridPane();
+        g.setHgap(10);
+        g.setVgap(4);
+        ColumnConstraints label = new ColumnConstraints();
+        label.setHalignment(HPos.LEFT);
+        ColumnConstraints control = new ColumnConstraints(170);
+        control.setHgrow(Priority.ALWAYS);
+        ColumnConstraints value = new ColumnConstraints(64);
+        value.setHalignment(HPos.RIGHT);
+        g.getColumnConstraints().addAll(label, control, value);
+        Rows rows = new Rows(g, changed);
+
+        rows.section("View");
+        rows.slider("Field of view", 15, 120, () -> s.fovDeg, v -> s.fovDeg = v,
+                v -> String.format("%.0f° · %.0fmm", v, 12 / Math.tan(Math.toRadians(v / 2))));
+        rows.slider("Clip end", 256, 16000, () -> s.clipEnd, v -> s.clipEnd = v, v -> String.format("%.0f", v));
+        rows.check("Fog", () -> s.fog, v -> s.fog = v);
+        rows.slider("Fog start", 32, 4000, () -> s.fogDistance, v -> s.fogDistance = v, v -> String.format("%.0f", v));
+
+        rows.section("Overlays");
+        rows.check("Ground grid", () -> s.showGrid, v -> s.showGrid = v);
+        rows.check("Layer outlines", () -> s.showOutlines, v -> s.showOutlines = v);
+        rows.check("Block info", () -> s.showHud, v -> s.showHud = v);
+        rows.check("Hint bar", () -> s.showHints, v -> s.showHints = v);
+
+        rows.section("Navigation");
+        rows.slider("Orbit sensitivity", 0.2, 3, () -> s.orbitSensitivity, v -> s.orbitSensitivity = v, v -> String.format("%.2f×", v));
+        rows.slider("Zoom speed", 0.2, 3, () -> s.zoomSpeed, v -> s.zoomSpeed = v, v -> String.format("%.2f×", v));
+
+        rows.section("Flying (C)");
+        rows.slider("Fly speed", 2, 80, () -> s.flySpeed, v -> s.flySpeed = v, v -> String.format("%.1f b/s", v));
+        rows.slider("Look sensitivity", 0.2, 3, () -> s.lookSensitivity, v -> s.lookSensitivity = v, v -> String.format("%.2f×", v));
+
+        rows.section("Editing");
+        rows.slider("Fast nudge step (Tab)", 2, 64, () -> s.fastNudgeStep, v -> s.fastNudgeStep = (int) Math.round(v), v -> String.format("%.0f", v));
+        rows.slider("Place repeat", 50, 1000, () -> s.placeDelayMs, v -> s.placeDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
+        rows.slider("Break repeat", 50, 1000, () -> s.breakDelayMs, v -> s.breakDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
+
+        Button reset = new Button("Reset to defaults");
+        reset.getStyleClass().add("flat");
+        reset.setOnAction(e -> {
+            s.resetViewport();
+            changed.run();
+            p.setContentNode(content(s, changed, p));
+        });
+        HBox footer = new HBox(reset);
+        footer.setAlignment(Pos.CENTER_RIGHT);
+
+        VBox box = new VBox(6, g, footer);
+        box.getStyleClass().add("viewport-settings");
+        return box;
+    }
+
+    private static final class Rows {
+        private final GridPane g;
+        private final Runnable changed;
+        private int row;
+
+        Rows(GridPane g, Runnable changed) {
+            this.g = g;
+            this.changed = changed;
+        }
+
+        void section(String title) {
+            Label l = new Label(title.toUpperCase());
+            l.getStyleClass().add("viewport-settings-section");
+            g.add(l, 0, row++, 3, 1);
+        }
+
+        void slider(String name, double min, double max, java.util.function.DoubleSupplier get, java.util.function.DoubleConsumer set, DoubleFunction<String> fmt) {
+            Slider sl = new Slider(min, max, Math.clamp(get.getAsDouble(), min, max));
+            Label value = new Label(fmt.apply(sl.getValue()));
+            value.getStyleClass().add("viewport-settings-value");
+            sl.valueProperty().addListener((o, a, b) -> {
+                set.accept(b.doubleValue());
+                value.setText(fmt.apply(b.doubleValue()));
+                changed.run();
+            });
+            g.addRow(row++, new Label(name), sl, value);
+        }
+
+        void check(String name, Supplier<Boolean> get, Consumer<Boolean> set) {
+            CheckBox cb = new CheckBox(name);
+            cb.setSelected(get.get());
+            cb.selectedProperty().addListener((o, a, b) -> {
+                set.accept(b);
+                changed.run();
+            });
+            g.add(cb, 0, row++, 3, 1);
+        }
+    }
+}
