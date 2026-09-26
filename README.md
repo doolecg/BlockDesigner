@@ -107,7 +107,7 @@ These are the default keys. **Every keyboard shortcut can be rebound in Settings
 | 1 | View mode: look around only |
 | 2 | Select mode |
 | 3 | Build mode on / off (also while flying) |
-| G / R | Move / Rotate tool (gizmos for the selected layers, or the selected blocks) |
+| G / R / S | Move / Rotate / Scale tool (gizmos for the selected layers, or the selected blocks) |
 | 4 / 5 | Brush / Eraser |
 | Esc | Leave Build mode (in Build mode the number keys pick hotbar slots) |
 | Esc | Cancel a drag or placement, clear the selection, stop flying, then back to Select |
@@ -218,12 +218,13 @@ Commands take one slash and work on every visible, unlocked layer:
 </details>
 
 <details>
-<summary><b>Move and Rotate tools</b></summary>
+<summary><b>Move, Rotate and Scale tools</b></summary>
 
 | Action | Result |
 |---|---|
 | Drag an arrow / square / the centre | Move along an axis / in a plane / freely |
 | Drag a ring | Turn in 90° steps |
+| Scale: drag a square handle / the centre | Stretch along that axis / scale evenly (whole blocks, nearest neighbour) |
 | Click a layer | Select it (Shift adds) |
 | Esc / right-click | Cancel the drag |
 
@@ -234,10 +235,12 @@ Commands take one slash and work on every visible, unlocked layer:
 
 | Key | Action |
 |---|---|
-| Ctrl+wheel | Move along the hovered face's axis |
-| Ctrl+Shift+wheel / Shift+wheel | Up / down · back / forward |
+| Ctrl+wheel | Move along the axis of the layer's bounding-box side under the mouse |
+| Ctrl+Shift+wheel | Up / down |
+| Shift+wheel (outside Build mode) | Same as Ctrl+wheel |
 | Arrow keys, hold Tab | Move, bigger steps |
-| Alt+wheel | Spin (over the top) or flip (over a side) |
+| Alt+wheel (Shift+wheel in Build mode) | Turn by the bounding-box side under the mouse: spin (top or bottom) or flip (a side) |
+| Wheel / Alt+wheel in Build mode | Hotbar slot / zoom |
 | [ / ] | Make the layer below / above active |
 | Ctrl+Shift+N / Ctrl+D / Ctrl+M | New / duplicate / merge |
 | F2 | Rename the active layer |

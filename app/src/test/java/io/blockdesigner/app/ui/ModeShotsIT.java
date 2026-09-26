@@ -70,7 +70,7 @@ class ModeShotsIT {
         Thread.sleep(6000);
 
         for (Workspace.ToolKind tool : new Workspace.ToolKind[]{Workspace.ToolKind.BUILD, Workspace.ToolKind.BRUSH,
-                Workspace.ToolKind.ERASER, Workspace.ToolKind.SELECT}) {
+                Workspace.ToolKind.ERASER, Workspace.ToolKind.SELECT, Workspace.ToolKind.SCALE}) {
             fx(() -> {
                 ws.toolProperty().set(tool);
                 return null;
@@ -78,6 +78,24 @@ class ModeShotsIT {
             Thread.sleep(1500);
             save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("mode-" + tool.name().toLowerCase() + ".png"));
         }
+        // Scale: drag the gizmo's centre outwards to half again the size, and show the result.
+        fx(() -> {
+            ViewportPane v = window.viewport();
+            var gz = ViewportPane.class.getDeclaredField("gizmo");
+            gz.setAccessible(true);
+            double[] c = ((Gizmo) gz.get(v)).center();
+            var begin = ViewportPane.class.getDeclaredMethod("beginGizmoDrag", Gizmo.Handle.class, double.class, double.class);
+            var drag = ViewportPane.class.getDeclaredMethod("dragGizmo", double.class, double.class);
+            var end = ViewportPane.class.getDeclaredMethod("endGizmoDrag");
+            for (var m : new java.lang.reflect.Method[]{begin, drag, end}) m.setAccessible(true);
+            begin.invoke(v, new Gizmo.Handle(Gizmo.Kind.FREE, 0), c[0] + 40, c[1]);
+            drag.invoke(v, c[0] + 60, c[1]);
+            end.invoke(v);
+            return null;
+        });
+        for (int i = 0; i < 60 && fx(() -> window.viewport().meshesPending()); i++) Thread.sleep(500);
+        Thread.sleep(3000);
+        save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("mode-scale-dragged.png"));
         fx(() -> {
             window.stage().close();
             return null;

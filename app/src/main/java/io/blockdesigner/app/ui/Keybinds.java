@@ -41,13 +41,14 @@ public final class Keybinds {
         SETTINGS(Group.FILE, "Settings", "Shortcut+Comma"),
         SEARCH_BLOCKS(Group.FILE, "Search blocks", "Shortcut+F"),
 
-        // The toolbar's tools on the number keys in its order (Move and Rotate on letters). In Build mode the numbers
+        // The toolbar's tools on the number keys in its order (Move, Rotate and Scale on letters, as in Blender). In Build mode the numbers
         // pick hotbar slots instead, as in Minecraft.
         TOOL_VIEW(Group.TOOLS, "View mode", "1"),
         TOOL_SELECT(Group.TOOLS, "Select mode", "2"),
         TOOL_BUILD(Group.TOOLS, "Build mode (toggle)", "3"),
         TOOL_MOVE(Group.TOOLS, "Move", "G"),
         TOOL_ROTATE(Group.TOOLS, "Rotate", "R"),
+        TOOL_SCALE(Group.TOOLS, "Scale", "S"),
         TOOL_BRUSH(Group.TOOLS, "Paint brush", "4"),
         TOOL_ERASER(Group.TOOLS, "Eraser", "5"),
 

@@ -1425,6 +1425,7 @@ public final class MainWindow {
                 case TOOL_BUILD -> ws::toggleBuild;
                 case TOOL_MOVE -> () -> ws.toolProperty().set(ToolKind.MOVE);
                 case TOOL_ROTATE -> () -> ws.toolProperty().set(ToolKind.ROTATE);
+                case TOOL_SCALE -> () -> ws.toolProperty().set(ToolKind.SCALE);
                 case TOOL_BRUSH -> () -> ws.toolProperty().set(ToolKind.BRUSH);
                 case TOOL_ERASER -> () -> ws.toolProperty().set(ToolKind.ERASER);
                 case SHUFFLE -> this::toggleShuffle;

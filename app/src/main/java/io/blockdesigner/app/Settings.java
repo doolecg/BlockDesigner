@@ -25,7 +25,7 @@ public final class Settings {
     /** Colour theme (an AppTheme name: CLAUDE, BLUE, GREEN, RED, ORANGE, ZEN). */
     public String theme = "CLAUDE";
     /** DARK, LIGHT or SYSTEM (follow Windows); null in settings saved before themes, where darkTheme decides. */
-    public String themeMode;
+    public String themeMode = "DARK";
     /** Show the start screen (recent projects, new, jar, download sites) when the app opens. */
     public boolean showStartScreen = true;
     /** The window as it was last closed: normal (not maximised) bounds x, y, width, height, or null the first time. */
@@ -62,7 +62,9 @@ public final class Settings {
     public boolean flyMomentum = true;
     /** Place / break thuds and their volume (0..1). */
     public boolean blockSounds = true;
-    public double soundVolume = 0.6;
+    public double soundVolume = 0.05;
+    /** Size of the block palette's tiles in pixels (the zoom slider in its header). */
+    public int paletteTileSize = 34;
     /** Clicks for buttons and menus, pops for picking up and putting down blocks, a tick for hotbar slots. */
     public boolean uiSounds = true;
     /** Chips fly out of broken blocks. */

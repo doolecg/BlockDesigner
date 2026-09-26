@@ -329,7 +329,6 @@
     -fx-font-size: 12.5px;
     -fx-font-weight: bold;
     -fx-effect: dropshadow(gaussian, -bd-shadow, 18, 0.2, 0, 4);
-    -fx-translate-y: 16;
 }
 
 .viewport-settings-button {
@@ -1225,4 +1224,23 @@
 
 .brush-divider {
     -fx-padding: 0 2 0 2;
+}
+
+/* ---------- block palette zoom (tile size) ---------- */
+.palette-zoom-icon {
+    -fx-icon-size: 12;
+    -fx-icon-color: -color-fg-muted;
+}
+
+/* One outlined pill per active feature (Replace, Shuffle, the shape, Symmetry, Flying), after the mode pill. */
+.mode-feature {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 999;
+    -fx-border-color: -bd-mode, -bd-glass-border;
+    -fx-border-width: 1.5, 0;
+    -fx-border-radius: 999;
+    -fx-padding: 3 10 3 10;
+    -fx-font-size: 10.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
 }

@@ -46,7 +46,8 @@ import java.util.function.Predicate;
  * held mob's: colour, profession, baby…).
  */
 public final class BlockPalette extends VBox {
-    private static final int TILE = 34;
+    /** The palette tile size range (the zoom slider); icons are drawn at 64 px, so up to 72 stays sharp. */
+    static final int MIN_TILE = 24, MAX_TILE = 72;
 
     private final Workspace ws;
     private final TextField search = new TextField();
@@ -95,7 +96,25 @@ public final class BlockPalette extends VBox {
 
         Label title = new Label("Blocks");
         title.getStyleClass().add("panel-title");
-        HBox header = new HBox(title);
+        // Tile size: a small zoom slider, like an image browser's thumbnail size.
+        javafx.scene.control.Slider zoom = new javafx.scene.control.Slider(MIN_TILE, MAX_TILE, tileSize());
+        zoom.setPrefWidth(90);
+        zoom.setFocusTraversable(false);
+        zoom.getStyleClass().add("palette-zoom");
+        zoom.setTooltip(new Tooltip("Block size in the palette"));
+        zoom.valueProperty().addListener((o, a, b) -> {
+            int v = (int) Math.round(b.doubleValue());
+            if (v == ws.settings().paletteTileSize) return;
+            ws.settings().paletteTileSize = v;
+            applyTileSize();
+        });
+        FontIcon small = new FontIcon(Feather.GRID), big = new FontIcon(Feather.SQUARE);
+        small.getStyleClass().add("palette-zoom-icon");
+        big.getStyleClass().add("palette-zoom-icon");
+        javafx.scene.layout.Region grow = new javafx.scene.layout.Region();
+        HBox.setHgrow(grow, Priority.ALWAYS);
+        HBox header = new HBox(6, title, grow, small, zoom, big);
+        header.setAlignment(Pos.CENTER_LEFT);
         header.getStyleClass().add("panel-header");
 
         search.setPromptText("Search blocks…  (" + Keybinds.keyOf(Keybinds.Action.SEARCH_BLOCKS) + " · e.g. oak stairs, create:shaft)");
@@ -110,8 +129,8 @@ public final class BlockPalette extends VBox {
         buildCategories();
         buildMobGroups();
 
-        tiles.setPrefTileWidth(TILE);
-        tiles.setPrefTileHeight(TILE);
+        tiles.setPrefTileWidth(tileSize());
+        tiles.setPrefTileHeight(tileSize());
         tiles.setHgap(4);
         tiles.setVgap(4);
         tiles.setPadding(new Insets(4));
@@ -185,6 +204,18 @@ public final class BlockPalette extends VBox {
 
     void setOnPickUp(Runnable r) {
         onPickUp = r;
+    }
+
+    private int tileSize() {
+        return Math.clamp(ws.settings().paletteTileSize, MIN_TILE, MAX_TILE);
+    }
+
+    /** The zoom slider moved: every tile is remade at the new size. */
+    private void applyTileSize() {
+        tiles.setPrefTileWidth(tileSize());
+        tiles.setPrefTileHeight(tileSize());
+        tileCache.clear();
+        rebuild();
     }
 
     /** Ctrl+F: jumps to the block search box. */
@@ -420,8 +451,8 @@ public final class BlockPalette extends VBox {
 
     private StackPane mobTile(String id, String name) {
         ImageView iv = new ImageView(EntityIcons.icon(ws.assets(), id));
-        iv.setFitWidth(TILE - 6);
-        iv.setFitHeight(TILE - 6);
+        iv.setFitWidth(tileSize() - 6);
+        iv.setFitHeight(tileSize() - 6);
         iv.setSmooth(false);
         StackPane p = new StackPane(iv);
         p.getStyleClass().add("block-tile");
@@ -438,8 +469,8 @@ public final class BlockPalette extends VBox {
 
     private StackPane tile(BlockAssets assets, BlockRegistry.BlockInfo b) {
         ImageView iv = new ImageView(thumbnail(assets, b.defaultState()));
-        iv.setFitWidth(TILE - 6);
-        iv.setFitHeight(TILE - 6);
+        iv.setFitWidth(tileSize() - 6);
+        iv.setFitHeight(tileSize() - 6);
         iv.setSmooth(false);
         StackPane p = new StackPane(iv);
         p.getStyleClass().add("block-tile");

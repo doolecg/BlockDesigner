@@ -226,6 +226,8 @@ public final class ViewportPane extends StackPane {
     private BrushPopup brushPopup;
     /** The active mode, top-left ("Build mode · Sphere", "Brush · Smooth"…), and the coloured frame of the edit modes. */
     private final Label modeBadge = new Label();
+    /** The mode pill followed by one pill per active feature (Replace, Shuffle, the shape, Symmetry, Flying). */
+    private final javafx.scene.layout.HBox modeBar = new javafx.scene.layout.HBox(6);
     private final javafx.scene.layout.Region modeFrame = new javafx.scene.layout.Region();
     private Stroke stroke;
     private long lastBrushSound;
@@ -265,7 +267,8 @@ public final class ViewportPane extends StackPane {
         toast.getStyleClass().add("viewport-toast");
         toast.setOpacity(0);
         toast.setMouseTransparent(true);
-        StackPane.setAlignment(toast, Pos.TOP_CENTER);
+        // Notifications sit bottom right, under the key hints.
+        StackPane.setAlignment(toast, Pos.BOTTOM_RIGHT);
         StackPane.setAlignment(viewCube, Pos.TOP_RIGHT);
         StackPane.setMargin(viewCube, new javafx.geometry.Insets(6, 56, 0, 0));
         sliceBadge.getStyleClass().add("viewport-badge");
@@ -300,9 +303,9 @@ public final class ViewportPane extends StackPane {
         // Bottom-left, like Minecraft's chat (clear of the hotbar in the middle).
         StackPane.setAlignment(commandBar, Pos.BOTTOM_LEFT);
         StackPane.setMargin(commandBar, new javafx.geometry.Insets(0, 0, 74, 12));
-        StackPane.setAlignment(hud, Pos.TOP_LEFT);
-        // Under the mode badge.
-        StackPane.setMargin(hud, new javafx.geometry.Insets(50, 0, 0, 12));
+        // The block info box (Jade-style) sits top centre.
+        StackPane.setAlignment(hud, Pos.TOP_CENTER);
+        StackPane.setMargin(hud, new javafx.geometry.Insets(12, 0, 0, 0));
         javafx.scene.shape.Rectangle ch = new javafx.scene.shape.Rectangle(18, 2), cv = new javafx.scene.shape.Rectangle(2, 18);
         ch.getStyleClass().add("crosshair-bar");
         cv.getStyleClass().add("crosshair-bar");
@@ -345,9 +348,12 @@ public final class ViewportPane extends StackPane {
             requestRedraw();
         });
         modeBadge.getStyleClass().add("mode-badge");
-        modeBadge.setMouseTransparent(true);
-        StackPane.setAlignment(modeBadge, Pos.TOP_LEFT);
-        StackPane.setMargin(modeBadge, new javafx.geometry.Insets(12, 0, 0, 12));
+        modeBar.getChildren().add(modeBadge);
+        modeBar.setMouseTransparent(true);
+        modeBar.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
+        modeBar.setAlignment(Pos.CENTER_LEFT);
+        StackPane.setAlignment(modeBar, Pos.TOP_LEFT);
+        StackPane.setMargin(modeBar, new javafx.geometry.Insets(12, 0, 0, 12));
         modeFrame.getStyleClass().add("mode-frame");
         modeFrame.setMouseTransparent(true);
         modeFrame.setVisible(false);
@@ -362,7 +368,7 @@ public final class ViewportPane extends StackPane {
         shapeInfo.setMouseTransparent(true);
         shapeInfo.setVisible(false);
         StackPane.setAlignment(shapeInfo, Pos.BOTTOM_CENTER);
-        StackPane.setMargin(shapeInfo, new javafx.geometry.Insets(0, 0, 82, 0));
+        StackPane.setMargin(shapeInfo, new javafx.geometry.Insets(0, 0, 66, 0));
         radialDelay.setOnFinished(e -> openShapeRadial());
         symmetryPopup = new SymmetryPopup(ws.settings(), () -> {
             updateSymmetryButton();
@@ -385,7 +391,7 @@ public final class ViewportPane extends StackPane {
         ws.shuffleProperty().addListener((o, x, y) -> updateModeBadge());
         onFlyChanged(this::updateModeBadge);
         for (javafx.scene.Node ui : new javafx.scene.Node[]{hotbar, brushBar, viewCube, commandBar, hud, sliceBadge, keyHints}) markUi(ui);
-        getChildren().addAll(modeFrame, modeBadge);
+        getChildren().addAll(modeFrame, modeBar);
         getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, brushBar, pluginToolBar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar,
                 shapeInfo, symmetryButton, keyHints, shapeRadial);
         keyHintsTick.setCycleCount(javafx.animation.Animation.INDEFINITE);
@@ -424,7 +430,8 @@ public final class ViewportPane extends StackPane {
                 case SELECT -> "Select mode";
                 case VIEW -> "View mode";
                 case MOVE -> "Move · drag an arrow, square or the centre" + (keyText(Keybinds.Action.TOOL_MOVE).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_MOVE));
-                case ROTATE -> "Rotate · drag a ring to turn 90° · E";
+                case ROTATE -> "Rotate · drag a ring to turn 90°" + (keyText(Keybinds.Action.TOOL_ROTATE).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_ROTATE));
+                case SCALE -> "Scale · drag a square to stretch, the centre to scale evenly" + (keyText(Keybinds.Action.TOOL_SCALE).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_SCALE));
                 case BRUSH -> "Brush · drag to paint · right-drag smooths · Shift+right-click settings"
                         + keyNote(Keybinds.Action.BRUSH_SMALLER, "/ " + keyText(Keybinds.Action.BRUSH_BIGGER) + " size")
                         + keyNote(Keybinds.Action.BRUSH_WEAKER, "/ " + keyText(Keybinds.Action.BRUSH_STRONGER) + " strength");
@@ -1135,7 +1142,7 @@ public final class ViewportPane extends StackPane {
                 // Selection happens on release: a click selects one block, a drag draws a marquee.
             }
             case BUILD -> startHold(Action.BREAK);
-            case MOVE, ROTATE -> {
+            case MOVE, ROTATE, SCALE -> {
                 // A click on a layer selects it on release (see onRelease).
             }
             case BRUSH, ERASER -> startStroke(null, e.isShiftDown(), e.isShortcutDown());
@@ -1302,22 +1309,29 @@ public final class ViewportPane extends StackPane {
             return;
         }
         int sign = delta > 0 ? 1 : -1;
+        boolean build = ws.toolProperty().get() == ToolKind.BUILD && placing.isEmpty();
+        // Moving and turning go by the side of the layer's bounding box under the mouse, not the aimed block's face.
+        // Never by the camera angle: with nothing under the mouse, nothing moves.
+        BoxFace box = boxFaceUnder(e.getX(), e.getY());
         if (e.isControlDown() && e.isShiftDown()) {
             nudge(0, sign, 0);
-        } else if (e.isControlDown() && hover != null && placing.isEmpty()) {
-            BlockPos n = hover.normal();
-            nudge(n.x() * sign, n.y() * sign, n.z() * sign);
         } else if (e.isControlDown()) {
-            int[] r = camera.screenRightAxis();
-            nudge(r[0] * sign, 0, r[1] * sign);
+            nudgeByBox(box, sign);
+        } else if (build && e.isAltDown()) {
+            // Build mode: the plain wheel is the hotbar, so zoom moves to Alt.
+            camera.zoom((float) Math.pow(1.0018, -delta * ws.settings().zoomSpeed));
+            requestRedraw();
+        } else if (build && e.isShiftDown()) {
+            // Build mode: Shift turns (a mob under the mouse, else the layer by its box side).
+            turnUnderMouse(box, sign);
+        } else if (build) {
+            // Minecraft: wheel down moves to the next hotbar slot.
+            ws.scrollHotbar(-sign);
         } else if (e.isAltDown()) {
             if (!placing.isEmpty()) rotatePlacement(sign);
-            else if (hoverEntity != null) turnEntity(hoverEntity, sign);
-            else if (hover != null) turnLayer(hover.layer(), sign, hover.normal());
-            else showToast("Hover over a layer to turn it");
+            else turnUnderMouse(box, sign);
         } else if (e.isShiftDown()) {
-            int[] f = camera.screenForwardAxis();
-            nudge(f[0] * sign, 0, f[1] * sign);
+            nudgeByBox(box, sign);
         } else if (fly) {
             // Minecraft: wheel down moves to the next hotbar slot. Fly speed lives in the viewport settings.
             ws.scrollHotbar(-sign);
@@ -1818,8 +1832,86 @@ public final class ViewportPane extends StackPane {
         showToast("Δ " + fmt(burstDelta[0]) + ", " + fmt(burstDelta[1]) + ", " + fmt(burstDelta[2]));
     }
 
+    /** A layer and the side of its world bounding box that the mouse ray enters (a unit normal). */
+    private record BoxFace(Layer layer, BlockPos normal) {
+    }
+
     /**
-     * Alt+scroll over a layer, given the hovered face's world normal {@code face}: over the top or bottom, a spin
+     * The layer under the mouse and the side of its bounding box the ray meets: the hovered block's layer first, else
+     * the nearest visible layer whose box the ray passes through. From inside a box it's the side the ray leaves by.
+     */
+    private BoxFace boxFaceUnder(double x, double y) {
+        Vector3f[] r = ray(x, y);
+        Vector3f o = r[0], d = new Vector3f(r[1]).normalize();
+        // While placing, only the layers being placed count.
+        Layer preferred = placing.isEmpty() && hover != null ? hover.layer() : null;
+        BoxFace best = null;
+        float bestT = Float.MAX_VALUE;
+        for (Layer l : placing.isEmpty() ? ws.scene().layers() : placing) {
+            if (!l.visible() || placing.isEmpty() && placing.contains(l)) continue;
+            Box b = l.worldBounds().orElse(null);
+            if (b == null) continue;
+            float[] hit = boxHit(o, d, b);
+            if (hit == null) continue;
+            BoxFace f = new BoxFace(l, new BlockPos(hit[1] == 0 ? (int) hit[2] : 0, hit[1] == 1 ? (int) hit[2] : 0, hit[1] == 2 ? (int) hit[2] : 0));
+            if (l == preferred) return f;
+            if (hit[0] < bestT) {
+                bestT = hit[0];
+                best = f;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Where a ray meets a block box (cells min..max, so max + 1 is the far wall): {distance, axis (0 x, 1 y, 2 z),
+     * normal sign}, or null for a miss. The entry side; from inside, the exit side.
+     */
+    static float[] boxHit(Vector3f o, Vector3f d, Box b) {
+        float[] os = {o.x, o.y, o.z}, ds = {d.x, d.y, d.z};
+        float[] lo = {b.minX(), b.minY(), b.minZ()}, hi = {b.maxX() + 1, b.maxY() + 1, b.maxZ() + 1};
+        float tNear = -Float.MAX_VALUE, tFar = Float.MAX_VALUE;
+        int nearAxis = -1, farAxis = -1;
+        for (int i = 0; i < 3; i++) {
+            if (Math.abs(ds[i]) < 1e-9f) {
+                if (os[i] < lo[i] || os[i] > hi[i]) return null;
+                continue;
+            }
+            float t1 = (lo[i] - os[i]) / ds[i], t2 = (hi[i] - os[i]) / ds[i];
+            float tn = Math.min(t1, t2), tf = Math.max(t1, t2);
+            if (tn > tNear) {
+                tNear = tn;
+                nearAxis = i;
+            }
+            if (tf < tFar) {
+                tFar = tf;
+                farAxis = i;
+            }
+        }
+        if (tNear > tFar || tFar < 0) return null;
+        if (tNear >= 0 && nearAxis >= 0) return new float[]{tNear, nearAxis, ds[nearAxis] > 0 ? -1 : 1};
+        return new float[]{0, farAxis, ds[farAxis] > 0 ? 1 : -1};
+    }
+
+    /** Moves along the axis of the bounding-box side under the mouse (wheel up: out of that side). */
+    private void nudgeByBox(BoxFace box, int sign) {
+        if (box == null) {
+            showToast("Point at a layer's box to move it");
+            return;
+        }
+        BlockPos n = box.normal();
+        nudge(n.x() * sign, n.y() * sign, n.z() * sign);
+    }
+
+    /** Turns what's under the mouse: a mob, else the layer by the side of its bounding box (top spins, a side flips). */
+    private void turnUnderMouse(BoxFace box, int sign) {
+        if (hoverEntity != null) turnEntity(hoverEntity, sign);
+        else if (box != null) turnLayer(box.layer(), sign, box.normal());
+        else showToast("Hover over a layer to turn it");
+    }
+
+    /**
+     * Turns a layer by the side of its bounding box, given that side's world normal {@code face}: over the top or bottom, a spin
      * (clockwise from above when {@code sign} is 1); over a side, a flip that rolls that side up ({@code sign} 1) or
      * down. A quick burst undoes as one step.
      */
@@ -2363,7 +2455,7 @@ public final class ViewportPane extends StackPane {
         }
     }
 
-    // ---- move / rotate gizmos --------------------------------------------------------------------------------
+    // ---- move / rotate / scale gizmos ------------------------------------------------------------------------
 
     /**
      * A gizmo drag: the layers it moves, the pivot it started from, and how much has been applied so far (whole blocks
@@ -2385,11 +2477,33 @@ public final class ViewportPane extends StackPane {
         java.util.Map<Layer, Layer> lifted;
         /** The selection before the drag, restored on cancel. */
         java.util.Map<String, java.util.Set<Long>> selBefore;
+        // Scale: each layer's blocks as they were, the factor shown and the screen distance the centre drag started at
+        java.util.Map<Layer, ScaleSource> scaleFrom;
+        float[] factor = {1, 1, 1};
+        double startDist;
+    }
+
+    /**
+     * A layer's blocks before a scale drag, in a dense grid over its local bounds (null = air), its entities, and the
+     * size it's shown at now (so an unchanged size isn't rebuilt).
+     */
+    private record ScaleSource(Box box, BlockState[] cells, java.util.Map<BlockPos, io.blockdesigner.core.nbt.CompoundTag> blockEntities,
+                               List<io.blockdesigner.core.model.StructureEntity> entities, int[] size, int[] shown) {
+        static ScaleSource of(Layer l) {
+            Box b = l.structure().bounds().orElse(null);
+            if (b == null) return null;
+            int sx = b.maxX() - b.minX() + 1, sy = b.maxY() - b.minY() + 1, sz = b.maxZ() - b.minZ() + 1;
+            BlockState[] cells = new BlockState[sx * sy * sz];
+            l.structure().forEachBlock((x, y, z, st) -> cells[((x - b.minX()) * sy + (y - b.minY())) * sz + (z - b.minZ())] = st);
+            java.util.Map<BlockPos, io.blockdesigner.core.nbt.CompoundTag> be = new java.util.HashMap<>();
+            l.structure().blockEntities().forEach((p, nbt) -> be.put(p, nbt.copy()));
+            return new ScaleSource(b, cells, be, List.copyOf(l.structure().entities()), new int[]{sx, sy, sz}, new int[]{sx, sy, sz});
+        }
     }
 
     private boolean isGizmoTool() {
         ToolKind t = ws.toolProperty().get();
-        return t == ToolKind.MOVE || t == ToolKind.ROTATE;
+        return t == ToolKind.MOVE || t == ToolKind.ROTATE || t == ToolKind.SCALE;
     }
 
     private List<Layer> gizmoTargets() {
@@ -2411,11 +2525,16 @@ public final class ViewportPane extends StackPane {
 
     private void updateGizmo() {
         Gizmo.Mode mode = !isGizmoTool() || fly || !placing.isEmpty() ? null
-                : ws.toolProperty().get() == ToolKind.MOVE ? Gizmo.Mode.MOVE : Gizmo.Mode.ROTATE;
+                : switch (ws.toolProperty().get()) {
+                    case MOVE -> Gizmo.Mode.MOVE;
+                    case SCALE -> Gizmo.Mode.SCALE;
+                    default -> Gizmo.Mode.ROTATE;
+                };
         Vector3f pivot = null;
+        gizmo.scaleShown(gizmoDrag != null && mode == Gizmo.Mode.SCALE ? gizmoDrag.factor : null);
         if (mode != null) {
-            // Rotation turns about a fixed point; a move carries the gizmo along with the layers.
-            pivot = gizmoDrag != null && mode == Gizmo.Mode.ROTATE ? gizmoDrag.pivot
+            // Rotation and scaling work about a fixed point; a move carries the gizmo along with the layers.
+            pivot = gizmoDrag != null && mode != Gizmo.Mode.MOVE ? gizmoDrag.pivot
                     : gizmoDrag != null ? boundsCenter(gizmoDrag.layers)
                     : movableSelection() ? selectionCenter() : boundsCenter(gizmoTargets());
         }
@@ -2442,16 +2561,31 @@ public final class ViewportPane extends StackPane {
             }
             case RING -> d.lastAngle = screenAngle(x, y);
         }
+        boolean scale = ws.toolProperty().get() == ToolKind.SCALE;
+        if (scale) {
+            // Scaling measures from the pivot: along the grabbed axis, or the screen distance from the centre.
+            double[] c = gizmo.center();
+            d.startDist = c == null ? 0 : Math.max(24, Math.hypot(x - c[0], y - c[1]));
+            if (h.kind() == Gizmo.Kind.AXIS && Math.abs(d.startT) < 0.1f * gizmo.size()) d.startT = gizmo.size();
+        }
+        String verb = scale ? "Scale" : h.kind() == Gizmo.Kind.RING ? "Rotate" : "Move";
         gizmoDrag = d;
         if (selection) {
             // The selected blocks float in their own layers while dragged, and go back into their layers on release.
-            ws.editor().undoStack().beginGroup(h.kind() == Gizmo.Kind.RING ? "Rotate selection" : "Move selection");
+            ws.editor().undoStack().beginGroup(verb + " selection");
             d.selBefore = copySelection();
             d.lifted = liftSelection();
             d.layers = List.copyOf(d.lifted.keySet());
         } else {
             d.layers = layers;
-            ws.editor().undoStack().beginGroup(h.kind() == Gizmo.Kind.RING ? "Rotate layers" : layers.size() == 1 ? "Move " + layers.getFirst().name() : "Move layers");
+            ws.editor().undoStack().beginGroup(layers.size() == 1 ? verb + " " + layers.getFirst().name() : verb + " layers");
+        }
+        if (scale) {
+            d.scaleFrom = new java.util.LinkedHashMap<>();
+            for (Layer l : d.layers) {
+                ScaleSource src = ScaleSource.of(l);
+                if (src != null) d.scaleFrom.put(l, src);
+            }
         }
         requestRedraw();
     }
@@ -2459,6 +2593,10 @@ public final class ViewportPane extends StackPane {
     private void dragGizmo(double x, double y) {
         GizmoDrag d = gizmoDrag;
         Vector3f[] r = ray(x, y);
+        if (d.scaleFrom != null) {
+            dragScale(d, r, x, y);
+            return;
+        }
         if (d.handle.kind() == Gizmo.Kind.RING) {
             double a = screenAngle(x, y), da = a - d.lastAngle;
             if (da > Math.PI) da -= 2 * Math.PI;
@@ -2523,6 +2661,74 @@ public final class ViewportPane extends StackPane {
             if (mx != 0 || my != 0 || mz != 0) ws.editor().nudge(List.of(l), mx, my, mz, null);
         }
         d.changed = true;
+    }
+
+    /** A scale drag step: the factor from the mouse, then each layer is rebuilt at its new size in whole blocks. */
+    private void dragScale(GizmoDrag d, Vector3f[] r, double x, double y) {
+        float f;
+        if (d.handle.kind() == Gizmo.Kind.AXIS) {
+            f = axisParam(r, d.pivot, Gizmo.AXES[d.handle.axis()]) / d.startT;
+        } else {
+            double[] c = gizmo.center();
+            if (c == null) return;
+            f = (float) (Math.hypot(x - c[0], y - c[1]) / d.startDist);
+        }
+        f = Math.clamp(f, 1 / 64f, 16f);
+        float[] factor = d.handle.kind() == Gizmo.Kind.AXIS ? new float[]{1, 1, 1} : new float[]{f, f, f};
+        if (d.handle.kind() == Gizmo.Kind.AXIS) factor[d.handle.axis()] = f;
+        d.factor = factor;
+        String dims = "";
+        for (var en : d.scaleFrom.entrySet()) {
+            ScaleSource src = en.getValue();
+            int[] n = new int[3];
+            for (int i = 0; i < 3; i++) n[i] = Math.max(1, Math.round(src.size()[i] * factor[i]));
+            if (scaleLayer(en.getKey(), src, n)) d.changed = true;
+            if (d.scaleFrom.size() == 1) dims = " → " + n[0] + " × " + n[1] + " × " + n[2];
+        }
+        showToast("Scale" + (d.handle.kind() == Gizmo.Kind.AXIS ? " " + Gizmo.axisName(d.handle.axis()) : "")
+                + " ×" + String.format(java.util.Locale.ROOT, "%.2f", f) + dims);
+        requestRedraw();
+    }
+
+    /**
+     * Rebuilds a layer from its blocks before the drag at {@code n} blocks per axis (nearest neighbour), centred where
+     * it was. False when the layer is already that size.
+     */
+    private boolean scaleLayer(Layer l, ScaleSource src, int[] n) {
+        Box b = src.box();
+        int[] s = src.size();
+        int[] min = {b.minX() + Math.floorDiv(s[0] - n[0], 2), b.minY() + Math.floorDiv(s[1] - n[1], 2), b.minZ() + Math.floorDiv(s[2] - n[2], 2)};
+        if (java.util.Arrays.equals(src.shown(), n)) return false;
+        System.arraycopy(n, 0, src.shown(), 0, 3);
+        List<BlockPos> old = new ArrayList<>();
+        l.structure().forEachBlock((x, y, z, st) -> old.add(new BlockPos(x, y, z)));
+        try (SceneEditor.BlockSession ses = ws.editor().edit(l, "Scale " + l.name(), "scale-" + l.id())) {
+            for (BlockPos p : old) ses.set(p.x(), p.y(), p.z(), BlockState.AIR);
+            for (int i = 0; i < n[0]; i++) {
+                int sx = (int) ((long) i * s[0] / n[0]);
+                for (int j = 0; j < n[1]; j++) {
+                    int sy = (int) ((long) j * s[1] / n[1]);
+                    for (int k = 0; k < n[2]; k++) {
+                        int sz = (int) ((long) k * s[2] / n[2]);
+                        BlockState st = src.cells()[(sx * s[1] + sy) * s[2] + sz];
+                        if (st == null) continue;
+                        io.blockdesigner.core.nbt.CompoundTag be = src.blockEntities().get(new BlockPos(b.minX() + sx, b.minY() + sy, b.minZ() + sz));
+                        ses.set(min[0] + i, min[1] + j, min[2] + k, st, be == null ? null : be.copy());
+                    }
+                }
+            }
+        }
+        if (!src.entities().isEmpty()) {
+            // Entities keep their facing; their positions stretch with the blocks.
+            ws.editor().editEntities(l, "Scale " + l.name(), "scale-" + l.id(), list -> {
+                list.clear();
+                for (var en : src.entities()) {
+                    list.add(en.at(min[0] + (en.x() - b.minX()) * n[0] / s[0], min[1] + (en.y() - b.minY()) * n[1] / s[1],
+                            min[2] + (en.z() - b.minZ()) * n[2] / s[2]));
+                }
+            });
+        }
+        return true;
     }
 
     /** Right-handed 90° turn about a world axis, {@code sign} times (±1). */
@@ -4023,6 +4229,7 @@ public final class ViewportPane extends StackPane {
     private void updateSymmetryButton() {
         symmetryButton.getStyleClass().remove("active");
         if (ws.settings().symOn) symmetryButton.getStyleClass().add("active");
+        if (modeBar != null) updateModeBadge();
     }
 
     /** Mirror planes (X red, Y green, Z blue), radial spokes, and ghost outlines where the aimed block's copies go. */
@@ -4493,7 +4700,6 @@ public final class ViewportPane extends StackPane {
         SidePopover.show(settingsPopover, settingsButton);
     }
 
-    /** The hotbar shows in Build mode. */
     /** Mode colours: Build green, Brush blue, Eraser red; the other tools stay neutral (and get no frame). */
     private static String modeColour(ToolKind t) {
         return switch (t) {
@@ -4510,21 +4716,30 @@ public final class ViewportPane extends StackPane {
         String text = switch (t) {
             case VIEW -> "View";
             case SELECT -> "Select";
-            case BUILD -> {
-                StringBuilder b = new StringBuilder(fly ? "Creative flight" : "Build mode");
-                if (ws.replaceProperty().get()) b.append(" · Replace");
-                if (ws.shuffleProperty().get()) b.append(" · Shuffle");
-                if (shape() != io.blockdesigner.core.place.ShapeTool.Shape.SINGLE) b.append(" · ").append(shape().label);
-                yield b.toString();
-            }
+            case BUILD -> fly ? "Creative flight" : "Build mode";
             case MOVE -> "Move";
             case ROTATE -> "Rotate";
-            case BRUSH -> "Brush · " + BrushPopup.mode(ws.settings()).label;
+            case SCALE -> "Scale";
+            case BRUSH -> "Brush";
             case ERASER -> "Eraser";
             case PLUGIN -> pluginTool == null ? "Plugin tool" : pluginTool.tool().tool().name();
         };
-        if (fly && t != ToolKind.BUILD) text += " · Flying";
         modeBadge.setText(text.toUpperCase(java.util.Locale.ROOT));
+        // One pill per active feature, after the mode's own pill.
+        List<String> features = new ArrayList<>();
+        if (t == ToolKind.BUILD) {
+            if (ws.replaceProperty().get()) features.add("Replace");
+            if (ws.shuffleProperty().get()) features.add("Shuffle");
+            if (shape() != io.blockdesigner.core.place.ShapeTool.Shape.SINGLE) features.add(shape().label);
+            if (ws.settings().symOn) features.add("Symmetry");
+        }
+        if (fly && t != ToolKind.BUILD) features.add("Flying");
+        modeBar.getChildren().setAll(modeBadge);
+        for (String f : features) {
+            Label pill = new Label(f.toUpperCase(java.util.Locale.ROOT));
+            pill.getStyleClass().addAll("mode-feature");
+            modeBar.getChildren().add(pill);
+        }
         modeBadge.setGraphic(switch (t) {
             case BUILD -> ToolIcons.build(14);
             case BRUSH -> ToolIcons.brush(14);
@@ -4533,21 +4748,25 @@ public final class ViewportPane extends StackPane {
             case SELECT -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.MOUSE_POINTER);
             case MOVE -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.MOVE);
             case ROTATE -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.ROTATE_CW);
+            case SCALE -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.MAXIMIZE_2);
             case PLUGIN -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.PACKAGE);
         });
         String c = modeColour(t);
+        modeBar.setStyle(c == null ? "" : "-bd-mode: " + c + ";");
         modeBadge.getStyleClass().removeAll("mode-edit");
         if (c != null) modeBadge.getStyleClass().add("mode-edit");
         modeBadge.setStyle(c == null ? "" : "-bd-mode: " + c + ";");
         modeFrame.setVisible(c != null);
         // While the brush options show, their own mode pill stands in for the badge.
-        modeBadge.setVisible(!brushBar.isVisible());
+        modeBar.setVisible(!brushBar.isVisible());
         modeFrame.setStyle(c == null ? "" : "-bd-mode: " + c + ";");
-        // The key hints sit above whatever is along the bottom (hotbar, plugin tool options).
+        // Bottom right, above whatever is along the bottom (hotbar, plugin tool options): notifications, and the
+        // key hints above them (the notification's row is kept free so the hints don't jump).
         double bottom = 14 + (hotbar.isVisible() ? 72 : 0) + (pluginToolBar.isVisible() ? 50 : 0);
-        StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, bottom, 0));
-        // Toasts move down out of the way of the brush options along the top.
-        StackPane.setMargin(toast, new javafx.geometry.Insets(brushBar.isVisible() ? 60 : 12, 0, 0, 0));
+        StackPane.setMargin(toast, new javafx.geometry.Insets(0, 14, bottom, 0));
+        StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, bottom + 42, 0));
+        // Top centre: the block info box, below the brush options when they show.
+        StackPane.setMargin(hud, new javafx.geometry.Insets(brushBar.isVisible() ? 60 : 12, 0, 0, 0));
     }
 
     private void updateHotbarVisibility() {
@@ -4691,6 +4910,9 @@ public final class ViewportPane extends StackPane {
                     hint(h, ws.replaceProperty().get() ? "Stop replacing" : "Replace mode", Keybinds.Action.REPLACE_MODE);
                     hint(h, ws.shuffleProperty().get() ? "Stop shuffling" : "Shuffle hotbar", Keybinds.Action.SHUFFLE);
                     hint(h, "Symmetry", Keybinds.Action.SYMMETRY);
+                    h.add(KeyHints.Hint.of("Hotbar slot", "Wheel"));
+                    h.add(KeyHints.Hint.of("Zoom", "Alt", "Wheel"));
+                    h.add(KeyHints.Hint.of("Turn layer", "Shift", "Wheel"));
                     // The nine slots as "1-9" while they are on the number keys, else the first slot's key.
                     boolean digits = keys != null && java.util.stream.IntStream.range(0, 9).allMatch(i ->
                             keys.caps(Keybinds.Action.values()[Keybinds.Action.HOTBAR_1.ordinal() + i]).equals(List.of(Integer.toString(i + 1))));
@@ -4713,10 +4935,18 @@ public final class ViewportPane extends StackPane {
                     h.add(KeyHints.Hint.of(movableSelection() ? "Move the selected blocks" : "Drag arrow / square", "LMB"));
                     h.add(KeyHints.Hint.of("Nudge", "Ctrl", "Wheel"));
                     hint(h, "Rotate tool", Keybinds.Action.TOOL_ROTATE);
+                    hint(h, "Scale tool", Keybinds.Action.TOOL_SCALE);
                 }
                 case ROTATE -> {
                     h.add(KeyHints.Hint.of(movableSelection() ? "Turn the selected blocks" : "Drag a ring", "LMB"));
                     hint(h, "Move tool", Keybinds.Action.TOOL_MOVE);
+                    hint(h, "Scale tool", Keybinds.Action.TOOL_SCALE);
+                }
+                case SCALE -> {
+                    h.add(KeyHints.Hint.of(movableSelection() ? "Scale the selected blocks" : "Drag a square / the centre", "LMB"));
+                    h.add(KeyHints.Hint.of("Cancel", "RMB"));
+                    hint(h, "Move tool", Keybinds.Action.TOOL_MOVE);
+                    hint(h, "Rotate tool", Keybinds.Action.TOOL_ROTATE);
                 }
                 case BRUSH -> {
                     h.add(KeyHints.Hint.of("Paint", "LMB"));

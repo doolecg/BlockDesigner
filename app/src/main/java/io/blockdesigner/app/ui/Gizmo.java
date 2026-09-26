@@ -11,11 +11,11 @@ import org.joml.Vector4f;
 
 /**
  * Blender-style transform handles drawn over the viewport: Move shows axis arrows, plane squares and a free-move centre,
- * Rotate shows a ring per axis. Drawn in screen space at a constant size, so they stay easy to grab at any zoom. This
+ * Rotate shows a ring per axis, Scale shows axis handles with square tips and an even-scale centre. Drawn in screen space at a constant size, so they stay easy to grab at any zoom. This
  * class only draws and hit-tests; {@link ViewportPane} does the dragging.
  */
 final class Gizmo extends Canvas {
-    enum Mode { MOVE, ROTATE }
+    enum Mode { MOVE, ROTATE, SCALE }
 
     enum Kind { AXIS, PLANE, FREE, RING }
 
@@ -40,6 +40,8 @@ final class Gizmo extends Canvas {
     private final double[][] planeQuad = new double[3][];
     private final double[][] ring = new double[3][];
     private double[] center;
+    /** Scale: the factor per axis shown while dragging (the handles stretch with it). */
+    private float[] scaleShown = {1, 1, 1};
 
     Gizmo() {
         setMouseTransparent(true);
@@ -58,6 +60,10 @@ final class Gizmo extends Canvas {
     /** Screen position of the pivot, or null when hidden. */
     double[] center() {
         return center;
+    }
+
+    void scaleShown(float[] f) {
+        scaleShown = f == null ? new float[]{1, 1, 1} : f;
     }
 
     /** Redraws; {@code mode} or {@code pivot} null hides the gizmo. */
@@ -83,6 +89,7 @@ final class Gizmo extends Canvas {
 
         g.setLineCap(StrokeLineCap.ROUND);
         if (mode == Mode.MOVE) drawMove(g, hot, active);
+        else if (mode == Mode.SCALE) drawScale(g, hot, active);
         else drawRotate(g, hot, active);
     }
 
@@ -144,6 +151,37 @@ final class Gizmo extends Canvas {
         }
     }
 
+    private void drawScale(GraphicsContext g, Handle hot, Handle active) {
+        for (int i = 0; i < 3; i++) {
+            float len = size * Math.clamp(scaleShown[i], 0.15f, 4f);
+            double[] base = project(new Vector3f(pivot).fma(0.2f * size, AXES[i]));
+            double[] tip = project(new Vector3f(pivot).fma(len, AXES[i]));
+            double[] full = project(new Vector3f(pivot).fma(size, AXES[i]));
+            if (base == null || tip == null || full == null) continue;
+            // Looking straight down an axis: its handle collapses, so hide it.
+            if (Math.hypot(full[0] - center[0], full[1] - center[1]) < 18) continue;
+            axisSeg[i] = new double[]{base[0], base[1], tip[0], tip[1]};
+            boolean lit = is(hot, Kind.AXIS, i) || is(active, Kind.AXIS, i);
+            Color c = lit ? HOT : COLORS[i];
+            g.setStroke(c);
+            g.setLineWidth(lit ? 4 : 3);
+            g.strokeLine(base[0], base[1], tip[0], tip[1]);
+            g.setFill(c);
+            g.fillRect(tip[0] - 6, tip[1] - 6, 12, 12);
+            double dx = tip[0] - center[0], dy = tip[1] - center[1], l = Math.max(1, Math.hypot(dx, dy));
+            g.setFont(javafx.scene.text.Font.font(null, javafx.scene.text.FontWeight.BOLD, 11));
+            g.fillText(NAMES[i], tip[0] + dx / l * 16 - 4, tip[1] + dy / l * 16 + 4);
+        }
+        boolean lit = is(hot, Kind.FREE, 0) || is(active, Kind.FREE, 0);
+        g.setStroke(lit ? HOT : Color.gray(1, 0.9));
+        g.setLineWidth(lit ? 3 : 2);
+        g.strokeOval(center[0] - 11, center[1] - 11, 22, 22);
+        if (lit) {
+            g.setFill(HOT.deriveColor(0, 1, 1, 0.4));
+            g.fillOval(center[0] - 11, center[1] - 11, 22, 22);
+        }
+    }
+
     private void drawRotate(GraphicsContext g, Handle hot, Handle active) {
         Vector3f toEye = new Vector3f(eye).sub(pivot);
         float r = 0.85f * size;
@@ -184,8 +222,8 @@ final class Gizmo extends Canvas {
     /** The handle under a screen point, or null. */
     Handle hit(double x, double y) {
         if (center == null || mode == null) return null;
-        if (mode == Mode.MOVE) {
-            if (Math.hypot(x - center[0], y - center[1]) <= 11) return new Handle(Kind.FREE, 0);
+        if (mode != Mode.ROTATE) {
+            if (Math.hypot(x - center[0], y - center[1]) <= (mode == Mode.SCALE ? 14 : 11)) return new Handle(Kind.FREE, 0);
             int best = -1;
             double bestD = GRAB_PX;
             for (int i = 0; i < 3; i++) {

@@ -220,7 +220,8 @@ final class ViewCube extends VBox {
         g.setFont(Font.font(null, FontWeight.BOLD, 8.5));
         g.setTextAlign(TextAlignment.CENTER);
         for (int i = 0; i < 3; i++) {
-            double[] e = toScreen(new Vector3f(corner).fma(2.7f, axes[i]));
+            // As long as the cube's edge (corner to corner is 2 units).
+            double[] e = toScreen(new Vector3f(corner).fma(2f, axes[i]));
             double x0 = cx + c0[0] * HALF, y0 = cy + c0[1] * HALF, x1 = cx + e[0] * HALF, y1 = cy + e[1] * HALF;
             g.setStroke(AXIS[i]);
             g.setLineWidth(2);
