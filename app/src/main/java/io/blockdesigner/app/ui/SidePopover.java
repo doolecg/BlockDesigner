@@ -19,6 +19,10 @@ final class SidePopover {
         p.setHeaderAlwaysVisible(true);
         p.setDetachable(false);
         p.setArrowLocation(Popover.ArrowLocation.RIGHT_TOP);
+        // The same panel as every other menu (app.css › menus & popups): no arrow, the shared corner radius.
+        p.setArrowSize(0);
+        p.setArrowIndent(0);
+        p.setCornerRadius(10);
         p.getStyleClass().add("side-popover");
         return p;
     }

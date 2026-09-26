@@ -35,6 +35,10 @@ final class BrushPopup extends Popup {
     private final Label sizeValue = new Label(), strengthValue = new Label();
     private final ToggleButton sphere = new ToggleButton("Sphere"), cube = new ToggleButton("Cube");
     private boolean syncing;
+    /** The current key for each mode (Settings › Keybinds), and the labels and hint that show keys. */
+    private java.util.function.Function<Keybinds.Action, String> keyText = a -> "";
+    private final Map<Sculpt.Mode, Label> modeKeys = new EnumMap<>(Sculpt.Mode.class);
+    private final Label sizeKeys = new Label(), strengthKeys = new Label(), hint = new Label();
 
     BrushPopup(Settings settings, Runnable changed, java.util.function.Consumer<Sculpt.Mode> picked) {
         this.settings = settings;
@@ -44,7 +48,7 @@ final class BrushPopup extends Popup {
         setHideOnEscape(true);
 
         Label title = new Label("Brush");
-        title.getStyleClass().add("brush-title");
+        title.getStyleClass().add("menu-title");
 
         GridPane grid = new GridPane();
         grid.setHgap(4);
@@ -54,14 +58,20 @@ final class BrushPopup extends Popup {
         for (Sculpt.Mode m : Sculpt.Mode.values()) {
             ToggleButton b = new ToggleButton(m.label);
             int n = m.ordinal() + 1;
-            Label key = new Label("Alt+" + (n % 10));
+            Label key = new Label();
             key.getStyleClass().add("shortcut-key");
+            modeKeys.put(m, key);
             b.setGraphic(key);
             b.setToggleGroup(group);
             b.getStyleClass().add("brush-mode");
             b.setMaxWidth(Double.MAX_VALUE);
             b.setFocusTraversable(false);
-            b.setTooltip(new javafx.scene.control.Tooltip(m.description + "\nAlt+" + (n % 10) + ", or " + m.key + " while this is open"));
+            javafx.scene.control.Tooltip tip = new javafx.scene.control.Tooltip();
+            tip.setOnShowing(e -> {
+                String k = keyText.apply(modeAction(m));
+                tip.setText(m.description + "\n" + (k.isEmpty() ? "" : k + ", or ") + m.key + " while this is open");
+            });
+            b.setTooltip(tip);
             b.setOnAction(e -> select(m));
             modes.put(m, b);
             grid.add(b, i % 2, i / 2);
@@ -102,17 +112,15 @@ final class BrushPopup extends Popup {
             update();
         });
 
-        Label hint = new Label("Alt+1…0 (or the letter while this is open) pick a mode · - / = size · , / . strength\n"
-                + "Right-drag smooths · Shift smooths, Ctrl inverts while painting (not while flying)");
         hint.getStyleClass().add("layer-meta");
+        hint.setWrapText(true);
 
         VBox box = new VBox(8, title, grid,
-                row("Size", size, sizeValue, "- / ="),
-                row("Strength", strength, strengthValue, ", / ."),
-                row("Shape", new HBox(4, sphere, cube), new Label(), ""),
+                row("Size", size, sizeValue, sizeKeys),
+                row("Strength", strength, strengthValue, strengthKeys),
+                row("Shape", new HBox(4, sphere, cube), new Label(), new Label()),
                 hint);
-        box.getStyleClass().add("brush-popup");
-        box.setPadding(new Insets(10, 12, 10, 12));
+        box.getStyleClass().add("menu-panel");
         box.setPrefWidth(340);
         getContent().add(box);
         // Keys work whichever window has focus (see also key()).
@@ -122,11 +130,34 @@ final class BrushPopup extends Popup {
         setOnShown(e -> sync());
     }
 
-    private static Node row(String name, Node control, Label value, String keys) {
+    /** Shows the keys bound in Settings › Keybinds (brush modes, size, strength). */
+    void setKeys(java.util.function.Function<Keybinds.Action, String> keyText) {
+        this.keyText = keyText;
+        showKeys();
+    }
+
+    private static Keybinds.Action modeAction(Sculpt.Mode m) {
+        return Keybinds.Action.values()[Keybinds.Action.BRUSH_MODE_1.ordinal() + m.ordinal()];
+    }
+
+    private void showKeys() {
+        modeKeys.forEach((m, l) -> l.setText(keyText.apply(modeAction(m))));
+        sizeKeys.setText(pair(Keybinds.Action.BRUSH_SMALLER, Keybinds.Action.BRUSH_BIGGER));
+        strengthKeys.setText(pair(Keybinds.Action.BRUSH_WEAKER, Keybinds.Action.BRUSH_STRONGER));
+        String first = keyText.apply(Keybinds.Action.BRUSH_MODE_1), last = keyText.apply(Keybinds.Action.BRUSH_MODE_10);
+        String modes = first.isEmpty() ? "The letter" : first + "…" + last + " (or the letter while this is open)";
+        hint.setText(modes + " picks a mode · " + sizeKeys.getText() + " size · " + strengthKeys.getText() + " strength\n"
+                + "Right-drag smooths · Shift smooths, Ctrl inverts while painting (not while flying)");
+    }
+
+    private String pair(Keybinds.Action a, Keybinds.Action b) {
+        String x = keyText.apply(a), y = keyText.apply(b);
+        return x.isEmpty() && y.isEmpty() ? "" : x + " / " + y;
+    }
+
+    private static Node row(String name, Node control, Label value, Label k) {
         Label l = new Label(name);
         l.setMinWidth(62);
-        Label k = new Label(keys);
-        k.getStyleClass().add("layer-meta");
         HBox.setHgrow(control, Priority.ALWAYS);
         HBox h = new HBox(8, l, control, value, k);
         h.setAlignment(Pos.CENTER_LEFT);
@@ -187,6 +218,7 @@ final class BrushPopup extends Popup {
 
     /** Shows the current settings. */
     void sync() {
+        showKeys();
         syncing = true;
         Sculpt.Mode mode = eraser ? Sculpt.Mode.ERASE : mode(settings);
         modes.forEach((m, b) -> b.setSelected(m == mode));

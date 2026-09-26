@@ -34,7 +34,15 @@ final class ViewportSettings {
         return p;
     }
 
+    /** "Name (key)" with the key bound in Settings › Keybinds, or just the name when it has none. */
+    private static String withKey(String name, Keybinds keys, Keybinds.Action a) {
+        var k = keys.get(a);
+        String t = Keybinds.text(k[0] != null ? k[0] : k[1]);
+        return t.isEmpty() ? name : name + " (" + t + ")";
+    }
+
     private static Node content(Settings s, Runnable changed, Runnable showShortcuts, Popover p) {
+        Keybinds keys = new Keybinds(s);
         GridPane g = new GridPane();
         g.setHgap(10);
         g.setVgap(4);
@@ -58,19 +66,19 @@ final class ViewportSettings {
         rows.check("Ground grid", () -> s.showGrid, v -> s.showGrid = v);
         rows.check("Layer outlines", () -> s.showOutlines, v -> s.showOutlines = v);
         rows.check("Block info", () -> s.showHud, v -> s.showHud = v);
-        rows.check("Key hints (Shift+F1)", () -> s.showKeyHints, v -> s.showKeyHints = v);
+        rows.check(withKey("Key hints", keys, Keybinds.Action.KEY_HINTS), () -> s.showKeyHints, v -> s.showKeyHints = v);
 
         rows.section("Navigation");
         rows.slider("Orbit sensitivity", 0.2, 3, () -> s.orbitSensitivity, v -> s.orbitSensitivity = v, v -> String.format("%.2f×", v));
         rows.slider("Zoom speed", 0.2, 3, () -> s.zoomSpeed, v -> s.zoomSpeed = v, v -> String.format("%.2f×", v));
 
-        rows.section("Flying (C)");
+        rows.section(withKey("Flying", keys, Keybinds.Action.FLY));
         rows.slider("Fly speed", 2, 80, () -> s.flySpeed, v -> s.flySpeed = v, v -> String.format("%.1f b/s", v));
         rows.slider("Look sensitivity", 0.2, 3, () -> s.lookSensitivity, v -> s.lookSensitivity = v, v -> String.format("%.2f×", v));
         rows.check("Momentum (glide to a stop)", () -> s.flyMomentum, v -> s.flyMomentum = v);
 
         rows.section("Editing");
-        rows.slider("Fast nudge step (Tab)", 2, 64, () -> s.fastNudgeStep, v -> s.fastNudgeStep = (int) Math.round(v), v -> String.format("%.0f", v));
+        rows.slider(withKey("Fast nudge step", keys, Keybinds.Action.FAST_NUDGE), 2, 64, () -> s.fastNudgeStep, v -> s.fastNudgeStep = (int) Math.round(v), v -> String.format("%.0f", v));
         rows.slider("Place repeat", 50, 1000, () -> s.placeDelayMs, v -> s.placeDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
         rows.slider("Break repeat", 50, 1000, () -> s.breakDelayMs, v -> s.breakDelayMs = (int) Math.round(v), v -> String.format("%.0f ms", v));
         rows.slider("Brush speed", 2, 30, () -> s.brushRate, v -> s.brushRate = v, v -> String.format("%.0f / s", v));
@@ -85,12 +93,12 @@ final class ViewportSettings {
             changed.run();
             p.setContentNode(content(s, changed, showShortcuts, p));
         });
-        Button keys = new Button("Keyboard shortcuts  (Alt+K)", new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.COMMAND));
-        keys.getStyleClass().add("flat");
-        keys.setOnAction(e -> showShortcuts.run());
+        Button shortcutsButton = new Button(withKey("Keyboard shortcuts", keys, Keybinds.Action.SHORTCUTS), new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.COMMAND));
+        shortcutsButton.getStyleClass().add("flat");
+        shortcutsButton.setOnAction(e -> showShortcuts.run());
         javafx.scene.layout.Region gap = new javafx.scene.layout.Region();
         HBox.setHgrow(gap, Priority.ALWAYS);
-        HBox footer = new HBox(keys, gap, reset);
+        HBox footer = new HBox(shortcutsButton, gap, reset);
         footer.setAlignment(Pos.CENTER_LEFT);
 
         VBox box = new VBox(6, g, footer);

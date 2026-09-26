@@ -3658,6 +3658,7 @@ public final class ViewportPane extends StackPane {
             ws.settings().symCenter = new int[]{2 * aimed.x() + off, 2 * aimed.y() + off, 2 * aimed.z() + off};
         }
         symmetryPopup.sync();
+        if (keys != null) symmetryPopup.setKeys(this::keyText);
         if (screenX < 0) {
             javafx.geometry.Point2D p = localToScreen(getWidth() / 2 - 160, getHeight() / 2 - 180);
             if (p == null) return;
@@ -4171,6 +4172,8 @@ public final class ViewportPane extends StackPane {
     /** The user's key binds, so the key hints show the keys actually bound. */
     void setKeybinds(Keybinds keys) {
         this.keys = keys;
+        brushPopup.setKeys(this::keyText);
+        symmetryPopup.setKeys(this::keyText);
     }
 
     /** Frames the selected blocks if there are any, otherwise the active layer (or everything when there is none). */

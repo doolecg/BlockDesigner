@@ -232,6 +232,71 @@ class UiSnapshotsIT {
         sbox.layout();
         save(sbox.snapshot(null, null), dir.resolve("symmetry" + suffix + ".png"));
 
+        // Every kind of menu side by side, shown for real over a window: a right-click / dropdown menu, a side
+        // popover (viewport settings), the brush popup and the symmetry popup. They should read as one family.
+        {
+            // The app's theme stylesheet (it defines the accent colours popups use).
+            javafx.application.Application.setUserAgentStylesheet(AppTheme.values()[0].userAgentStylesheet(dark));
+            javafx.scene.control.Button anchor = new javafx.scene.control.Button("anchor");
+            javafx.scene.layout.StackPane menuHost = new javafx.scene.layout.StackPane(anchor);
+            menuHost.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+            menuHost.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+            javafx.stage.Stage win = new javafx.stage.Stage();
+            // As in the app: the stylesheet is on the scene, so popups inherit it (but they are not under .app-root).
+            javafx.scene.Scene menuScene = new javafx.scene.Scene(menuHost, 400, 300);
+            menuScene.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+            win.setScene(menuScene);
+            win.show();
+            javafx.scene.control.ContextMenu cm = new javafx.scene.control.ContextMenu();
+            javafx.scene.control.MenuItem copy = new javafx.scene.control.MenuItem("Copy to new layer");
+            copy.setAccelerator(javafx.scene.input.KeyCombination.valueOf("Shortcut+J"));
+            javafx.scene.control.Menu sub = new javafx.scene.control.Menu("Select or replace by type");
+            sub.getItems().add(new javafx.scene.control.MenuItem("All Stone Bricks in visible layers"));
+            javafx.scene.control.MenuItem disabled = new javafx.scene.control.MenuItem("Move to active layer");
+            disabled.setDisable(true);
+            cm.getItems().addAll(new javafx.scene.control.MenuItem("Pick block to hotbar"), sub, new javafx.scene.control.SeparatorMenuItem(),
+                    copy, disabled, new javafx.scene.control.MenuItem("Delete 1,234 blocks"));
+            cm.show(anchor, javafx.geometry.Side.BOTTOM, 0, 0);
+            atlantafx.base.controls.Popover pop = ViewportSettings.popover(settings, () -> {
+            }, () -> {
+            });
+            pop.setAnimated(false);
+            pop.show(anchor);
+            BrushPopup bp = new BrushPopup(settings, () -> {
+            }, m -> {
+            });
+            Keybinds kb = new Keybinds(settings);
+            bp.setKeys(act -> Keybinds.text(kb.get(act)[0]));
+            bp.show(win);
+            SymmetryPopup sym = new SymmetryPopup(settings, () -> {
+            }, () -> {
+            });
+            sym.show(win);
+            HBox all = new HBox(16);
+            all.setPadding(new Insets(16));
+            all.setAlignment(javafx.geometry.Pos.TOP_LEFT);
+            all.setStyle("-fx-background-color: " + (dark ? "#3b4a63" : "#9fb3cf") + ";");
+            // AtlantaFX reveals the popover on the next pulse, once it is placed; the snapshot can't wait for that.
+            pop.getSkin().getNode().setVisible(true);
+            for (javafx.stage.PopupWindow w : List.of(cm, pop, bp, sym)) {
+                javafx.scene.Parent r = w.getScene().getRoot();
+                r.applyCss();
+                r.layout();
+                javafx.scene.SnapshotParameters sp2 = new javafx.scene.SnapshotParameters();
+                sp2.setFill(javafx.scene.paint.Color.TRANSPARENT);
+                all.getChildren().add(new javafx.scene.image.ImageView(r.snapshot(sp2, null)));
+            }
+            cm.hide();
+            pop.hide();
+            bp.hide();
+            sym.hide();
+            win.close();
+            new javafx.scene.Scene(all);
+            all.applyCss();
+            all.layout();
+            save(all.snapshot(null, null), dir.resolve("menus" + suffix + ".png"));
+        }
+
         // Icon sheet: every kind at menu, list and card sizes.
         VBox rows = new VBox(10);
         rows.setPadding(new Insets(12));

@@ -44,7 +44,7 @@ final class SymmetryPopup extends Popup {
         setHideOnEscape(true);
 
         Label title = new Label("Symmetry");
-        title.getStyleClass().add("brush-title");
+        title.getStyleClass().add("menu-title");
         on.getStyleClass().addAll("chip", "small");
         on.setFocusTraversable(false);
         on.setOnAction(e -> {
@@ -121,12 +121,12 @@ final class SymmetryPopup extends Popup {
         g.addRow(0, new Label("Mirror"), mirrors);
         g.addRow(1, new Label("Radial"), radial);
         g.addRow(2, new Label("Centre"), new VBox(4, centre, new HBox(6, onBlock, onEdge), here));
-        Label hint = new Label("Shapes, placing and breaking in Build mode are repeated in every copy. M opens this; Shift+M centres on the aimed block.");
+        hint.setText("Shapes, placing and breaking in Build mode are repeated in every copy.");
         hint.setWrapText(true);
         hint.setMaxWidth(290);
         hint.getStyleClass().add("layer-meta");
         VBox box = new VBox(10, head, g, flip, planes, hint);
-        box.getStyleClass().add("brush-popup");
+        box.getStyleClass().add("menu-panel");
         box.setPrefWidth(320);
         getContent().add(box);
         sync();
@@ -164,6 +164,15 @@ final class SymmetryPopup extends Popup {
     private void update() {
         sync();
         changed.run();
+    }
+
+    /** The hint, with the keys bound in Settings › Keybinds. */
+    private final Label hint = new Label();
+
+    void setKeys(java.util.function.Function<Keybinds.Action, String> keyText) {
+        String open = keyText.apply(Keybinds.Action.SYMMETRY), centre = keyText.apply(Keybinds.Action.SYMMETRY_CENTRE);
+        hint.setText("Shapes, placing and breaking in Build mode are repeated in every copy."
+                + (open.isEmpty() ? "" : " " + open + " opens this;") + (centre.isEmpty() ? "" : " " + centre + " centres on the aimed block."));
     }
 
     void sync() {

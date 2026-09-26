@@ -12,6 +12,8 @@ Every keyboard key can now be changed. Settings › Keybinds covers the viewport
 0.4.2 updates to this by itself. On 0.4.0 or 0.4.1, install it by hand once: their updater can't install updates (see [0.4.2](https://github.com/doolecg/BlockDesigner/releases/tag/0.4.2)).
 
 ## Changed
+- **Every menu looks the same:** right-click menus, dropdowns (Export, plugins, loot pickers, combo boxes), the side panels (viewport settings, shortcuts, select or replace by type) and the brush and symmetry popups now share one look. They have the same background, border, rounded corners, shadow, padding, title style and item highlight, in every theme, light and dark. The brush and symmetry popups had lost their border and shadow, and those are back. The side panels no longer have an arrow, and their titles sit on the left like the others.
+- **Menus show your keys:** the brush popup, the symmetry popup and the viewport settings list the keys set in Settings › Keybinds, not the original ones.
 - **F is Focus again:** it frames the selected blocks, or else the active layer. It had been Shift+F since 0.4.1.
 - **The Eraser moves to Y.**
 
