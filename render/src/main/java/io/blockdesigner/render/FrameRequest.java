@@ -15,9 +15,31 @@ import java.util.List;
  * @param gridY   height of the ground grid
  * @param gridCenter grid centre (x, z)
  * @param fogDistance distance where fog starts; {@link Float#POSITIVE_INFINITY} for none
+ * @param images  textured quads (plugin scene objects such as reference images)
  */
 public record FrameRequest(int width, int height, float[] viewProj, float[] eye, List<LayerDraw> layers, List<Line> lines,
-                           Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence, float fogDistance) {
+                           Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence, float fogDistance,
+                           List<ImageQuad> images) {
+
+    /** A frame without images. */
+    public FrameRequest(int width, int height, float[] viewProj, float[] eye, List<LayerDraw> layers, List<Line> lines,
+                        Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence, float fogDistance) {
+        this(width, height, viewProj, eye, layers, lines, theme, showGrid, gridY, gridCenter, sequence, fogDistance, List.of());
+    }
+
+    /** How an image quad mixes with the blocks. */
+    public enum ImageDepth { BEHIND_BLOCKS, IN_SCENE, IN_FRONT }
+
+    /**
+     * A world-space quad showing an image, drawn from both sides and blended.
+     *
+     * @param key     identity of the pixels: the texture is uploaded once per key and reused while it keeps being drawn
+     * @param argb    {@code width × height} ARGB pixels (not premultiplied), top row first; never changed after drawing
+     * @param corners four corners, x y z each (12 floats), in order around the quad
+     * @param uv      u v per corner (8 floats), v from the top row down; outside 0..1 is transparent
+     */
+    public record ImageQuad(Object key, int width, int height, int[] argb, float[] corners, float[] uv, float opacity, ImageDepth depth) {
+    }
 
     /**
      * @param layerId  id of the GPU mesh to draw; layers with identical content share one (instancing)

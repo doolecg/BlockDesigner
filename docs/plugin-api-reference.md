@@ -8,7 +8,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 
 | Type | Kind | API | What it is |
 |---|---|---|---|
-| [`PluginApi`](#pluginapi) | class | 1 | The API version (`VERSION = 2`) and the manifest file name |
+| [`PluginApi`](#pluginapi) | class | 1 | The API version (`VERSION = 3`) and the manifest file name |
 | [`BlockDesignerPlugin`](#blockdesignerplugin) | interface | 1 | A plugin's entry point |
 | [`PluginInfo`](#plugininfo) | record | 1 | What the manifest says about a plugin |
 | [`PluginContext`](#plugincontext) | interface | 1 (parts 2) | The plugin's handle on BlockDesigner: registration, the scene, edits, feedback |
@@ -32,6 +32,14 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | [`ToolEvent`](#toolevent) | record | 2 | Mouse input for a tool handler |
 | [`ToolContext`](#toolcontext) | interface | 2 | What an active tool can use: options, preview, strokes |
 | [`PluginImporter`](#pluginimporter) | interface | 2 | Turns a non-schematic file into layers |
+| [`SceneObjectType`](#sceneobjecttype) | interface | 3 | A kind of scene object (reference image, guide): makes them, from files too |
+| [`SceneObject`](#sceneobject) | interface | 3 | Something in the scene that isn't blocks: draws itself, has a right-click menu and its own state |
+| [`ObjectHandle`](#objecthandle) | interface | 3 | BlockDesigner's side of one object: name, pose, visibility, lock, undoable edits |
+| [`SceneObjects`](#sceneobjects) | interface | 3 | The plugin's objects in the project, the view, and blobs |
+| [`Pose`](#pose) | record | 3 | Position, rotation and scale of an object |
+| [`Drawing`](#drawing) | interface | 3 | What an object draws: images on patches, lines |
+| [`ImageData`](#imagedata) | class | 3 | ARGB pixels for `Drawing.image` |
+| [`ViewInfo`](#viewinfo) | record | 3 | How the 3D view looks at the scene: ortho, axis view, eye, target |
 
 ## Core
 
@@ -41,7 +49,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 
 | Member | Description |
 |---|---|
-| `static final int VERSION = 2` | The API version this BlockDesigner provides. Plugins declaring a newer `api` are not loaded. |
+| `static final int VERSION = 3` | The API version this BlockDesigner provides. Plugins declaring a newer `api` are not loaded. |
 | `static final String DESCRIPTOR = "blockdesigner-plugin.json"` | Name of the manifest at the root of a plugin jar. |
 
 ### BlockDesignerPlugin
@@ -74,6 +82,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `void registerPanel(PluginPanel panel)` | 2 | Adds a panel (a closable tab on the right). |
 | `void registerImporter(PluginImporter importer)` | 2 | Adds an importer (Import window, drag and drop). |
 | `void registerTool(PluginTool tool)` | 2 | Adds a tool to the tool dock. |
+| `void registerObjectType(SceneObjectType type)` | 3 | Adds a kind of scene object; objects of it in the open project appear. |
 | `<E extends SceneEvent> Subscription on(Class<E> type, Consumer<? super E> listener)` | 2 | Listens for scene events, at most once per frame per kind; `SceneEvent.class` hears every kind. |
 | `Scene scene()` | 1 | The layers being edited (read freely; edit through `editor()`). |
 | `SceneEditor editor()` | 1 | Undoable editing: block sessions, adding / removing / modifying layers. |
@@ -85,6 +94,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `Optional<Box> selection()` | 2 | World-space box around the selected blocks, or the `//pos1 //pos2` region; empty when neither. |
 | `void editWorld(String label, Consumer<WorldEdit.World> edit)` | 1 | Edits blocks in world coordinates across visible, unlocked layers as one undo step; new blocks go into the active layer. |
 | `Layer addLayer(String name, Structure blocks)` | 1 | Adds a layer (one undo step) and makes it active. |
+| `SceneObjects objects()` | 3 | The plugin's scene objects. |
 | `void status(String message)` | 1 | Sets the status bar text. |
 | `void toast(String message)` | 1 | Shows a short message over the 3D view. |
 | `void runOnUiThread(Runnable task)` | 1 | Runs on the JavaFX thread (immediately when already on it). |
@@ -354,3 +364,92 @@ Typed getters throw `IllegalArgumentException` for an unknown key or the wrong t
 | `List<ImportedLayer> importFile(Path file, OptionValues options, Progress progress, BlockCatalog blocks) throws IOException` | Reads the file on a background thread; an `IOException` message is shown to the user. |
 
 `record ImportedLayer(String name, Structure blocks, BlockPos offset)` — a layer to add; `name` defaults to "Imported", `offset` (the layer's origin relative to the others of the same import) defaults to the origin.
+
+## API 3 extension points
+
+### SceneObjectType
+
+`public interface SceneObjectType` — registered with `PluginContext.registerObjectType`.
+
+| Member | Description |
+|---|---|
+| `String id()` | Stable id, unique within the plugin, saved in projects (`a-z 0-9 _ . -`). |
+| `String name()` | What one is called ("Reference image"); also the choice when a file could be imported several ways. |
+| `String badge()` | The tag on its rows in the Layers panel ("REFERENCE"). |
+| `SceneObject create()` | A new, empty object (`load` follows when it comes from a project). |
+| `default List<String> extensions()` | Files `open` turns into objects (Import, drag and drop). |
+| `default void open(Path file, ViewInfo view) throws IOException` | Makes an object from such a file, usually with `objects().add(...)`; an `IOException` message is shown. |
+
+### SceneObject
+
+`public interface SceneObject` — a plugin's object. Every call runs on the JavaFX thread.
+
+| Member | Description |
+|---|---|
+| `void draw(ViewInfo view, Drawing out)` | Draws the object in its own space, every frame it is visible; draw nothing to hide it in this view. |
+| `default String description(ObjectHandle self)` | The line under its name in the Layers panel. |
+| `default List<MenuItem> menu(ObjectHandle self)` | Its own right-click entries (JavaFX); BlockDesigner adds rename, focus, hide, lock and delete. |
+| `byte[] save()` | Its own state (not the name, pose or flags), for projects and undo. |
+| `void load(byte[] data) throws IOException` | Puts back a saved state. |
+| `default Set<String> blobs()` | Keys of the blobs it uses, saved with the project. |
+
+### ObjectHandle
+
+`public interface ObjectHandle` — BlockDesigner's side of one object. The setters are one undo step each.
+
+| Member | Description |
+|---|---|
+| `String id()`, `String type()`, `SceneObject object()` | Its id in the project, its type id and the plugin's object. |
+| `boolean exists()` | Still in the scene (false once deleted, or while its plugin is off). |
+| `String name()`, `void setName(String)` | Its name in the Layers panel. |
+| `Pose pose()`, `void setPose(Pose pose, String label)` | Where it is; the Move and Rotate tools change it too. |
+| `boolean visible()`, `void setVisible(boolean)` | Shown or hidden. |
+| `boolean locked()`, `void setLocked(boolean)` | A locked object is drawn but can't be picked or moved in the view. |
+| `void edit(String label, Runnable change)` | Changes the plugin's own state as one undo step (undo loads what `save()` returned before). |
+| `void refresh()` | Redraws without an undo step. |
+| `boolean selected()`, `void select()`, `void remove()` | Selection (the gizmo tools work on the selected object) and deleting (one undo step). |
+
+### SceneObjects
+
+`public interface SceneObjects` — from `PluginContext.objects()`.
+
+| Member | Description |
+|---|---|
+| `List<ObjectHandle> list()` | The plugin's objects, top first. |
+| `ObjectHandle add(String type, String name, Pose pose, SceneObject object)` | Adds one of the plugin's types, as one undo step, and selects it. |
+| `Optional<ObjectHandle> selected()` | The selected object, if it is the plugin's. |
+| `ViewInfo view()` | How the 3D view looks now. |
+| `String storeBlob(byte[] data)` | Keeps data (an image file) with the project; the key is the same for the same bytes. |
+| `Optional<byte[]> blob(String key)` | Data stored under a key. |
+
+### Pose
+
+`public record Pose(Vec3 position, Vec3 rotation, Vec3 scale)` — `Vec3` is `ToolEvent.Vec3`. Rotation is in degrees, XYZ Euler (`R = Rz·Ry·Rx`); a point goes to `position + R·(scale∘local)`.
+
+| Member | Description |
+|---|---|
+| `static Pose IDENTITY`, `static Pose at(x, y, z)` | At the origin (or a point), unturned, scale 1. |
+| `withPosition`, `withRotation`, `withScale` | Copies with one part changed. |
+| `Pose translated(dx, dy, dz)` | Moved. |
+| `Pose rotatedAbout(int axis, double degrees, Vec3 pivot)` | Turned about world axis 0 / 1 / 2 through a pivot. |
+| `Pose scaledBy(fx, fy, fz)` | Scaled along its own axes. |
+| `Vec3 toWorld(...)`, `Vec3 toLocal(Vec3)` | Points between its own space and the world. |
+| `Vec3 axis(int)`, `double[] rotationMatrix()` | Its turned axes; the rotation as a row-major 3×3 matrix. |
+
+### Drawing
+
+`public interface Drawing` — valid only during `SceneObject.draw`; coordinates are in the object's own space.
+
+| Member | Description |
+|---|---|
+| `void image(ImageData image, Vec3[] corners, double[] uv, double opacity, Depth depth)` | A picture on four corners (bottom-left, bottom-right, top-right, top-left), seen from both sides; `uv` is u v per corner, v from the top, outside 0..1 see-through. |
+| `void line(Vec3 from, Vec3 to, int argb)` | A line. |
+| `enum Depth { BEHIND_BLOCKS, IN_SCENE, IN_FRONT }` | A backdrop blocks always cover; hidden by blocks in front; over everything. |
+
+### ImageData
+
+`public final class ImageData(int width, int height, int[] argb)` — ARGB pixels (not premultiplied), top row first, wrapped, not copied. Uploaded once per instance: keep one per picture and never change its pixels. `width()`, `height()`, `argb()`, `aspect()`; `MAX_SIZE = 4096`.
+
+### ViewInfo
+
+`public record ViewInfo(boolean ortho, Optional<Side> side, Vec3 eye, Vec3 forward, Vec3 target)` — `side` is the axis view the camera is at (empty for a free view); `isOrthoSide(Side)` checks for one orthographic axis view. `enum Side { FRONT, BACK, RIGHT, LEFT, TOP, BOTTOM }`, with `facing()`: the rotation that turns something drawn facing +Z towards that view, upright.

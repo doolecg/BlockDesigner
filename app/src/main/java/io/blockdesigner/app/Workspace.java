@@ -34,6 +34,8 @@ public final class Workspace {
     private final Settings settings;
     private final Scene scene = new Scene();
     private final SceneEditor editor = new SceneEditor(scene);
+    /** Plugin scene objects (reference images and the like): listed with the layers, saved with the project. */
+    private final io.blockdesigner.app.plugins.SceneObjectStore objects = new io.blockdesigner.app.plugins.SceneObjectStore(editor.undoStack());
     private final ObjectProperty<BlockAssets> assets = new SimpleObjectProperty<>();
     private final ObjectProperty<McVersion> targetVersion = new SimpleObjectProperty<>(McVersion.latestKnown());
     private final ObjectProperty<BlockState> selectedBlock = new SimpleObjectProperty<>(BlockState.of("stone_bricks"));
@@ -114,6 +116,10 @@ public final class Workspace {
 
     public SceneEditor editor() {
         return editor;
+    }
+
+    public io.blockdesigner.app.plugins.SceneObjectStore objects() {
+        return objects;
     }
 
     public ObjectProperty<BlockAssets> assetsProperty() {

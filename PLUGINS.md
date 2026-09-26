@@ -9,6 +9,7 @@ This guide covers setting up a plugin project, the manifest, installing and test
 - [Getting started](#getting-started): [examples](#the-examples) · [project setup](#project-setup) · [manifest](#the-manifest-blockdesigner-pluginjson) · [entry point](#the-entry-point) · [install and test](#install-and-test)
 - [API 1 extension points](#api-1-extension-points): [commands](#commands) · [actions](#menu-actions) · [exporters](#exporters) · [schematic formats](#schematic-formats) · [editing the scene](#reading-and-editing-the-scene)
 - [API 2 extension points](#api-2-extension-points): [options](#options-parameters-without-writing-ui) · [transforms](#transforms) · [panels](#panels) · [tools](#tools) · [importers](#importers) · [richer exporters](#exporters-options-summary-progress) · [scene events](#scene-events) · [block catalog](#the-block-catalog) · [asset access](#asset-access) · [Bedrock NBT](#bedrock-nbt)
+- [API 3 extension points](#api-3-extension-points): [scene objects](#scene-objects)
 - [Rules of the road](#rules-of-the-road) · [Limits and what's not supported yet](#limits-and-whats-not-supported-yet)
 
 ## What a plugin can add
@@ -23,8 +24,9 @@ This guide covers setting up a plugin project, the manifest, installing and test
 | `registerPanel(PluginPanel)` | 2 | A closable tab in the right-hand panel, with your own JavaFX content |
 | `registerTool(PluginTool)` | 2 | A button in the tool dock over the viewport; mouse, wheel and keys go to your handler |
 | `registerImporter(PluginImporter)` | 2 | Import (file filter, drag and drop) for files that aren't schematics, such as images |
+| `registerObjectType(SceneObjectType)` | 3 | Things in the scene that aren't blocks (reference images, guides): rows in the Layers panel, drawn in the 3D view, moved by the Move / Rotate tools, a right-click menu, saved in the project |
 
-API 2 also adds exporter options, summaries and progress; declarative `Options`; scene events (`ctx.on(...)`); the block catalog (`ctx.blocks()`); and asset access (`ctx.assets()`).
+API 2 also adds exporter options, summaries and progress; declarative `Options`; scene events (`ctx.on(...)`); the block catalog (`ctx.blocks()`); and asset access (`ctx.assets()`). API 3 adds scene objects (`ctx.objects()`).
 
 When a plugin is disabled, or fails while enabling, BlockDesigner removes everything it registered.
 
@@ -36,6 +38,7 @@ The repository has two complete plugins. Read them alongside this guide:
 
 - [`examples/hello-plugin`](examples/hello-plugin) (API 1): a `/pillar` command, an "Add test platform" action, a CSV bill-of-materials exporter and a plain-text schematic format.
 - [`examples/palette-tools`](examples/palette-tools) (API 2): Weathering, Palette swap and Gradient transforms, a Palette panel, a GIMP colour-palette exporter with options, a pixel-art importer and a Wall tool.
+- [`plugins/reference-planes`](plugins/reference-planes) (API 3): Blender-style reference images as scene objects. This one is a real plugin, released on its own.
 
 Build them from the repository root:
 
@@ -112,12 +115,13 @@ Put `blockdesigner-plugin.json` at the root of the jar (in Gradle, `src/main/res
 | `version`, `author`, `description` | no | Shown in the Plugins window and the install prompt. |
 | `api` | no | The plugin API version the plugin needs (defaults to `1`). |
 
-**API versions.** The current API is **2** (`PluginApi.VERSION`).
+**API versions.** The current API is **3** (`PluginApi.VERSION`).
 
 - `"api": 1`: commands, menu actions, exporters, schematic formats and scene edits (`editWorld`, `editor()`, `addLayer`).
 - `"api": 2`: everything in API 1 plus options, scene events, the block catalog, asset access, transforms, panels, tools, importers, and options / summary / progress for exporters.
+- `"api": 3`: everything in API 2 plus scene objects (`registerObjectType`, `ctx.objects()`).
 
-Declare the lowest version whose features you use. BlockDesigner refuses plugins that ask for a newer API than it has (they show as *needs a newer BlockDesigner* in the Plugins window) and keeps loading older ones, so API 1 plugins run unchanged on an API 2 BlockDesigner.
+Declare the lowest version whose features you use. BlockDesigner refuses plugins that ask for a newer API than it has (they show as *needs a newer BlockDesigner* in the Plugins window) and keeps loading older ones, so API 1 and 2 plugins run unchanged on an API 3 BlockDesigner.
 
 ### The entry point
 
@@ -587,6 +591,66 @@ Families and variants are worked out from block ids and checked against the regi
 
 `NbtIO.readLE` / `NbtIO.writeLE` in `core` read and write little-endian NBT, as used by Bedrock's `.mcstructure`, for a Bedrock format plugin.
 
+## API 3 extension points
+
+Everything in this section needs `"api": 3` in the manifest. The examples come from [`plugins/reference-planes`](plugins/reference-planes/src/main/java/io/blockdesigner/refplanes).
+
+### Scene objects
+
+A `SceneObject` is something in the scene that isn't blocks: a reference image, a guide, a marker. You write what makes your object different: how it draws, its right-click entries and its own state. BlockDesigner handles everything objects have in common:
+
+- **Layers panel:** a row above the layers with your type's badge (`REFERENCE`), with the eye and lock buttons, click to select and double-click to rename.
+- **3D view:** your drawing, with the object's `Pose` applied. A click selects the object, and a right-click opens its menu.
+- **Move and Rotate tools:** they drive the pose (an object moves and turns freely, and Ctrl snaps to whole blocks and 15°). Delete removes the selected object.
+- **Undo and projects:** every change can be undone, and objects are saved in the `.bdproj`. Objects whose plugin is off are kept in the project and come back when it is on again.
+
+Register a `SceneObjectType` in `enable`. `create()` makes an empty object, which `load` fills when a project is opened. A type that lists `extensions()` also takes those files from Import and drag and drop, through `open(file, view)`:
+
+```java
+final class ReferenceType implements SceneObjectType {
+    public String id() { return "reference"; }             // saved in projects: never change it
+    public String name() { return "Reference image"; }
+    public String badge() { return "REFERENCE"; }           // the tag in the Layers panel
+    public SceneObject create() { return new ReferenceImage(ctx, this); }
+    public List<String> extensions() { return List.of("png", "jpg", "jpeg", "gif", "bmp"); }
+
+    public void open(Path file, ViewInfo view) throws IOException {
+        byte[] bytes = Files.readAllBytes(file);
+        String blob = ctx.objects().storeBlob(bytes);        // kept in the project; save the key, not the bytes
+        ReferenceImage ref = new ReferenceImage(ctx, this);
+        // ... set it up from the picture
+        ctx.objects().add(id(), "sketch", new Pose(view.target(), view.side().map(ViewInfo.Side::facing).orElse(new Vec3(0, 0, 0)),
+                new Vec3(16, 16, 16)), ref);                // one undo step; the new object is selected
+    }
+}
+```
+
+The object draws itself in its own space, once per frame of the 3D view, and keeps its state small for undo:
+
+```java
+final class ReferenceImage implements SceneObject {
+    public void draw(ViewInfo view, Drawing out) {
+        if (!settings.visibleIn(view)) return;               // e.g. only when view.isOrthoSide(Side.FRONT)
+        out.image(image(), settings.corners(), settings.uv(), settings.opacity(), settings.depth());
+    }
+
+    public String description(ObjectHandle self) { return "sketch.png · 1920×1080"; }   // under the name in the Layers panel
+    public List<MenuItem> menu(ObjectHandle self) { return ReferenceMenu.items(self, this, type); }
+    public byte[] save() { return settings.encode(); }       // your state only: BlockDesigner keeps the name and pose
+    public void load(byte[] data) throws IOException { settings = ReferenceSettings.decode(data); }
+    public Set<String> blobs() { return Set.of(settings.blob()); }                     // the blobs to save with it
+}
+```
+
+- **`Drawing`:** `image(ImageData, corners, uv, opacity, depth)` draws a picture on a flat four-cornered patch, seen from both sides. UV runs 0..1 across the picture, with v from the top down, and outside 0..1 is see-through. `depth` is `BEHIND_BLOCKS` (a backdrop), `IN_SCENE` (blocks in front hide it) or `IN_FRONT` (over everything). `line(from, to, argb)` draws a line. The images are also what the mouse picks the object by.
+- **`ImageData`:** width, height and ARGB pixels. BlockDesigner uploads each instance to the GPU once, so keep one instance per picture and don't change its pixels. Keep pictures to `ImageData.MAX_SIZE` (4096) a side.
+- **`ViewInfo`:** whether the view is orthographic, which axis view it is (`side()`: FRONT looks north, RIGHT looks west, TOP looks down with north up), and the eye, look direction and orbit target. `Side.facing()` is the rotation that turns something drawn facing +Z towards that view, like Blender's "align to view".
+- **`Pose`:** position, rotation (degrees, XYZ Euler as in Blender) and scale. A point of the object goes to `position + R·(scale∘local)`. It has helpers for `translated`, `rotatedAbout(axis, degrees, pivot)`, `scaledBy`, `toWorld`, `toLocal` and `axis`.
+- **`ObjectHandle`** (BlockDesigner's side of your object): `name()`, `pose()`, `visible()`, `locked()` and their setters, each one undo step. `edit(label, change)` records a change to your own state: it runs `change`, and undo `load`s what `save()` returned before. `refresh()` redraws without an undo step (for a live slider preview). There are also `select()`, `selected()`, `remove()` and `exists()`.
+- **`ctx.objects()`** (`SceneObjects`): your objects (`list()`), `add(...)`, `selected()`, the current `view()`, and blobs. `storeBlob(bytes)` returns a key that is the same for the same bytes, and `blob(key)` reads it back. Only blobs that some object lists in `blobs()` are saved.
+- **Menus:** `menu(self)` returns JavaFX `MenuItem`s, as panels do. `CustomMenuItem` with `hideOnClick` false can hold fields and sliders. BlockDesigner adds Rename, Focus camera, Hide, Lock and Delete after them.
+- **Errors:** an exception from `draw`, `load` or `menu` is logged against your plugin, and the object is skipped for that frame.
+
 ## Rules of the road
 
 - **Threads:** every call into a plugin (`enable`, actions, commands, transforms, panels, tools, events, exporter `summary`) runs on the JavaFX thread. `PluginExporter.export` and `PluginImporter.importFile` run on a background thread; exporters get their own copies of the layers. Do long work on your own thread and come back with `ctx.runOnUiThread(...)` before you touch the scene.
@@ -607,5 +671,6 @@ Families and variants are worked out from block ids and checked against the regi
 - `averageColor` averages the top-face texture, not a rendered inventory icon.
 - `AssetAccess.quads` covers baked block models; block-entity models (chests, banners, signs) aren't included.
 - There is no Bedrock `.mcstructure` format plugin yet, only the little-endian NBT it needs.
+- Scene objects: the Scale tool doesn't drive them yet (use `Pose.scaledBy` from your own menu). They can't be reordered in the Layers panel or selected several at a time. The mouse picks them by their whole image patch, see-through parts included.
 
 The design record, including how each piece is built and tested, is [docs/plugin-api-v2.md](docs/plugin-api-v2.md).

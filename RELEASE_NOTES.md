@@ -1,3 +1,28 @@
+# BlockDesigner 0.4.12
+
+Shapes place blocks facing the right way and can break too, and plugins can now add their own objects to the scene, which the new Reference Planes plugin uses.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.12.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.12.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.12-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Break with shapes.** With a shape chosen in Build mode, left-drag outlines it in red and breaks every block in it when you let go (as in Effortless Building). One undo puts it back.
+- **Plugin objects in the scene (plugin API 3).** Plugins can add their own objects, such as pictures, with a row in Layers, a right-click menu, saving in the project, and Move, Rotate and Scale. The **Reference Planes** plugin, released separately, uses this for reference images.
+
+## Changed
+- **Shapes place blocks the right way round.** Every block in a line, wall, floor or other shape is turned as a click on the face you started from would turn it: stairs, slabs, torches and the rest. Logs, pillars and chains follow the direction of a line.
+
+---
+
 # BlockDesigner 0.4.11
 
 The wheel zooms again in Build mode, shapes end on the side of the block you point at, and notifications move to the bottom left.

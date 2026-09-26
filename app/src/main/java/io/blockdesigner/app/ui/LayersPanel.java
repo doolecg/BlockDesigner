@@ -90,8 +90,95 @@ public final class LayersPanel extends VBox {
                 refreshSoon();
             }
         });
+        // Clicking in the layer list hands the gizmo back from a scene object to the layers.
+        list.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, e -> ws.objects().select(null));
 
-        getChildren().addAll(header, list);
+        objectRows.getStyleClass().add("object-rows");
+        ws.objects().addListener(this::refreshObjectsSoon);
+        refreshObjects();
+        getChildren().addAll(header, objectRows, list);
+    }
+
+    // ---- plugin scene objects ----------------------------------------------------------------------------------
+
+    /** Rows for the plugins' scene objects (reference images…), above the layers, each tagged with its type's badge. */
+    private final VBox objectRows = new VBox(2);
+    private Consumer<io.blockdesigner.app.plugins.SceneObjectStore.Entry> focusObject = o -> {
+    };
+    private boolean objectsQueued;
+
+    /** How "Focus camera" frames a scene object (the viewport). */
+    public void setObjectFocus(Consumer<io.blockdesigner.app.plugins.SceneObjectStore.Entry> focus) {
+        this.focusObject = focus;
+    }
+
+    /** Object changes come in bursts while dragging: rebuild the rows once per pulse. */
+    private void refreshObjectsSoon() {
+        if (objectsQueued) return;
+        objectsQueued = true;
+        javafx.application.Platform.runLater(() -> {
+            objectsQueued = false;
+            refreshObjects();
+        });
+    }
+
+    private void refreshObjects() {
+        List<javafx.scene.Node> rows = new java.util.ArrayList<>();
+        for (var o : ws.objects().list()) rows.add(objectRow(o));
+        objectRows.getChildren().setAll(rows);
+        objectRows.setVisible(!rows.isEmpty());
+        objectRows.setManaged(!rows.isEmpty());
+    }
+
+    private HBox objectRow(io.blockdesigner.app.plugins.SceneObjectStore.Entry o) {
+        FontIcon thumb = new FontIcon(Feather.IMAGE);
+        thumb.getStyleClass().add("object-thumb");
+        Label name = new Label(o.name());
+        name.getStyleClass().add("layer-name");
+        name.setMinWidth(0);
+        Label badge = new Label(o.badge());
+        badge.getStyleClass().addAll("badge", "object-badge");
+        badge.setMinWidth(USE_PREF_SIZE);
+        HBox title = new HBox(6, name, badge);
+        title.setAlignment(Pos.CENTER_LEFT);
+        Label meta = new Label(o.description());
+        meta.getStyleClass().add("layer-meta");
+        meta.setMinWidth(0);
+        VBox text = new VBox(1, title, meta);
+        text.setMinWidth(0);
+        HBox.setHgrow(text, Priority.SOMETIMES);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        ToggleButton lock = new ToggleButton(null, new FontIcon(o.locked() ? Feather.LOCK : Feather.UNLOCK));
+        lock.getStyleClass().addAll("flat", "icon-toggle");
+        lock.setSelected(o.locked());
+        lock.setTooltip(new Tooltip("Lock: drawn, but can't be picked or moved in the view"));
+        lock.setOnAction(e -> o.setLocked(lock.isSelected()));
+        ToggleButton eye = new ToggleButton(null, new FontIcon(o.visible() ? Feather.EYE : Feather.EYE_OFF));
+        eye.getStyleClass().addAll("flat", "icon-toggle");
+        eye.setSelected(!o.visible());
+        eye.setTooltip(new Tooltip("Show / hide"));
+        eye.setOnAction(e -> o.setVisible(!eye.isSelected()));
+        HBox row = new HBox(8, thumb, text, spacer, lock, eye);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().addAll("layer-cell", "object-row");
+        if (o.selected()) row.getStyleClass().add("selected-object");
+        row.setOpacity(o.visible() ? 1 : 0.55);
+        Tooltip.install(row, new Tooltip(o.name() + " · " + o.badge().toLowerCase(java.util.Locale.ROOT)
+                + " from a plugin · click to select (then G / R) · right-click for its options"));
+        row.setOnMouseClicked(e -> {
+            if (e.getButton() != MouseButton.PRIMARY) return;
+            if (e.getClickCount() == 2) ObjectMenus.rename(o);
+            else o.select();
+        });
+        ContextMenu menu = new ContextMenu();
+        row.setOnContextMenuRequested(e -> {
+            // Not selected here: that rebuilds the rows, and the menu's row with them.
+            menu.getItems().setAll(ObjectMenus.items(ws.objects(), o, focusObject));
+            menu.show(row, e.getScreenX(), e.getScreenY());
+            e.consume();
+        });
+        return row;
     }
 
     private boolean refreshQueued;

@@ -62,4 +62,11 @@ public interface PluginHost {
     /** A plugin with tools is about to be disabled: put down its tool if it is the active one. */
     default void pluginUnloading(PluginManager.Plugin plugin) {
     }
+
+    // ---- API 3 ------------------------------------------------------------------------------------------------
+
+    /** The project's scene objects; null to let the plugin manager keep its own (tests). */
+    default SceneObjectStore objects() {
+        return null;
+    }
 }

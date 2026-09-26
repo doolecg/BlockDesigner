@@ -25,6 +25,8 @@ import io.blockdesigner.plugin.PluginPanel;
 import io.blockdesigner.plugin.PluginTool;
 import io.blockdesigner.plugin.PluginTransform;
 import io.blockdesigner.plugin.SceneEvent;
+import io.blockdesigner.plugin.SceneObjectType;
+import io.blockdesigner.plugin.SceneObjects;
 import io.blockdesigner.plugin.Subscription;
 
 import java.io.IOException;
@@ -115,7 +117,10 @@ public final class PluginManager {
         private final List<PluginPanel> panels = new ArrayList<>();
         private final List<PluginImporter> importers = new ArrayList<>();
         private final List<PluginTool> tools = new ArrayList<>();
+        private final List<SceneObjectType> objectTypes = new ArrayList<>();
         private Context context;
+        /** The last scene object failure shown as a toast (a failing draw repeats every frame). */
+        private String lastObjectError;
 
         private Plugin(PluginInfo info, Path jar) {
             this.info = info;
@@ -154,6 +159,7 @@ public final class PluginManager {
             if (!tools.isEmpty()) parts.add(tools.size() + (tools.size() == 1 ? " tool" : " tools"));
             if (!transforms.isEmpty()) parts.add(transforms.size() + (transforms.size() == 1 ? " transform" : " transforms"));
             if (!panels.isEmpty()) parts.add(panels.size() + (panels.size() == 1 ? " panel" : " panels"));
+            if (!objectTypes.isEmpty()) parts.add(objectTypes.size() + (objectTypes.size() == 1 ? " object type" : " object types"));
             return parts.isEmpty() ? "nothing registered" : String.join(" · ", parts);
         }
 
@@ -179,6 +185,7 @@ public final class PluginManager {
     private final BlockCatalog catalog;
     private final io.blockdesigner.plugin.AssetAccess assetAccess;
     private final OptionStore optionStore;
+    private final SceneObjectStore objects;
     private boolean transformCommand;
 
     /**
@@ -201,6 +208,15 @@ public final class PluginManager {
         this.optionStore = new OptionStore(savedOptions);
         this.events = new SceneEventBus(host.scene(), host::selection, host::runLater, (owner, t) -> {
             if (owner instanceof Plugin p) p.log("Event listener failed: " + t);
+        });
+        SceneObjectStore s = host.objects();
+        this.objects = s != null ? s : new SceneObjectStore(host.editor() == null ? null : host.editor().undoStack());
+        objects.setErrors((owner, t) -> {
+            if (!(owner instanceof Plugin p)) return;
+            p.log("Scene object failed: " + t);
+            String msg = t.getMessage() == null ? t.toString() : t.getMessage();
+            if (!msg.equals(p.lastObjectError)) host.toast("✖ " + p.info().name() + ": " + msg);
+            p.lastObjectError = msg;
         });
     }
 
@@ -285,6 +301,11 @@ public final class PluginManager {
     /** Last-used option values per plugin feature. */
     public OptionStore optionStore() {
         return optionStore;
+    }
+
+    /** The plugins' scene objects in the open project. */
+    public SceneObjectStore objects() {
+        return objects;
     }
 
     /** The selection changed: tells plugins listening for {@link SceneEvent.SelectionChanged} (measured via the host). */
@@ -480,6 +501,10 @@ public final class PluginManager {
             }
         }
         p.panels.clear();
+        // Its objects stay in the project, parked until the plugin is back.
+        if (!p.objectTypes.isEmpty()) objects.unregister(p);
+        p.objectTypes.clear();
+        p.lastObjectError = null;
         events.removeAll(p);
         p.context = null;
         if (p.loader != null) {
@@ -533,6 +558,7 @@ public final class PluginManager {
 
     private final class Context implements PluginContext {
         private final Plugin p;
+        private SceneObjects sceneObjects;
 
         Context(Plugin p) {
             this.p = p;
@@ -604,6 +630,18 @@ public final class PluginManager {
                 if (t.id().equals(tool.id())) throw new IllegalArgumentException("Tool id '" + tool.id() + "' registered twice");
             }
             p.tools.add(tool);
+        }
+
+        @Override
+        public void registerObjectType(SceneObjectType type) {
+            objects.register(p, p.info.id(), type);
+            p.objectTypes.add(type);
+        }
+
+        @Override
+        public SceneObjects objects() {
+            if (sceneObjects == null) sceneObjects = objects.forPlugin(p.info.id());
+            return sceneObjects;
         }
 
         @Override

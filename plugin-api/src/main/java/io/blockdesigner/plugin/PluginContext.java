@@ -57,6 +57,12 @@ public interface PluginContext {
     /** Adds a tool to the tool dock over the viewport. Since API 2. */
     void registerTool(PluginTool tool);
 
+    /**
+     * Adds a kind of scene object (see {@link SceneObject}); objects of it saved in the open project appear now. Since
+     * API 3.
+     */
+    void registerObjectType(SceneObjectType type);
+
     // ---- events (API 2) --------------------------------------------------------------------------------------
 
     /**
@@ -102,6 +108,9 @@ public interface PluginContext {
 
     /** Adds a new layer holding {@code blocks} (as one undo step) and makes it active. */
     Layer addLayer(String name, Structure blocks);
+
+    /** The plugin's scene objects: add, list and select them, and store their data. Since API 3. */
+    SceneObjects objects();
 
     // ---- feedback --------------------------------------------------------------------------------------------
 

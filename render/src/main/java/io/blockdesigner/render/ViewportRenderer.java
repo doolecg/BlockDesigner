@@ -54,8 +54,11 @@ public final class ViewportRenderer implements AutoCloseable {
 
     // ---- render-thread state ------------------------------------------------------------------------------------
     private long window;
-    private Shader blockShader, skyShader, gridShader, lineShader;
-    private int atlasTex, emptyVao, gridVao, gridVbo, lineVao, lineVbo, ebo;
+    private Shader blockShader, skyShader, gridShader, lineShader, imageShader;
+    private int atlasTex, emptyVao, gridVao, gridVbo, lineVao, lineVbo, ebo, imageVao, imageVbo;
+    /** Textures of the images in recent frames, by the image's key (identity), and when each was last drawn. */
+    private final Map<Object, int[]> imageTextures = new java.util.IdentityHashMap<>();
+    private long frameCount;
     private int eboQuads;
     private int msaaFbo, msaaColor, msaaDepth, resolveFbo, resolveColor;
     private int fbWidth, fbHeight;
@@ -239,6 +242,16 @@ public final class ViewportRenderer implements AutoCloseable {
         glVertexAttribPointer(0, 3, GL_FLOAT, false, 16, 0);
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, true, 16, 12);
+
+        imageShader = new Shader("image");
+        imageVao = glGenVertexArrays();
+        imageVbo = glGenBuffers();
+        glBindVertexArray(imageVao);
+        glBindBuffer(GL_ARRAY_BUFFER, imageVbo);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, false, 20, 0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, false, 20, 12);
         glBindVertexArray(0);
 
         ebo = glGenBuffers();
@@ -381,6 +394,9 @@ public final class ViewportRenderer implements AutoCloseable {
         skyShader.setRgb("uGround", theme.ground());
         glBindVertexArray(emptyVao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+        frameCount++;
+        // 1b. Images behind every block: on the sky, no depth, so the blocks always cover them
+        drawImages(r, FrameRequest.ImageDepth.BEHIND_BLOCKS);
 
         // 2. Opaque + cutout geometry
         glEnable(GL_DEPTH_TEST);
@@ -434,6 +450,9 @@ public final class ViewportRenderer implements AutoCloseable {
             glEnable(GL_CULL_FACE);
         }
 
+        // 3b. Images placed in the scene: hidden by blocks in front of them
+        drawImages(r, FrameRequest.ImageDepth.IN_SCENE);
+
         // 4. Translucent geometry, farthest sections first
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -462,6 +481,10 @@ public final class ViewportRenderer implements AutoCloseable {
             drawSorted(ld, vis, r.eye());
         }
         glFrontFace(GL_CCW);
+
+        // 5b. Images in front of every block
+        drawImages(r, FrameRequest.ImageDepth.IN_FRONT);
+        dropUnusedImages();
 
         // 6. Overlay lines: a faint always-visible pass, then a crisp depth-tested pass
         if (!r.lines().isEmpty()) drawLines(r.lines(), vp);
@@ -600,6 +623,112 @@ public final class ViewportRenderer implements AutoCloseable {
         glDrawArrays(GL_LINES, 0, lines.size() * 2);
     }
 
+    /**
+     * Draws the frame's images of one depth kind, blended and seen from both sides: behind the blocks without depth,
+     * in the scene depth-tested (farthest first), in front with no depth test. GL state is put back as it was.
+     */
+    private void drawImages(FrameRequest r, FrameRequest.ImageDepth depth) {
+        List<FrameRequest.ImageQuad> quads = new ArrayList<>();
+        for (FrameRequest.ImageQuad q : r.images()) if (q.depth() == depth && q.opacity() > 0) quads.add(q);
+        if (quads.isEmpty()) return;
+        if (depth == FrameRequest.ImageDepth.IN_SCENE) {
+            float[] eye = r.eye();
+            quads.sort((a, b) -> Float.compare(quadDist(b, eye), quadDist(a, eye)));
+        }
+        boolean blend = glIsEnabled(GL_BLEND), cull = glIsEnabled(GL_CULL_FACE), depthTest = glIsEnabled(GL_DEPTH_TEST);
+        boolean depthMask = glGetBoolean(GL_DEPTH_WRITEMASK);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDisable(GL_CULL_FACE);
+        glDepthMask(false);
+        if (depth == FrameRequest.ImageDepth.IN_SCENE) glEnable(GL_DEPTH_TEST);
+        else glDisable(GL_DEPTH_TEST);
+        imageShader.use();
+        imageShader.setMat4("uViewProj", r.viewProj());
+        imageShader.set("uImage", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindVertexArray(imageVao);
+        glBindBuffer(GL_ARRAY_BUFFER, imageVbo);
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer v = stack.mallocFloat(6 * 5);
+            for (FrameRequest.ImageQuad q : quads) {
+                int tex = imageTexture(q);
+                if (tex == 0) continue;
+                glBindTexture(GL_TEXTURE_2D, tex);
+                imageShader.set("uOpacity", Math.min(1f, q.opacity()));
+                v.clear();
+                // Two triangles: corners 0 1 2 and 0 2 3.
+                for (int c : new int[]{0, 1, 2, 0, 2, 3}) {
+                    v.put(q.corners()[c * 3]).put(q.corners()[c * 3 + 1]).put(q.corners()[c * 3 + 2]).put(q.uv()[c * 2]).put(q.uv()[c * 2 + 1]);
+                }
+                v.flip();
+                glBufferData(GL_ARRAY_BUFFER, v, GL_STREAM_DRAW);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+        }
+        glBindTexture(GL_TEXTURE_2D, atlasTex);
+        glBindVertexArray(0);
+        if (!blend) glDisable(GL_BLEND);
+        if (cull) glEnable(GL_CULL_FACE);
+        if (depthTest) glEnable(GL_DEPTH_TEST);
+        else glDisable(GL_DEPTH_TEST);
+        glDepthMask(depthMask);
+    }
+
+    private static float quadDist(FrameRequest.ImageQuad q, float[] eye) {
+        float[] c = q.corners();
+        return dist(eye, (c[0] + c[3] + c[6] + c[9]) / 4, (c[1] + c[4] + c[7] + c[10]) / 4, (c[2] + c[5] + c[8] + c[11]) / 4);
+    }
+
+    /** The texture for an image, uploaded on first use (smooth, mipmapped); 0 if it can't be. */
+    private int imageTexture(FrameRequest.ImageQuad q) {
+        int[] t = imageTextures.get(q.key());
+        if (t == null) {
+            int max = glGetInteger(GL_MAX_TEXTURE_SIZE);
+            int step = Math.max(1, (int) Math.ceil(Math.max(q.width(), q.height()) / (double) max));
+            int w = Math.max(1, q.width() / step), h = Math.max(1, q.height() / step);
+            if (q.argb().length < q.width() * q.height()) return 0;
+            ByteBuffer rgba = MemoryUtil.memAlloc(w * h * 4);
+            try {
+                // Too big for the card: every step-th pixel (the plugin should keep images to ImageData.MAX_SIZE).
+                for (int y = 0; y < h; y++) {
+                    for (int x = 0; x < w; x++) {
+                        int p = q.argb()[y * step * q.width() + x * step];
+                        rgba.put((byte) (p >> 16)).put((byte) (p >> 8)).put((byte) p).put((byte) (p >>> 24));
+                    }
+                }
+                rgba.flip();
+                int tex = glGenTextures();
+                glBindTexture(GL_TEXTURE_2D, tex);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+                glGenerateMipmap(GL_TEXTURE_2D);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                t = new int[]{tex, 0};
+                imageTextures.put(q.key(), t);
+            } finally {
+                MemoryUtil.memFree(rgba);
+            }
+        }
+        t[1] = (int) frameCount;
+        return t[0];
+    }
+
+    /** Frees the textures of images not drawn for a while (replaced pictures, deleted objects). */
+    private void dropUnusedImages() {
+        for (var it = imageTextures.values().iterator(); it.hasNext(); ) {
+            int[] t = it.next();
+            if (frameCount - t[1] > 240) {
+                glDeleteTextures(t[0]);
+                it.remove();
+            }
+        }
+    }
+
     private static float[] invert(float[] m) {
         org.joml.Matrix4f mat = new org.joml.Matrix4f();
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -615,6 +744,8 @@ public final class ViewportRenderer implements AutoCloseable {
     private void dispose() {
         for (Map<Long, GpuSection> m : meshes.values()) m.values().forEach(this::delete);
         meshes.clear();
+        for (int[] t : imageTextures.values()) glDeleteTextures(t[0]);
+        imageTextures.clear();
         if (window != NULL) {
             glfwDestroyWindow(window);
             glfwTerminate();

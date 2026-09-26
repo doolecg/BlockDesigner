@@ -121,6 +121,7 @@ public final class MainWindow {
         // Left: layers over palette
         layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> exportDialog(null, List.of(l)), viewport::frameLayer,
                 viewport::fixLayerShapes));
+        layers.setObjectFocus(viewport::frameObject);
         palette = new BlockPalette(ws);
         SplitPane left = new SplitPane(layers, palette);
         left.setOrientation(javafx.geometry.Orientation.VERTICAL);
@@ -403,6 +404,11 @@ public final class MainWindow {
             @Override
             public void openTransform(io.blockdesigner.app.plugins.PluginManager.Transform transform) {
                 MainWindow.this.openTransform(transform);
+            }
+
+            @Override
+            public io.blockdesigner.app.plugins.SceneObjectStore objects() {
+                return ws.objects();
             }
         };
     }
@@ -1044,17 +1050,22 @@ public final class MainWindow {
 
     /** Every readable extension, including formats and importers added by plugins. */
     private FileChooser.ExtensionFilter schematicFilter() {
-        List<String> exts = java.util.stream.Stream.concat(
+        List<String> exts = java.util.stream.Stream.of(
                         Schematics.formats().stream().filter(SchematicFormat::canRead).flatMap(f -> f.extensions().stream()),
-                        plugins.importers().stream().flatMap(i -> i.importer().extensions().stream()))
-                .distinct().map(e -> "*." + e).toList();
+                        plugins.importers().stream().flatMap(i -> i.importer().extensions().stream()),
+                        ws.objects().extensions().stream())
+                .flatMap(s -> s).distinct().map(e -> "*." + e).toList();
         return new FileChooser.ExtensionFilter("Schematics (" + String.join(", ", exts) + ")", exts);
     }
 
-    /** One filter per plugin importer, after the combined one. */
+    /** One filter per plugin importer and per scene object type that opens files, after the combined one. */
     private List<FileChooser.ExtensionFilter> importerFilters() {
-        return plugins.importers().stream().map(i -> new FileChooser.ExtensionFilter(i.importer().displayName(),
-                i.importer().extensions().stream().map(e -> "*." + e).toList())).toList();
+        List<FileChooser.ExtensionFilter> out = new ArrayList<>(plugins.importers().stream().map(i -> new FileChooser.ExtensionFilter(i.importer().displayName(),
+                i.importer().extensions().stream().map(e -> "*." + e).toList())).toList());
+        for (var r : ws.objects().fileTypes()) {
+            out.add(new FileChooser.ExtensionFilter(r.type().name(), r.type().extensions().stream().map(e -> "*." + e).toList()));
+        }
+        return out;
     }
 
     private File initialDir() {
@@ -1082,6 +1093,15 @@ public final class MainWindow {
     public void importFile(Path file) {
         if (!Schematics.isSupported(file)) {
             var imp = plugins.importerFor(file);
+            var types = ws.objects().typesFor(file);
+            if (!types.isEmpty()) {
+                Object pick = imp.isEmpty() && types.size() == 1 ? types.getFirst() : chooseImport(file, imp.orElse(null), types);
+                if (pick == null) return;
+                if (pick instanceof io.blockdesigner.app.plugins.SceneObjectStore.Registered r) {
+                    openAsObject(r, file);
+                    return;
+                }
+            }
             if (imp.isPresent()) {
                 importWithPlugin(imp.get(), file);
                 return;
@@ -1112,6 +1132,35 @@ public final class MainWindow {
             if (ws.projectNameProperty().get().equals("Untitled") && ws.scene().layers().isEmpty()) ws.projectNameProperty().set(sf.name());
             viewport.beginPlacement(layers, null);
         }, Platform::runLater).exceptionally(this::fail);
+    }
+
+    /**
+     * A file that a plugin importer and scene object types (or several types) all take, such as an image (pixel art or
+     * a reference image?): asks which. Returns the importer, the type, or null when cancelled.
+     */
+    private Object chooseImport(Path file, io.blockdesigner.app.plugins.PluginManager.Import imp,
+                                List<io.blockdesigner.app.plugins.SceneObjectStore.Registered> types) {
+        Map<String, Object> choices = new java.util.LinkedHashMap<>();
+        for (var t : types) choices.put(t.type().name(), t);
+        if (imp != null) choices.put(imp.importer().displayName(), imp);
+        javafx.scene.control.ChoiceDialog<String> d = new javafx.scene.control.ChoiceDialog<>(choices.keySet().iterator().next(), choices.keySet());
+        d.initOwner(stage);
+        d.setTitle("Import " + file.getFileName());
+        d.setHeaderText("Import " + file.getFileName() + " as…");
+        d.setContentText("As");
+        return d.showAndWait().map(choices::get).orElse(null);
+    }
+
+    /** Hands a file to a plugin's scene object type (a reference image from a picture, say). */
+    private void openAsObject(io.blockdesigner.app.plugins.SceneObjectStore.Registered r, Path file) {
+        try {
+            r.type().open(file, ws.objects().view());
+            ws.statusProperty().set("Added " + file.getFileName() + " as " + r.type().name());
+        } catch (java.io.IOException e) {
+            error("Could not open " + file.getFileName(), e.getMessage());
+        } catch (Throwable t) {
+            if (r.owner() instanceof io.blockdesigner.app.plugins.PluginManager.Plugin p) plugins.report(p, r.type().name(), t);
+        }
     }
 
     /** Imports through a plugin: asks for its options (if any), reads on a background thread, then starts placement. */
@@ -1214,11 +1263,14 @@ public final class MainWindow {
     private void projectExtrasLoaded(Map<String, byte[]> extras) {
         // The block selection, selected entities and WorldEdit region come back as they were saved.
         viewport.loadSelectionExtras(extras);
+        // Plugin scene objects (those of plugins that are off wait, parked, until the plugin is on again).
+        ws.objects().load(extras);
         extrasLoader.accept(extras);
     }
 
     private Map<String, byte[]> projectExtras() {
         Map<String, byte[]> out = new java.util.LinkedHashMap<>(viewport.selectionExtras());
+        out.putAll(ws.objects().save());
         out.putAll(extrasSaver.get());
         return out;
     }
@@ -1611,7 +1663,8 @@ public final class MainWindow {
             if (files == null || files.isEmpty()) return;
             for (File f : files) {
                 if (f.getName().endsWith("." + ProjectFile.EXTENSION)) openProject(f.toPath());
-                else if (Schematics.isSupported(f.toPath()) || plugins.importerFor(f.toPath()).isPresent()) importFile(f.toPath());
+                else if (Schematics.isSupported(f.toPath()) || plugins.importerFor(f.toPath()).isPresent()
+                        || !ws.objects().typesFor(f.toPath()).isEmpty()) importFile(f.toPath());
             }
             e.setDropCompleted(true);
         });

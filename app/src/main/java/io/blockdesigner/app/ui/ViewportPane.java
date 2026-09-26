@@ -145,17 +145,37 @@ public final class ViewportPane extends StackPane {
         /** Normal of the face the drag started on: shapes that follow the face grow along it. */
         final BlockPos up;
         final boolean replace;
+        /** Left-dragged: the shape breaks the blocks in it instead of placing. */
+        final boolean breaking;
+        /** How the start was aimed at (face, point, look), so every block is placed as a click there would place it. */
+        final BlockPlacement.Context start;
         BlockPos end;
         int height = 1;
         List<BlockPos> cells = List.of();
         boolean tooBig;
 
-        ShapeDrag(io.blockdesigner.core.place.ShapeTool.Shape shape, BlockPos anchor, BlockPos up, boolean replace) {
+        ShapeDrag(io.blockdesigner.core.place.ShapeTool.Shape shape, BlockPos anchor, BlockPos up, boolean replace, boolean breaking,
+                  BlockPlacement.Context start) {
             this.shape = shape;
             this.anchor = anchor;
             this.up = up;
             this.replace = replace;
+            this.breaking = breaking;
+            this.start = start;
             this.end = anchor;
+        }
+
+        /** The start's aim moved to {@code p}: the same face, the same point on it and the same look. */
+        BlockPlacement.Context at(BlockPos p) {
+            int dx = p.x() - anchor.x(), dy = p.y() - anchor.y(), dz = p.z() - anchor.z();
+            BlockPlacement.Context c = start;
+            return new BlockPlacement.Context(p, c.clicked() == null ? null : c.clicked().add(dx, dy, dz), c.face(),
+                    c.hitX() + dx, c.hitY() + dy, c.hitZ() + dz, c.lookX(), c.lookY(), c.lookZ());
+        }
+
+        /** The mouse button that drags this shape out: left breaks, right places. */
+        MouseButton button() {
+            return breaking ? MouseButton.PRIMARY : MouseButton.SECONDARY;
         }
     }
     private MouseButton dragButton;
@@ -443,6 +463,9 @@ public final class ViewportPane extends StackPane {
             if (b != ToolKind.PLUGIN && pluginTool != null) setPluginTool(null, null);
         });
         ws.editor().undoStack().addListener(this::requestRedraw);
+        // Plugin scene objects redraw when they change, and ask how the view looks (objects shown only in some views).
+        ws.objects().addListener(this::requestRedraw);
+        ws.objects().setView(this::viewInfo);
         ws.scene().addListener(new Scene.Listener() {
             @Override
             public void layerAdded(Layer layer, int index) {
@@ -627,6 +650,7 @@ public final class ViewportPane extends StackPane {
         drawShapePreview(lines);
         drawPluginPreview(lines);
         drawSymmetry(lines);
+        List<FrameRequest.ImageQuad> images = drawObjects(lines);
         updateGizmo();
 
         Optional<Box> sb = ws.scene().worldBounds();
@@ -635,7 +659,7 @@ public final class ViewportPane extends StackPane {
         return new FrameRequest(w, h, vp, new float[]{eye.x, eye.y, eye.z}, draws, lines,
                 AppTheme.byId(ws.themeProperty().get()).viewport(ws.darkProperty().get()),
                 ws.settings().showGrid, gridY, gc, ++sequence,
-                ws.settings().fog && !camera.orthoActive() ? (float) ws.settings().fogDistance : Float.POSITIVE_INFINITY);
+                ws.settings().fog && !camera.orthoActive() ? (float) ws.settings().fogDistance : Float.POSITIVE_INFINITY, images);
     }
 
     /** Renders the current scene from the given camera, without overlays (screenshots). */
@@ -648,7 +672,7 @@ public final class ViewportPane extends StackPane {
         copyCamera(saved, camera);
         // Drop overlays for clean captures.
         FrameRequest clean = new FrameRequest(req.width(), req.height(), req.viewProj(), req.eye(), req.layers(), List.of(), req.theme(),
-                req.showGrid(), req.gridY(), req.gridCenter(), req.sequence(), req.fogDistance());
+                req.showGrid(), req.gridY(), req.gridCenter(), req.sequence(), req.fogDistance(), req.images());
         return gpu.capture(clean);
     }
 
@@ -1053,7 +1077,7 @@ public final class ViewportPane extends StackPane {
         }
         if (shapeDrag != null) {
             // Any other button while dragging a shape cancels it.
-            if (e.getButton() != MouseButton.SECONDARY) cancelShape();
+            if (e.getButton() != shapeDrag.button()) cancelShape();
             e.consume();
             return;
         }
@@ -1078,9 +1102,11 @@ public final class ViewportPane extends StackPane {
                 startStroke(e.getButton() == MouseButton.SECONDARY ? io.blockdesigner.core.edit.Sculpt.Mode.SMOOTH : null, false, false);
             } else if (mode == ToolKind.BUILD) {
                 switch (e.getButton()) {
-                    case PRIMARY -> startHold(Action.BREAK);
+                    case PRIMARY -> {
+                        if (!beginShape(true)) startHold(Action.BREAK);
+                    }
                     case SECONDARY -> {
-                        if (!beginShape()) startHold(Action.PLACE);
+                        if (!beginShape(false)) startHold(Action.PLACE);
                     }
                     case MIDDLE -> pickBlock();
                     default -> {
@@ -1125,7 +1151,7 @@ public final class ViewportPane extends StackPane {
         }
         if (e.getButton() == MouseButton.SECONDARY && mode == ToolKind.BUILD && placing.isEmpty()) {
             updateHover(e.getX(), e.getY());
-            if (!beginShape()) startHold(Action.PLACE);
+            if (!beginShape(false)) startHold(Action.PLACE);
             else updateShapeEnd(e.getX(), e.getY());
             return;
         }
@@ -1144,7 +1170,11 @@ public final class ViewportPane extends StackPane {
             case SELECT -> {
                 // Selection happens on release: a click selects one block, a drag draws a marquee.
             }
-            case BUILD -> startHold(Action.BREAK);
+            case BUILD -> {
+                // With a shape chosen, a left-drag breaks that shape (as Effortless Building does).
+                if (!beginShape(true)) startHold(Action.BREAK);
+                else updateShapeEnd(e.getX(), e.getY());
+            }
             case MOVE, ROTATE, SCALE -> {
                 // A click on a layer selects it on release (see onRelease).
             }
@@ -1201,6 +1231,7 @@ public final class ViewportPane extends StackPane {
         }
         if (dragButton != MouseButton.PRIMARY) return;
         if (gizmoDrag != null) {
+            snapDrag = e.isShortcutDown();
             dragGizmo(e.getX(), e.getY());
             return;
         }
@@ -1217,7 +1248,7 @@ public final class ViewportPane extends StackPane {
 
     private void onRelease(MouseEvent e) {
         if (onUi(e) && stroke == null && holdAction == null && shapeDrag == null && gizmoDrag == null) return;
-        if (shapeDrag != null && e.getButton() == MouseButton.SECONDARY) {
+        if (shapeDrag != null && e.getButton() == shapeDrag.button()) {
             commitShape();
             dragButton = null;
             if (fly) e.consume();
@@ -1251,7 +1282,8 @@ public final class ViewportPane extends StackPane {
         if (e.getButton() == MouseButton.PRIMARY && click && isGizmoTool() && placing.isEmpty()) {
             // Move / Rotate tools: clicking a layer selects it (Shift adds or removes), so its gizmo appears.
             updateHover(e.getX(), e.getY());
-            if (hover != null) {
+            // A scene object there takes the click (and the gizmo) instead.
+            if (!clickObject(e.getX(), e.getY()) && hover != null) {
                 Layer l = hover.layer();
                 if (e.isShiftDown()) {
                     if (ws.selectedLayers().contains(l) && ws.selectedLayers().size() > 1) ws.selectedLayers().remove(l);
@@ -1264,6 +1296,10 @@ public final class ViewportPane extends StackPane {
             }
         }
         if (e.getButton() == MouseButton.MIDDLE && click) pickBlock();
+        if (e.getButton() == MouseButton.SECONDARY && click && placing.isEmpty() && showObjectMenu(e)) {
+            dragButton = null;
+            return;
+        }
         if (e.getButton() == MouseButton.SECONDARY && click && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
             // WorldEdit: right-click sets pos2; Shift+right-click opens the menu.
             updateHover(e.getX(), e.getY());
@@ -1274,6 +1310,10 @@ public final class ViewportPane extends StackPane {
             if (marquee.isVisible()) {
                 marqueeSelect(Math.min(pressX, e.getX()), Math.min(pressY, e.getY()), Math.max(pressX, e.getX()), Math.max(pressY, e.getY()),
                         e.isShiftDown(), e.isShortcutDown());
+            } else if (click && !e.isShiftDown() && !e.isShortcutDown() && clickObject(e.getX(), e.getY())) {
+                // A click on a scene object selects it (G / R then move or turn it).
+                showToast(ws.objects().selected().map(o -> o.name() + " · " + keyText(Keybinds.Action.TOOL_MOVE) + " move · "
+                        + keyText(Keybinds.Action.TOOL_ROTATE) + " rotate · right-click for options").orElse(""));
             } else if (click) {
                 // WorldEdit: a plain click sets pos1; Shift / Ctrl still add or toggle single blocks.
                 updateHover(e.getX(), e.getY());
@@ -1431,6 +1471,7 @@ public final class ViewportPane extends StackPane {
                 else if (fly) setFly(false);
                 else if (!placing.isEmpty()) cancelPlacement();
                 else if (!blockSel.isEmpty() || !entitySel.isEmpty() || worldEdit.region() != null) clearRegionAndSelection();
+                else if (ws.objects().selected().isPresent()) ws.objects().select(null);
                 else ws.toolProperty().set(ToolKind.SELECT);
             }
             case DELETE -> {
@@ -1441,6 +1482,10 @@ public final class ViewportPane extends StackPane {
                             : "Removed " + BlockInfoHud.name(ws.assets(), removed) + " from the hotbar");
                 } else if (!blockSel.isEmpty() || !entitySel.isEmpty()) {
                     deleteSelectedBlocks();
+                } else if (objectTarget() != null) {
+                    var o = objectTarget();
+                    o.remove();
+                    showToast("Deleted " + o.name() + " · " + Keybinds.keyOf(Keybinds.Action.UNDO) + " to undo");
                 } else {
                     return false;
                 }
@@ -1723,19 +1768,24 @@ public final class ViewportPane extends StackPane {
      * Minecraft would from the aimed face, the point on it and the look direction (see {@link BlockPlacement}).
      */
     private java.util.Map<BlockPos, BlockState> placementFor(LayeredEdit le, BlockPos world, BlockState held) {
+        return BlockPlacement.place(held, placementContext(world), le::get, placementBlocks());
+    }
+
+    /** A placement at {@code world} from the current aim: the aimed face, the point on it and the look direction. */
+    private BlockPlacement.Context placementContext(BlockPos world) {
         Vector3f[] r = ray(aimX(), aimY());
         Vector3f dir = new Vector3f(r[1]).normalize();
-        BlockPlacement.Context ctx;
         if (hover != null) {
             Vector3f hit = new Vector3f(dir).mul(hover.distance()).add(r[0]);
-            ctx = new BlockPlacement.Context(world, hover.world(), BlockPlacement.Dir.of(hover.normal()), hit.x, hit.y, hit.z, dir.x, dir.y, dir.z);
-        } else {
-            ctx = new BlockPlacement.Context(world, null, BlockPlacement.Dir.UP, world.x() + 0.5, world.y(), world.z() + 0.5, dir.x, dir.y, dir.z);
+            return new BlockPlacement.Context(world, hover.world(), BlockPlacement.Dir.of(hover.normal()), hit.x, hit.y, hit.z, dir.x, dir.y, dir.z);
         }
+        return new BlockPlacement.Context(world, null, BlockPlacement.Dir.UP, world.x() + 0.5, world.y(), world.z() + 0.5, dir.x, dir.y, dir.z);
+    }
+
+    private BlockPlacement.Blocks placementBlocks() {
         BlockAssets assets = ws.assets();
-        BlockPlacement.Blocks blocks = assets == null ? BlockPlacement.Blocks.NONE
+        return assets == null ? BlockPlacement.Blocks.NONE
                 : id -> assets.registry().get(id).map(i -> new BlockPlacement.Info(i.defaultState(), i.properties())).orElse(null);
-        return BlockPlacement.place(held, ctx, le::get, blocks);
     }
 
     /** Visible layers (not the ones being placed), bottom first: what edits read, as the view shows them. */
@@ -2479,6 +2529,10 @@ public final class ViewportPane extends StackPane {
         java.util.Map<Layer, Layer> lifted;
         /** The selection before the drag, restored on cancel. */
         java.util.Map<String, java.util.Set<Long>> selBefore;
+        /** Dragging a plugin scene object instead (freely, not by whole blocks or quarter turns). */
+        io.blockdesigner.app.plugins.ObjectDrag object;
+        /** The object drag is a Scale tool drag. */
+        boolean objectScale;
         // Scale: each layer's blocks as they were, the factor shown and the screen distance the centre drag started at
         java.util.Map<Layer, ScaleSource> scaleFrom;
         float[] factor = {1, 1, 1};
@@ -2534,7 +2588,11 @@ public final class ViewportPane extends StackPane {
                 };
         Vector3f pivot = null;
         gizmo.scaleShown(gizmoDrag != null && mode == Gizmo.Mode.SCALE ? gizmoDrag.factor : null);
-        if (mode != null) {
+        if (mode != null && (gizmoDrag != null ? gizmoDrag.object != null : objectTarget() != null)) {
+            // A selected scene object has the gizmo at its origin.
+            pivot = gizmoDrag != null && mode != Gizmo.Mode.MOVE ? gizmoDrag.pivot
+                    : toVector(gizmoDrag != null ? gizmoDrag.object.entry().pose().position() : objectTarget().pose().position());
+        } else if (mode != null) {
             // Rotation and scaling work about a fixed point; a move carries the gizmo along with the layers.
             pivot = gizmoDrag != null && mode != Gizmo.Mode.MOVE ? gizmoDrag.pivot
                     : gizmoDrag != null ? boundsCenter(gizmoDrag.layers)
@@ -2544,6 +2602,10 @@ public final class ViewportPane extends StackPane {
     }
 
     private void beginGizmoDrag(Gizmo.Handle h, double x, double y) {
+        if (objectTarget() != null) {
+            beginObjectDrag(h, x, y);
+            return;
+        }
         boolean selection = movableSelection();
         List<Layer> layers = selection ? List.of() : gizmoTargets();
         Vector3f pivot = selection ? selectionCenter() : boundsCenter(layers);
@@ -2595,6 +2657,10 @@ public final class ViewportPane extends StackPane {
     private void dragGizmo(double x, double y) {
         GizmoDrag d = gizmoDrag;
         Vector3f[] r = ray(x, y);
+        if (d.object != null) {
+            dragObject(d, r, x, y);
+            return;
+        }
         if (d.scaleFrom != null) {
             dragScale(d, r, x, y);
             return;
@@ -2749,6 +2815,11 @@ public final class ViewportPane extends StackPane {
     private void endGizmoDrag() {
         GizmoDrag d = gizmoDrag;
         gizmoDrag = null;
+        if (d.object != null) {
+            d.object.commit();
+            requestRedraw();
+            return;
+        }
         if (d.lifted != null) dropSelection(d.lifted);
         ws.editor().undoStack().endGroup();
         requestRedraw();
@@ -2757,6 +2828,12 @@ public final class ViewportPane extends StackPane {
     private void cancelGizmoDrag() {
         GizmoDrag d = gizmoDrag;
         gizmoDrag = null;
+        if (d.object != null) {
+            d.object.cancel();
+            showToast("Cancelled");
+            requestRedraw();
+            return;
+        }
         // A lifted selection always changed the layers, so it is always undone.
         if (d.lifted != null) dropSelection(d.lifted);
         ws.editor().undoStack().endGroup();
@@ -2766,6 +2843,187 @@ public final class ViewportPane extends StackPane {
             blockSel.putAll(d.selBefore);
         }
         showToast("Cancelled");
+        requestRedraw();
+    }
+
+    // ---- plugin scene objects ----------------------------------------------------------------------------------
+
+    /** Ctrl held during a gizmo drag: scene objects snap to whole blocks and 15° steps. */
+    private boolean snapDrag;
+
+    /** The selected scene object when the gizmo tools can take it (shown, visible, unlocked), or null. */
+    private io.blockdesigner.app.plugins.SceneObjectStore.Entry objectTarget() {
+        return ws.objects().selected().filter(o -> o.exists() && o.visible() && !o.locked()).orElse(null);
+    }
+
+    private static Vector3f toVector(io.blockdesigner.plugin.ToolEvent.Vec3 v) {
+        return new Vector3f((float) v.x(), (float) v.y(), (float) v.z());
+    }
+
+    private static io.blockdesigner.plugin.ToolEvent.Vec3 toVec3(Vector3f v) {
+        return new io.blockdesigner.plugin.ToolEvent.Vec3(v.x, v.y, v.z);
+    }
+
+    /** How the view looks now, for scene objects (some show only in one orthographic view). */
+    private io.blockdesigner.plugin.ViewInfo viewInfo() {
+        ViewCube.View v = ViewCube.View.of(camera);
+        return new io.blockdesigner.plugin.ViewInfo(camera.orthoActive(),
+                Optional.ofNullable(v).map(s -> io.blockdesigner.plugin.ViewInfo.Side.valueOf(s.name())),
+                toVec3(camera.viewEye()), toVec3(camera.forward()), toVec3(camera.target()));
+    }
+
+    /** The scene objects' images for the renderer, their lines, and an outline round the selected object. */
+    private List<FrameRequest.ImageQuad> drawObjects(List<FrameRequest.Line> lines) {
+        var drawn = ws.objects().draw(viewInfo());
+        var selected = ws.objects().selected().orElse(null);
+        List<FrameRequest.ImageQuad> out = new ArrayList<>();
+        for (var im : drawn.images()) {
+            float[] c = new float[12], uv = new float[8];
+            for (int i = 0; i < 12; i++) c[i] = (float) im.corners()[i];
+            for (int i = 0; i < 8; i++) uv[i] = (float) im.uv()[i];
+            out.add(new FrameRequest.ImageQuad(im.image(), im.image().width(), im.image().height(), im.image().argb(), c, uv,
+                    (float) im.opacity(), FrameRequest.ImageDepth.valueOf(im.depth().name())));
+            if (im.entry() != selected) continue;
+            int color = im.entry().locked() ? 0xAAFFFFFF : accent();
+            for (int i = 0; i < 4; i++) {
+                int j = (i + 1) % 4;
+                lines.add(new FrameRequest.Line(c[i * 3], c[i * 3 + 1], c[i * 3 + 2], c[j * 3], c[j * 3 + 1], c[j * 3 + 2], color));
+            }
+        }
+        for (var l : drawn.lines()) {
+            lines.add(new FrameRequest.Line((float) l.from().x(), (float) l.from().y(), (float) l.from().z(),
+                    (float) l.to().x(), (float) l.to().y(), (float) l.to().z(), l.argb()));
+        }
+        return out;
+    }
+
+    /**
+     * The scene object under the mouse: one drawn in front of the blocks, or the nearest one no block hides; null for
+     * none. Locked objects count only for the right-click menu (to unlock them).
+     */
+    private io.blockdesigner.app.plugins.SceneObjectStore.Entry pickObject(double x, double y, boolean locked) {
+        if (ws.objects().list().isEmpty()) return null;
+        Vector3f[] r = ray(x, y);
+        double before = pick(x, y).map(h -> (double) h.distance()).orElse(Double.MAX_VALUE);
+        return ws.objects().draw(viewInfo()).pick(toVec3(r[0]), toVec3(new Vector3f(r[1]).normalize()), before, locked).orElse(null);
+    }
+
+    /** A click in Select mode or with a gizmo tool: selects the scene object there (or none); true when there was one. */
+    private boolean clickObject(double x, double y) {
+        var obj = pickObject(x, y, false);
+        ws.objects().select(obj);
+        return obj != null;
+    }
+
+    /** Right-click on a scene object (not while building or painting): its menu. False when there is none there. */
+    private boolean showObjectMenu(MouseEvent e) {
+        ToolKind t = ws.toolProperty().get();
+        if (t == ToolKind.BUILD || t == ToolKind.BRUSH || t == ToolKind.ERASER || t == ToolKind.PLUGIN) return false;
+        var obj = pickObject(e.getX(), e.getY(), true);
+        if (obj == null) return false;
+        obj.select();
+        contextMenu.getItems().setAll(ObjectMenus.items(ws.objects(), obj, this::frameObject));
+        contextMenu.show(this, e.getScreenX(), e.getScreenY());
+        return true;
+    }
+
+    /** Frames a scene object: what it draws in this view, or the space round its origin. */
+    public void frameObject(io.blockdesigner.app.plugins.SceneObjectStore.Entry o) {
+        float[] b = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+        for (var im : ws.objects().draw(viewInfo()).images()) {
+            if (im.entry() != o) continue;
+            for (int i = 0; i < 12; i++) {
+                b[i % 3] = Math.min(b[i % 3], (float) im.corners()[i]);
+                b[3 + i % 3] = Math.max(b[3 + i % 3], (float) im.corners()[i]);
+            }
+        }
+        if (b[0] > b[3]) {
+            Vector3f p = toVector(o.pose().position());
+            b = new float[]{p.x - 1, p.y - 1, p.z - 1, p.x + 1, p.y + 1, p.z + 1};
+        }
+        camera.frame(b[0], b[1], b[2], b[3], b[4], b[5]);
+        requestRedraw();
+    }
+
+    /** Starts a gizmo drag on the selected scene object. */
+    private void beginObjectDrag(Gizmo.Handle h, double x, double y) {
+        GizmoDrag d = new GizmoDrag();
+        d.handle = h;
+        d.object = new io.blockdesigner.app.plugins.ObjectDrag(objectTarget());
+        d.pivot = toVector(d.object.pivot());
+        Vector3f[] r = ray(x, y);
+        switch (h.kind()) {
+            case AXIS -> d.startT = axisParam(r, d.pivot, Gizmo.AXES[h.axis()]);
+            case PLANE, FREE -> {
+                d.startHit = planeHit(r, d.pivot, h.kind() == Gizmo.Kind.FREE ? camera.forward() : Gizmo.AXES[h.axis()]);
+                if (d.startHit == null) return;
+            }
+            case RING -> d.lastAngle = screenAngle(x, y);
+        }
+        if (ws.toolProperty().get() == ToolKind.SCALE) {
+            // Scaling measures from the origin: along the grabbed axis, or the screen distance from the centre.
+            d.objectScale = true;
+            double[] c = gizmo.center();
+            d.startDist = c == null ? 0 : Math.max(24, Math.hypot(x - c[0], y - c[1]));
+            if (h.kind() == Gizmo.Kind.AXIS && Math.abs(d.startT) < 0.1f * gizmo.size()) d.startT = gizmo.size();
+        }
+        gizmoDrag = d;
+        requestRedraw();
+    }
+
+    /** A gizmo drag on a scene object: free moves and whole-degree turns; Ctrl snaps to whole blocks and 15°. */
+    private void dragObject(GizmoDrag d, Vector3f[] r, double x, double y) {
+        if (d.objectScale) {
+            float f;
+            if (d.handle.kind() == Gizmo.Kind.AXIS) {
+                f = axisParam(r, d.pivot, Gizmo.AXES[d.handle.axis()]) / d.startT;
+            } else {
+                double[] c = gizmo.center();
+                if (c == null) return;
+                f = (float) (Math.hypot(x - c[0], y - c[1]) / d.startDist);
+            }
+            // Ctrl snaps to tenths.
+            f = Math.clamp(snapDrag ? Math.round(f * 10) / 10f : f, 0.01f, 100f);
+            float[] k = d.handle.kind() == Gizmo.Kind.AXIS ? new float[]{1, 1, 1} : new float[]{f, f, f};
+            if (d.handle.kind() == Gizmo.Kind.AXIS) k[d.handle.axis()] = f;
+            d.factor = k;
+            d.object.scale(k[0], k[1], k[2]);
+            showToast("Scale" + (d.handle.kind() == Gizmo.Kind.AXIS ? " " + Gizmo.axisName(d.handle.axis()) : "")
+                    + " ×" + String.format(java.util.Locale.ROOT, "%.2f", f) + (snapDrag ? "" : " · Ctrl snaps to 0.1"));
+            requestRedraw();
+            return;
+        }
+        if (d.handle.kind() == Gizmo.Kind.RING) {
+            double a = screenAngle(x, y), da = a - d.lastAngle;
+            if (da > Math.PI) da -= 2 * Math.PI;
+            if (da < -Math.PI) da += 2 * Math.PI;
+            d.angle += da;
+            d.lastAngle = a;
+            Vector3f axis = Gizmo.AXES[d.handle.axis()];
+            double signed = Math.toDegrees(d.angle) * (axis.dot(new Vector3f(camera.eye()).sub(d.pivot)) >= 0 ? 1 : -1);
+            double step = snapDrag ? 15 : 1, deg = Math.round(signed / step) * step;
+            d.object.rotate(d.handle.axis(), deg);
+            showToast("Rotate " + Gizmo.axisName(d.handle.axis()) + " " + Math.round(deg) + "°" + (snapDrag ? "" : " · Ctrl snaps to 15°"));
+            requestRedraw();
+            return;
+        }
+        float[] want = new float[3];
+        switch (d.handle.kind()) {
+            case AXIS -> want[d.handle.axis()] = axisParam(r, d.pivot, Gizmo.AXES[d.handle.axis()]) - d.startT;
+            case PLANE, FREE -> {
+                boolean free = d.handle.kind() == Gizmo.Kind.FREE;
+                Vector3f hit = planeHit(r, d.pivot, free ? camera.forward() : Gizmo.AXES[d.handle.axis()]);
+                if (hit == null) return;
+                Vector3f diff = hit.sub(d.startHit);
+                float[] c = {diff.x, diff.y, diff.z};
+                for (int i = 0; i < 3; i++) if (free || i != d.handle.axis()) want[i] = c[i];
+            }
+            default -> {
+            }
+        }
+        if (snapDrag) for (int i = 0; i < 3; i++) want[i] = Math.round(want[i]);
+        d.object.move(want[0], want[1], want[2]);
+        showToast(String.format(java.util.Locale.ROOT, "Δ %.2f, %.2f, %.2f", want[0], want[1], want[2]) + (snapDrag ? "" : " · Ctrl snaps to blocks"));
         requestRedraw();
     }
 
@@ -4324,11 +4582,23 @@ public final class ViewportPane extends StackPane {
         requestRedraw();
     }
 
-    /** Starts a shape at the aimed cell; returns false when no shape is chosen (single placing) or nothing is aimed at. */
-    private boolean beginShape() {
+    /**
+     * Starts a shape at the aimed cell (the aimed block itself when {@code breaking}); returns false when no shape is
+     * chosen (single placing / breaking) or, breaking, when no block is aimed at.
+     */
+    private boolean beginShape(boolean breaking) {
         var s = shape();
+        if (s == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE || !placing.isEmpty()) return false;
+        if (breaking) {
+            // A mob under the aim is broken on its own.
+            if (hover == null || hoverEntity != null) return false;
+            shapeDrag = new ShapeDrag(s, hover.world(), hover.normal() != null ? hover.normal() : new BlockPos(0, 1, 0), false, true,
+                    placementContext(hover.world()));
+            refreshShape();
+            return true;
+        }
         // Shapes are for blocks: holding a mob places just the one.
-        if (s == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE || !placing.isEmpty() || ws.heldEntityProperty().get() != null) return false;
+        if (ws.heldEntityProperty().get() != null) return false;
         if (ws.blockToPlace() == null) {
             showToast("Empty hand · pick a block (middle-click), choose a hotbar slot or click one in the palette");
             return true;
@@ -4338,7 +4608,7 @@ public final class ViewportPane extends StackPane {
         if (start == null) return true;
         // Started on a block, the shape grows out of the aimed face (up, down or sideways); on the ground it grows up.
         BlockPos up = hover != null && hover.normal() != null ? hover.normal() : new BlockPos(0, 1, 0);
-        shapeDrag = new ShapeDrag(s, start, up, replace);
+        shapeDrag = new ShapeDrag(s, start, up, replace, false, placementContext(start));
         refreshShape();
         return true;
     }
@@ -4358,7 +4628,7 @@ public final class ViewportPane extends StackPane {
         // the start, whenever that cell lies on the shape's line or plane.
         Picker.Hit aimed = pick(x, y).orElse(null);
         if (aimed != null) {
-            BlockPos c = shapeDrag.replace ? aimed.world() : aimed.adjacentWorld();
+            BlockPos c = shapeDrag.replace || shapeDrag.breaking ? aimed.world() : aimed.adjacentWorld();
             if (onShapeGuide(c)) return c;
         }
         Vector3f[] r = ray(x, y);
@@ -4449,7 +4719,7 @@ public final class ViewportPane extends StackPane {
         String text = sd.tooBig ? sd.shape.label + " · too big (over " + String.format("%,d", io.blockdesigner.core.place.ShapeTool.MAX_BLOCKS) + " blocks)"
                 : sd.shape.label + size + " · " + String.format("%,d", sd.cells.size()) + " block" + (sd.cells.size() == 1 ? "" : "s")
                 + (sd.shape.usesHeight() ? " · wheel: height " + sd.height : "") + (sd.replace ? " · replacing" : "")
-                + " · release to place" + keyNote(Keybinds.Action.CANCEL, "cancels");
+                + (sd.breaking ? " · release to break" : " · release to place") + keyNote(Keybinds.Action.CANCEL, "cancels");
         shapeInfo.setText(text);
         shapeInfo.setOpacity(1);
         shapeInfo.setVisible(true);
@@ -4473,18 +4743,47 @@ public final class ViewportPane extends StackPane {
         List<BlockPos> cells = fly ? sd.cells.stream().filter(p -> !insideCamera(p)).toList() : sd.cells;
         io.blockdesigner.core.place.Symmetry sym = symmetry();
         int[] placed = {0};
+        if (sd.breaking) {
+            boolean ok = editWorld("Break " + sd.shape.label.toLowerCase(java.util.Locale.ROOT), world -> {
+                for (BlockPos p : cells) {
+                    for (BlockPos q : sym.apply(p, null).keySet()) {
+                        if (world.get(q).isAir()) continue;
+                        world.set(q, BlockState.AIR);
+                        placed[0]++;
+                    }
+                }
+            });
+            if (!ok) return;
+            if (placed[0] > 0 && ws.settings().blockSounds) sounds.breakBlock(ws.settings().soundVolume);
+            showToast(placed[0] == 0 ? "Nothing to break: the " + sd.shape.label.toLowerCase(java.util.Locale.ROOT) + " is empty"
+                    : String.format("%s · broke %,d block%s", sd.shape.label, placed[0], placed[0] == 1 ? "" : "s"));
+            updateHover(aimX(), aimY());
+            return;
+        }
+        BlockPlacement.Blocks blocks = placementBlocks();
+        // A line of logs, pillars or chains runs along the line (as Effortless Building does); a single cell follows the face.
+        BlockPos run = new BlockPos(sd.end.x() - sd.anchor.x(), sd.end.y() - sd.anchor.y(), sd.end.z() - sd.anchor.z());
+        String lineAxis = sd.shape.plane != io.blockdesigner.core.place.ShapeTool.Plane.AXIS || run.equals(new BlockPos(0, 0, 0)) ? null
+                : run.x() != 0 ? "x" : run.y() != 0 ? "y" : "z";
         boolean ok = editWorld(sd.shape.label, world -> {
             java.util.Set<BlockPos> done = new java.util.HashSet<>();
             for (BlockPos p : cells) {
                 BlockState b = ws.blockToPlace();
                 if (b == null) return;
-                // Each cell and (with symmetry on) its mirror images, blocks turned to match.
-                for (var c : sym.apply(p, b).entrySet()) {
-                    BlockPos q = c.getKey();
-                    if (!done.add(q) || (fly && insideCamera(q))) continue;
-                    if (!sd.replace && !world.get(q).isAir()) continue;
-                    world.set(q, c.getValue());
-                    placed[0]++;
+                // Oriented as a click on the start's face would orient it (stairs, logs, slabs, torches...).
+                java.util.Map<BlockPos, BlockState> one = sd.replace && !world.get(p).isAir()
+                        ? BlockPlacement.replace(b, p, world::get, blocks) : BlockPlacement.place(b, sd.at(p), world::get, blocks);
+                for (var o : one.entrySet()) {
+                    BlockState st = o.getValue();
+                    if (lineAxis != null && st.properties().containsKey("axis")) st = st.with("axis", lineAxis);
+                    // Each block and (with symmetry on) its mirror images, turned to match.
+                    for (var c : sym.apply(o.getKey(), st).entrySet()) {
+                        BlockPos q = c.getKey();
+                        if (!done.add(q) || (fly && insideCamera(q))) continue;
+                        if (!sd.replace && !world.get(q).isAir() && !one.containsKey(q)) continue;
+                        world.set(q, c.getValue());
+                        placed[0]++;
+                    }
                 }
             }
         });
@@ -4499,7 +4798,7 @@ public final class ViewportPane extends StackPane {
     private void drawShapePreview(List<FrameRequest.Line> lines) {
         ShapeDrag sd = shapeDrag;
         if (sd == null) return;
-        int color = sd.replace ? 0xFFFFC85A : 0xFF46C46E;
+        int color = sd.breaking ? 0xFFE5484D : sd.replace ? 0xFFFFC85A : 0xFF46C46E;
         Box b = io.blockdesigner.core.place.ShapeTool.bounds(sd.cells);
         if (b == null) {
             BlockPos a = sd.anchor;
@@ -4910,7 +5209,8 @@ public final class ViewportPane extends StackPane {
             h.add(KeyHints.Hint.of("Rotate", "Alt", "Wheel"));
             hint(h, "Cancel", Keybinds.Action.CANCEL);
         } else if (shapeDrag != null) {
-            h.add(KeyHints.Hint.of("Place the " + shapeDrag.shape.label.toLowerCase(java.util.Locale.ROOT), "RMB"));
+            h.add(KeyHints.Hint.of((shapeDrag.breaking ? "Break the " : "Place the ") + shapeDrag.shape.label.toLowerCase(java.util.Locale.ROOT),
+                    shapeDrag.breaking ? "LMB" : "RMB"));
             if (shapeDrag.shape.usesHeight()) h.add(KeyHints.Hint.of("Height", "Wheel"));
             hint(h, "Cancel", Keybinds.Action.CANCEL);
         } else {

@@ -14,7 +14,7 @@ package io.blockdesigner.plugin;
  *   "author": "You",
  *   "description": "What it adds",
  *   "main": "com.example.HelloPlugin",     // implements BlockDesignerPlugin, public no-arg constructor
- *   "api": 2                               // the PluginApi.VERSION it needs (1 if it uses no API 2 features)
+ *   "api": 2                               // the lowest PluginApi.VERSION whose features it uses (1, 2 or 3)
  * }
  * }</pre>
  *
@@ -25,7 +25,8 @@ public interface BlockDesignerPlugin {
 
     /**
      * Called once after the plugin is loaded (or re-enabled). Register formats, exporters, actions, commands,
-     * transforms, panels, tools and importers here. Don't build JavaFX nodes yet: panels make theirs when first shown.
+     * transforms, panels, tools, importers and scene object types here. Don't build JavaFX nodes yet: panels make
+     * theirs when first shown.
      */
     void enable(PluginContext context) throws Exception;
 
