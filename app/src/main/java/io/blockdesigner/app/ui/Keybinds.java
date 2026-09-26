@@ -102,8 +102,8 @@ public final class Keybinds {
         SLICE_DOWN(Group.MOVE, "Slice view: level down", "Page Down"),
         SLICE_SINGLE(Group.MOVE, "Slice view: single level on / off", "Insert"),
 
-        BRUSH_SMALLER(Group.BRUSH, "Smaller brush", "Minus", "Subtract"),
-        BRUSH_BIGGER(Group.BRUSH, "Bigger brush", "Equals", "Add"),
+        BRUSH_SMALLER(Group.BRUSH, "Smaller brush", "Open Bracket", "Minus", "Subtract"),
+        BRUSH_BIGGER(Group.BRUSH, "Bigger brush", "Close Bracket", "Equals", "Add"),
         BRUSH_WEAKER(Group.BRUSH, "Weaker brush", "Comma"),
         BRUSH_STRONGER(Group.BRUSH, "Stronger brush", "Period"),
         BRUSH_MODE_1(Group.BRUSH, "Brush mode: Draw", "Alt+1"),
@@ -343,12 +343,18 @@ public final class Keybinds {
 
     /**
      * Pairs that share a key on purpose, each acting in its own situation: the hotbar slots and the tools (Build mode
-     * vs the others), and turning an import being placed vs the Rotate tool.
+     * vs the others), turning an import being placed vs the Rotate tool, and [ / ] (brush size with the brush or
+     * eraser, the active layer otherwise).
      */
     static boolean sharedByDesign(Action a, Action b) {
         return hotbarVsTool(a, b) || hotbarVsTool(b, a)
+                || brushVsLayer(a, b) || brushVsLayer(b, a)
                 || (a == Action.ROTATE_PLACEMENT && b == Action.TOOL_ROTATE) || (b == Action.ROTATE_PLACEMENT && a == Action.TOOL_ROTATE)
                 || (a == Action.PLACE && b.group == Group.TOOLS) || (b == Action.PLACE && a.group == Group.TOOLS);
+    }
+
+    private static boolean brushVsLayer(Action a, Action b) {
+        return (a == Action.BRUSH_SMALLER || a == Action.BRUSH_BIGGER) && (b == Action.LAYER_BELOW || b == Action.LAYER_ABOVE);
     }
 
     private static boolean hotbarVsTool(Action a, Action b) {

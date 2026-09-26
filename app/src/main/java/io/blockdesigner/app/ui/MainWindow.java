@@ -1583,8 +1583,9 @@ public final class MainWindow {
                 case GHOST_LAYERS -> () -> toggleLayers("ghost", Layer::ghost, Layer::setGhost);
                 case SHOW_ALL_LAYERS -> this::showAllLayers;
                 case LOCK_LAYERS -> () -> toggleLayers("lock", Layer::locked, Layer::setLocked);
-                case LAYER_BELOW -> () -> stepActiveLayer(-1);
-                case LAYER_ABOVE -> () -> stepActiveLayer(1);
+                // With the brush or eraser, [ and ] (by default) size the brush instead.
+                case LAYER_BELOW -> brush && keys.matches(Keybinds.Action.BRUSH_SMALLER, e) ? null : () -> stepActiveLayer(-1);
+                case LAYER_ABOVE -> brush && keys.matches(Keybinds.Action.BRUSH_BIGGER, e) ? null : () -> stepActiveLayer(1);
                 case BRUSH_SMALLER -> brush ? () -> viewport.stepBrush(-1) : null;
                 case BRUSH_BIGGER -> brush ? () -> viewport.stepBrush(1) : null;
                 case BRUSH_WEAKER -> brush ? () -> viewport.stepBrushStrength(-1) : null;

@@ -21,6 +21,12 @@ public final class Camera {
     /** In fly mode {@link #target} is the eye position and the camera looks along {@link #forward()}. */
     private boolean fly;
     private boolean ortho;
+    /**
+     * Going from perspective into an orthographic view: how far along (0..1), or -1 when not. In between, the view
+     * dollies back while the lens narrows (what's at the target keeps its size), so the switch to orthographic at the
+     * end doesn't jump.
+     */
+    private float toOrtho = -1;
 
     public Vector3f target() {
         return new Vector3f(target);
@@ -68,6 +74,26 @@ public final class Camera {
 
     public void setOrtho(boolean ortho) {
         this.ortho = ortho;
+    }
+
+    /** Sets how far along a smooth switch into orthographic is (0..1), or -1 to end it. See {@link #toOrtho}. */
+    public void setOrthoTransition(float t) {
+        toOrtho = t < 0 ? -1 : Math.min(1, t);
+    }
+
+    private boolean dollying() {
+        return toOrtho >= 0 && !ortho && !fly;
+    }
+
+    /** The tangent of half the field of view, narrowed while dollying into orthographic. */
+    private float lensTan() {
+        float t = (float) Math.tan(Math.toRadians(fovDeg / 2));
+        return dollying() ? t * (1 - 0.97f * toOrtho) : t;
+    }
+
+    /** How far the eye is from the target: further back while dollying, so the target keeps its size. */
+    private float eyeDistance() {
+        return dollying() ? distance * (float) Math.tan(Math.toRadians(fovDeg / 2)) / lensTan() : distance;
     }
 
     /** Orthographic right now. */
@@ -164,7 +190,8 @@ public final class Camera {
 
     /** Where the view is rendered from: the eye, or for orthographic a point far behind the target. */
     public Vector3f viewEye() {
-        return orthoActive() ? new Vector3f(target).sub(forward().mul(ORTHO_BACK)) : eye();
+        if (orthoActive()) return new Vector3f(target).sub(forward().mul(ORTHO_BACK));
+        return dollying() ? new Vector3f(target).sub(forward().mul(eyeDistance())) : eye();
     }
 
     public Matrix4f view() {
@@ -177,8 +204,10 @@ public final class Camera {
             float h = distance * (float) Math.tan(Math.toRadians(fovDeg / 2));
             return new Matrix4f().ortho(-h * aspect, h * aspect, -h, h, 1f, ORTHO_BACK + clipEnd);
         }
-        float near = fly ? 0.05f : Math.max(0.05f, distance / 500f);
-        return new Matrix4f().perspective((float) Math.toRadians(fovDeg), aspect, near, Math.max(clipEnd, fly ? 0 : distance * 2));
+        float d = eyeDistance();
+        float near = fly ? 0.05f : Math.max(0.05f, d / 500f);
+        float fov = dollying() ? 2 * (float) Math.atan(lensTan()) : (float) Math.toRadians(fovDeg);
+        return new Matrix4f().perspective(fov, aspect, near, Math.max(clipEnd + d - distance, fly ? 0 : d * 2));
     }
 
     public Matrix4f viewProjection(float aspect) {

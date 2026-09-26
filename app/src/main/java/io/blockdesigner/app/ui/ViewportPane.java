@@ -82,7 +82,9 @@ public final class ViewportPane extends StackPane {
     // Smooth view changes: from / to angles and when it started (-1 when idle)
     private float animYaw0, animPitch0, animYaw1, animPitch1;
     private long animStart = -1;
-    private static final double VIEW_ANIM_MS = 220;
+    private static final double VIEW_ANIM_MS = 380;
+    /** The view animation also eases perspective into orthographic (a dolly zoom), switching over at the end. */
+    private boolean animToOrtho;
     private final Label sliceBadge = new Label();
     private final Hotbar hotbar;
     private final javafx.scene.control.Button settingsButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.SLIDERS));
@@ -459,7 +461,7 @@ public final class ViewportPane extends StackPane {
                 case BRUSH -> "Brush · drag to paint · right-drag smooths · Shift+right-click settings"
                         + keyNote(Keybinds.Action.BRUSH_SMALLER, "/ " + keyText(Keybinds.Action.BRUSH_BIGGER) + " size")
                         + keyNote(Keybinds.Action.BRUSH_WEAKER, "/ " + keyText(Keybinds.Action.BRUSH_STRONGER) + " strength");
-                case ERASER -> "Eraser · drag to remove blocks · - / = size" + (keyText(Keybinds.Action.TOOL_ERASER).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_ERASER));
+                case ERASER -> "Eraser · drag to remove blocks" + keyNote(Keybinds.Action.BRUSH_SMALLER, "/ " + keyText(Keybinds.Action.BRUSH_BIGGER) + " size") + (keyText(Keybinds.Action.TOOL_ERASER).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_ERASER));
                 case PLUGIN -> pluginToolToast();
             });
             if (b != ToolKind.PLUGIN && pluginTool != null) setPluginTool(null, null);
@@ -1665,9 +1667,7 @@ public final class ViewportPane extends StackPane {
                     // Break the aimed block and its mirror images in whatever layers hold them, as one step.
                     var cells = sym.apply(hover.world(), null).keySet();
                     if (ws.settings().blockSounds) sounds.breakBlock(ws.settings().soundVolume);
-                    editWorld("Break block", world -> {
-                        for (BlockPos p : cells) if (!world.get(p).isAir()) world.set(p, BlockState.AIR);
-                    });
+                    editWorld("Break block", world -> breakCells(world, cells));
                     break;
                 }
                 BlockPos bw = hover.world();
@@ -1679,7 +1679,10 @@ public final class ViewportPane extends StackPane {
                 }
                 if (ws.settings().blockSounds) sounds.breakBlock(ws.settings().soundVolume);
                 editLayers("Break block", key, l, world -> {
+                    // Doors, tall plants and beds go as a whole: the other half with this one.
+                    BlockPos other = otherHalf(bw, world.get(bw), world::get);
                     world.setIn(l, bw, BlockState.AIR);
+                    if (other != null) world.set(other, BlockState.AIR);
                     // Neighbouring fences, walls, panes and stairs let go of the broken block, in any layer.
                     world.reconnect();
                 });
@@ -1976,8 +1979,11 @@ public final class ViewportPane extends StackPane {
         }
         Optional<Box> lb = l.structure().bounds();
         if (lb.isEmpty()) return;
+        Vector3f centre = turnCentre(l);
         if (face.y() != 0) spinLayer(l, lb.get(), sign);
         else tipLayer(l, lb.get(), sign, face);
+        // Turned in place: it stays centred where it was, so turning back puts it exactly where it started.
+        placeCentred(l, centre, "rotate-" + l.id());
         nudgeSeal.playFromStart();
         updateHover(aimX(), aimY());
     }
@@ -2043,6 +2049,52 @@ public final class ViewportPane extends StackPane {
             }));
         }
         showToast("Flipped " + l.name() + (sign > 0 ? " up" : " down"));
+    }
+
+    /**
+     * Breaks these cells, and the other half of any door, tall plant or bed among them, so no half is left behind.
+     * Returns how many blocks went.
+     */
+    private static int breakCells(io.blockdesigner.core.worldedit.WorldEdit.World world, java.util.Collection<BlockPos> cells) {
+        java.util.Set<BlockPos> all = new java.util.LinkedHashSet<>(cells);
+        for (BlockPos p : cells) {
+            BlockPos other = otherHalf(p, world.get(p), world::get);
+            if (other != null) all.add(other);
+        }
+        int n = 0;
+        for (BlockPos p : all) {
+            if (world.get(p).isAir()) continue;
+            world.set(p, BlockState.AIR);
+            n++;
+        }
+        return n;
+    }
+
+    /**
+     * The other half of a two-block block at {@code p} (world-facing state {@code s}): the upper or lower half of a
+     * door or tall plant, or the head or foot of a bed. Null when it isn't one, or the other half isn't there.
+     */
+    static BlockPos otherHalf(BlockPos p, BlockState s, java.util.function.Function<BlockPos, BlockState> get) {
+        if (s == null || s.isAir()) return null;
+        BlockPos o = null;
+        String opposite = null, key = null;
+        String half = s.get("half");
+        String part = s.get("part");
+        if ("upper".equals(half) || "lower".equals(half)) {
+            key = "half";
+            opposite = "upper".equals(half) ? "lower" : "upper";
+            o = p.add(0, "upper".equals(half) ? -1 : 1, 0);
+        } else if (("head".equals(part) || "foot".equals(part)) && s.get("facing") != null) {
+            BlockPlacement.Dir f = BlockPlacement.Dir.parse(s.get("facing"));
+            if (f == null || !f.horizontal()) return null;
+            key = "part";
+            opposite = "head".equals(part) ? "foot" : "head";
+            int k = "foot".equals(part) ? 1 : -1;
+            o = p.add(f.x * k, 0, f.z * k);
+        }
+        if (o == null) return null;
+        BlockState t = get.apply(o);
+        return t != null && t.name().equals(s.name()) && opposite.equals(t.get(key)) ? o : null;
     }
 
     /** Whether a state's property values all exist for its block (per the loaded assets; anything goes without them). */
@@ -2369,11 +2421,10 @@ public final class ViewportPane extends StackPane {
     public void snapView(ViewCube.View v) {
         if (fly) setFly(false);
         if (ViewCube.View.of(camera) == v && animStart < 0) v = v.opposite();
-        if (!camera.isOrtho()) {
-            camera.setOrtho(true);
-            autoOrtho = true;
-        }
+        boolean dolly = !camera.isOrtho() || animToOrtho;
+        if (dolly) autoOrtho = true;
         animateTo(v.yaw, v.pitch);
+        animToOrtho = dolly;
         showToast(v.label + " · " + (v == ViewCube.View.FRONT ? "looking north" : v == ViewCube.View.BACK ? "looking south"
                 : v == ViewCube.View.RIGHT ? "looking west" : v == ViewCube.View.LEFT ? "looking east"
                 : v == ViewCube.View.TOP ? "looking down, north up" : "looking up") + (camera.isOrtho() ? " · Ortho" : ""));
@@ -2393,11 +2444,10 @@ public final class ViewportPane extends StackPane {
         swingX = swingY = 0;
         ViewCube.View v = viewLookingAlong(f);
         if (fly) setFly(false);
-        if (!camera.isOrtho()) {
-            camera.setOrtho(true);
-            autoOrtho = true;
-        }
+        boolean dolly = !camera.isOrtho() || animToOrtho;
+        if (dolly) autoOrtho = true;
         animateTo(v.yaw, v.pitch);
+        animToOrtho = dolly;
         showToast(v.label + " · Ortho");
     }
 
@@ -2412,6 +2462,7 @@ public final class ViewportPane extends StackPane {
     /** P / O: perspective or orthographic. */
     public void setOrtho(boolean ortho) {
         if (fly) setFly(false);
+        cancelDolly();
         autoOrtho = false;
         if (camera.isOrtho() == ortho) {
             showToast(ortho ? "Already orthographic" : "Already perspective");
@@ -2431,6 +2482,7 @@ public final class ViewportPane extends StackPane {
     /** Numpad 5 or the cube's button: perspective ↔ orthographic. */
     public void toggleOrtho() {
         if (fly) setFly(false);
+        cancelDolly();
         camera.setOrtho(!camera.isOrtho());
         autoOrtho = false;
         showToast(camera.isOrtho() ? "Orthographic" : "Perspective");
@@ -2438,6 +2490,7 @@ public final class ViewportPane extends StackPane {
     }
 
     private void leaveAutoOrtho() {
+        cancelDolly();
         if (!autoOrtho) return;
         camera.setOrtho(false);
         autoOrtho = false;
@@ -2454,6 +2507,8 @@ public final class ViewportPane extends StackPane {
     }
 
     private void animateTo(float yaw, float pitch) {
+        // A new swing starts from where the view is now; an unfinished switch into orthographic goes on from there.
+        animToOrtho = false;
         animYaw0 = camera.yaw();
         animPitch0 = camera.pitch();
         // Shortest way round.
@@ -2463,15 +2518,33 @@ public final class ViewportPane extends StackPane {
         requestRedraw();
     }
 
+    /** Drops an unfinished switch into orthographic (the user took over the view, or chose a projection). */
+    private void cancelDolly() {
+        if (!animToOrtho) return;
+        animToOrtho = false;
+        animStart = -1;
+        camera.setOrthoTransition(-1);
+    }
+
+    /** Ends the view animation where it is; a switch into orthographic completes. */
+    private void finishViewAnim() {
+        animStart = -1;
+        camera.setOrthoTransition(-1);
+        if (animToOrtho) camera.setOrtho(true);
+        animToOrtho = false;
+    }
+
     private void viewAnimStep() {
         if (animStart < 0) return;
         double t = Math.min(1, (System.nanoTime() - animStart) / 1e6 / VIEW_ANIM_MS);
-        double e = 1 - Math.pow(1 - t, 3);
+        // Eases in and out, so the swing starts and lands gently.
+        double e = t * t * t * (t * (6 * t - 15) + 10);
         camera.setAngles((float) (animYaw0 + (animYaw1 - animYaw0) * e), (float) (animPitch0 + (animPitch1 - animPitch0) * e));
+        if (animToOrtho) camera.setOrthoTransition((float) e);
         if (t >= 1) {
             // Land exactly on the view so the cube recognises it (and keep the yaw tidy).
             camera.setAngles((float) Math.IEEEremainder(animYaw1, 2 * Math.PI), animPitch1);
-            animStart = -1;
+            finishViewAnim();
         }
         requestRedraw();
     }
@@ -2719,16 +2792,14 @@ public final class ViewportPane extends StackPane {
     private void turnGroup(GizmoDrag d, int sign) {
         int axis = d.handle.axis();
         for (Layer l : d.layers) {
-            Optional<Box> lb = l.structure().bounds(), wb0 = l.worldBounds();
-            if (lb.isEmpty() || wb0.isEmpty()) continue;
-            Vector3f c0 = boxCenter(wb0.get());
+            Optional<Box> lb = l.structure().bounds();
+            if (lb.isEmpty() || l.worldBounds().isEmpty()) continue;
+            // The exact centre (kept between turns, so rounding to whole blocks never adds up) orbits the pivot.
+            Vector3f c0 = turnCentre(l);
             // Transform.rotation(1) is clockwise from above, the opposite of right-handed about +Y.
             if (axis == 1) spinLayer(l, lb.get(), -sign);
             else tipLayer(l, lb.get(), sign, axis == 0 ? new BlockPos(0, 0, -1) : new BlockPos(1, 0, 0));
-            Vector3f rel = new Vector3f(c0).sub(d.pivot), turned = quarterTurn(rel, axis, sign).add(d.pivot);
-            Vector3f c1 = boxCenter(l.worldBounds().orElse(wb0.get()));
-            int mx = Math.round(turned.x - c1.x), my = Math.round(turned.y - c1.y), mz = Math.round(turned.z - c1.z);
-            if (mx != 0 || my != 0 || mz != 0) ws.editor().nudge(List.of(l), mx, my, mz, null);
+            placeCentred(l, quarterTurn(new Vector3f(c0).sub(d.pivot), axis, sign).add(d.pivot), null);
         }
         d.changed = true;
     }
@@ -2799,6 +2870,32 @@ public final class ViewportPane extends StackPane {
             });
         }
         return true;
+    }
+
+    /**
+     * Each turned layer's exact centre after its last turn. A box with an odd and an even side can't be centred on the
+     * same point after a quarter turn, so the true centre is remembered and the box goes as near it as whole blocks
+     * allow; turning back then lands exactly where it began, however many turns there were.
+     */
+    private final java.util.Map<Layer, Vector3f> turnCentres = new java.util.WeakHashMap<>();
+
+    /** The layer's centre to turn about: the remembered one while the layer is still there, else its box's. */
+    private Vector3f turnCentre(Layer l) {
+        Vector3f now = boxCenter(l.worldBounds().orElseThrow());
+        Vector3f kept = turnCentres.get(l);
+        return kept != null && Math.abs(kept.x - now.x) <= 0.5f && Math.abs(kept.y - now.y) <= 0.5f && Math.abs(kept.z - now.z) <= 0.5f
+                ? new Vector3f(kept) : now;
+    }
+
+    /** Moves a layer so its box is centred on {@code c}, as near as whole blocks allow, and remembers {@code c}. */
+    private void placeCentred(Layer l, Vector3f c, String mergeKey) {
+        Box b = l.worldBounds().orElse(null);
+        if (b == null) return;
+        int mx = (int) Math.floor(c.x - b.sizeX() / 2f + 1e-3f) - b.minX();
+        int my = (int) Math.floor(c.y - b.sizeY() / 2f + 1e-3f) - b.minY();
+        int mz = (int) Math.floor(c.z - b.sizeZ() / 2f + 1e-3f) - b.minZ();
+        if (mx != 0 || my != 0 || mz != 0) ws.editor().nudge(List.of(l), mx, my, mz, mergeKey);
+        turnCentres.put(l, new Vector3f(c));
     }
 
     /** Right-handed 90° turn about a world axis, {@code sign} times (±1). */
@@ -3240,7 +3337,7 @@ public final class ViewportPane extends StackPane {
         }
     }
 
-    /** - / =: one brush size smaller or bigger. */
+    /** [ / ] (or - / =): one brush size smaller or bigger. */
     public void stepBrush(int d) {
         brushBar.step(d);
         brushPopup.sync();
@@ -4747,13 +4844,9 @@ public final class ViewportPane extends StackPane {
         int[] placed = {0};
         if (sd.breaking) {
             boolean ok = editWorld("Break " + sd.shape.label.toLowerCase(java.util.Locale.ROOT), world -> {
-                for (BlockPos p : cells) {
-                    for (BlockPos q : sym.apply(p, null).keySet()) {
-                        if (world.get(q).isAir()) continue;
-                        world.set(q, BlockState.AIR);
-                        placed[0]++;
-                    }
-                }
+                java.util.Set<BlockPos> all = new java.util.LinkedHashSet<>();
+                for (BlockPos p : cells) all.addAll(sym.apply(p, null).keySet());
+                placed[0] = breakCells(world, all);
             });
             if (!ok) return;
             if (placed[0] > 0 && ws.settings().blockSounds) sounds.breakBlock(ws.settings().soundVolume);

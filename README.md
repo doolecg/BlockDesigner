@@ -175,7 +175,7 @@ These are the default keys. **Every keyboard shortcut can be rebound in Settings
 | Right-drag | Smooth |
 | Alt+1 … Alt+0 | Draw · Erase · Smooth · Erode · Fill · Pinch · Raise · Lower · Flatten · Slope |
 | Shift+right-click | Brush settings: mode, size, strength, shape |
-| - / = | Smaller / bigger brush (1–16) |
+| [ / ] (or - / =) | Smaller / bigger brush (1–16) |
 | , / . | Weaker / stronger brush (1–5) |
 | Shift+drag / Ctrl+drag | Smooth / inverse mode (not while flying) |
 
@@ -241,7 +241,7 @@ Commands take one slash and work on every visible, unlocked layer:
 | Arrow keys, hold Tab | Move, bigger steps |
 | Alt+wheel (Shift+wheel in Build mode) | Turn by the bounding-box side under the mouse: spin (top or bottom) or flip (a side) |
 | Alt+wheel in Build mode | Next / previous hotbar slot (the wheel still zooms) |
-| [ / ] | Make the layer below / above active |
+| [ / ] | Make the layer below / above active (with the brush or eraser: brush size) |
 | Ctrl+Shift+N / Ctrl+D / Ctrl+M | New / duplicate / merge |
 | F2 | Rename the active layer |
 | H / Alt+H / Shift+H | Hide or show / show every layer / ghost |
@@ -281,11 +281,10 @@ Each plugin lives in its own repository and is released there, separately from B
 |---|---|---|
 | **[Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes)** | Reference images in the scene, like Blender's: move, rotate and scale them, pick the views they show in, set opacity and UV. Listed in Layers as REFERENCE | 0.4.12 |
 | **[Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools)** | Weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool | 0.4.4 |
-| **[Hello Plugin](https://github.com/doolecg/BlockDesigner-HelloPlugin)** | A `/pillar` command, a bill of materials exporter and a plain-text schematic format: a starting point for your own plugin | 0.3.0 |
 
 Download a plugin's `.jar` from its releases page, then install it with **Plugins › Manage plugins… › Install…**.
 
-To write one, see **[PLUGINS.md](PLUGINS.md)** (guide), [docs/plugin-api-reference.md](docs/plugin-api-reference.md) (every API type) and the plugin repositories above. [Hello Plugin](https://github.com/doolecg/BlockDesigner-HelloPlugin) is the simplest template to copy. Copies of the two examples also stay in [`examples/`](examples), because BlockDesigner's own tests load them.
+To write one, see **[PLUGINS.md](PLUGINS.md)** (guide), [docs/plugin-api-reference.md](docs/plugin-api-reference.md) (every API type) and the plugin repositories above. The smallest template to copy is [`examples/hello-plugin`](examples/hello-plugin); it and [`examples/palette-tools`](examples/palette-tools) stay in this repository because BlockDesigner's own tests load them.
 
 ## Building from source
 

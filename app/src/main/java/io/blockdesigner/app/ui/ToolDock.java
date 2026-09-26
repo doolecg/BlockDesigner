@@ -39,8 +39,8 @@ public final class ToolDock extends VBox {
         add(ws, group, ToolKind.MOVE, Feather.MOVE, "Move", Keybinds.Action.TOOL_MOVE, "drag an arrow, a plane square or the centre to move the selected layers (or the selected blocks)");
         add(ws, group, ToolKind.ROTATE, Feather.ROTATE_CW, "Rotate", Keybinds.Action.TOOL_ROTATE, "drag a ring to turn the selected layers (or blocks) in 90° steps");
         add(ws, group, ToolKind.SCALE, Feather.MAXIMIZE_2, "Scale", Keybinds.Action.TOOL_SCALE, "drag a handle to stretch the selected layers (or blocks) along an axis, or the centre to scale them evenly");
-        add(ws, group, ToolKind.BRUSH, ToolIcons.brush(17), "Paint brush", Keybinds.Action.TOOL_BRUSH, "drag to add blocks with the held block (right-drag smooths); - / = size");
-        add(ws, group, ToolKind.ERASER, ToolIcons.eraser(17), "Eraser", Keybinds.Action.TOOL_ERASER, "drag to remove blocks; - / = size");
+        add(ws, group, ToolKind.BRUSH, ToolIcons.brush(17), "Paint brush", Keybinds.Action.TOOL_BRUSH, "drag to add blocks with the held block (right-drag smooths); [ / ] size");
+        add(ws, group, ToolKind.ERASER, ToolIcons.eraser(17), "Eraser", Keybinds.Action.TOOL_ERASER, "drag to remove blocks; [ / ] size");
         getChildren().add(new Separator());
         flyToggle.getStyleClass().addAll("flat", "tool-button");
         flyToggle.setTooltip(Keybinds.tooltip("Creative flight", "Fly with "

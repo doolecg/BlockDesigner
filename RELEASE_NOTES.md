@@ -1,3 +1,29 @@
+# BlockDesigner 0.4.15
+
+Doors, tall plants and beds break as a whole, turned layers stay put, [ and ] size the brush, and swinging to the axis views is smooth.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.15.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.15.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.15-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Changed
+- **Brush size on [ and ].** With the brush or eraser, `[` and `]` make it smaller or bigger (`-` and `=` still work). In the other tools they still change the active layer.
+- **Smoother axis views.** Swinging to Front, Top and the other axis views (the view cube, the numpad keys, Alt+middle-drag) now eases in and out, and goes from perspective into orthographic smoothly instead of switching at the start.
+
+## Fixed
+- **Two-block blocks break as a whole.** Breaking either half of a door, tall grass, a tall flower or a bed removes the other half too, including with symmetry and shape breaking.
+- **Turned layers stay where they are.** Turning a layer again and again no longer makes it creep sideways, and turning it back puts it exactly where it started.
+
+---
+
 # BlockDesigner 0.4.14
 
 Every plugin gets its own tab on the right, so you can see it's running, change its settings and use what it adds.

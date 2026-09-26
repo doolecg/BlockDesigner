@@ -23,7 +23,7 @@ import java.util.Map;
 
 /**
  * Right-click in Brush mode: every brush setting at the cursor. Each mode shows its key; while the popup is open the
- * letter keys pick a mode, - / = change the size, , / . the strength, and Enter or Esc closes it.
+ * letter keys pick a mode, [ / ] (or - / =) change the size, , / . the strength, and Enter or Esc closes it.
  */
 final class BrushPopup extends Popup {
     private final Settings settings;

@@ -52,4 +52,24 @@ class CameraTest {
         Vector4f v = new Vector4f(p, 1).mul(c.viewProjection(16 / 9f));
         return new float[]{v.x / v.w, v.y / v.w};
     }
+
+    @Test
+    void dollyIntoOrthographicEndsWhereOrthographicStarts() {
+        Camera c = new Camera();
+        c.setTarget(0, 0, 0);
+        c.setDistance(40);
+        Vector3f p = new Vector3f(c.right()).mul(5).add(new Vector3f(c.up()).mul(3));
+        float[] persp = screen(c, p);
+        c.setOrthoTransition(0);
+        float[] start = screen(c, p);
+        assertThat(start[0]).isCloseTo(persp[0], within(1e-3f));
+        assertThat(start[1]).isCloseTo(persp[1], within(1e-3f));
+        c.setOrthoTransition(1);
+        float[] end = screen(c, p);
+        c.setOrthoTransition(-1);
+        c.setOrtho(true);
+        float[] ortho = screen(c, p);
+        assertThat(end[0]).isCloseTo(ortho[0], within(1e-3f));
+        assertThat(end[1]).isCloseTo(ortho[1], within(1e-3f));
+    }
 }
