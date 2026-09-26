@@ -61,9 +61,13 @@ final class UpdateDialog extends Dialog<Void> {
         sub.getStyleClass().add("plugin-meta");
         sub.setWrapText(true);
 
-        TextArea notes = new TextArea(release.notes().isBlank() ? "(No release notes.)" : release.notes().strip());
-        notes.setEditable(false);
-        notes.setWrapText(true);
+        // The release notes are Markdown; their own "# BlockDesigner x.y.z" heading repeats the title above.
+        String md = release.notes().isBlank() ? "(No release notes.)" : release.notes().strip().replaceFirst("^#\\s+BlockDesigner[^\\n]*\\n", "");
+        VBox rendered = MarkdownView.render(md, browser);
+        rendered.setPadding(new Insets(10, 14, 10, 12));
+        javafx.scene.control.ScrollPane notes = new javafx.scene.control.ScrollPane(rendered);
+        notes.setFitToWidth(true);
+        notes.getStyleClass().add("release-notes");
         VBox.setVgrow(notes, Priority.ALWAYS);
 
         ProgressBar bar = new ProgressBar(0);

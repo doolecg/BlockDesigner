@@ -23,6 +23,7 @@ Sounds: painting with the brush has its own looping sound, and the interface has
   Turn them off under Viewport settings › Editing › UI sounds. The place / break switch is now "Build sounds (place, break, paint)", and both share the volume slider.
 
 ## Fixed
+- **The update window shows the release notes formatted**, with headings, lists, tables, bold and links, instead of raw Markdown text.
 - **Clicking the interface over the 3D view no longer acts on the world behind it.** This covers the viewport buttons, the hotbar, the brush bar, the view cube and the command line. Before, a click there could also break, place or paint the block behind the button.
 
 ---

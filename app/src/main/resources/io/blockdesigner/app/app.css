@@ -1121,3 +1121,53 @@
     -fx-background-radius: 6;
     -fx-padding: 5 10 5 10;
 }
+
+/* ---------- Markdown (release notes in the update window) ---------- */
+.release-notes {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 8;
+}
+
+.release-notes > .viewport {
+    -fx-background-color: transparent;
+}
+
+.md-text {
+    -fx-fill: -color-fg-default;
+    -fx-font-size: 13px;
+}
+
+.md-h1 .md-text, .md-h2 .md-text {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.md-h3 .md-text {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.md-bold {
+    -fx-font-weight: bold;
+}
+
+.md-code {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-fill: -color-accent-fg;
+}
+
+.md-link {
+    -fx-padding: 0;
+    -fx-font-size: 13px;
+}
+
+.md-bullet {
+    -fx-text-fill: -color-fg-muted;
+}
+
+.md-th .md-text {
+    -fx-font-weight: bold;
+}

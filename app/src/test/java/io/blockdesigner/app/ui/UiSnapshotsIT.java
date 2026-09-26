@@ -416,6 +416,19 @@ class UiSnapshotsIT {
             Keybinds.install(null);
         }
 
+        // The update window, with the newest release notes (Markdown) as GitHub would send them.
+        {
+            String notes = Files.readString(Path.of("../RELEASE_NOTES.md")).split("\n---\n", 2)[0];
+            var rel = new io.blockdesigner.app.update.Updater.Release("9.9.9", "BlockDesigner 9.9.9", notes,
+                    java.net.URI.create("https://github.com/doolecg/BlockDesigner/releases"), null, null);
+            UpdateDialog ud = new UpdateDialog(null, dark, null, rel, () -> false, () -> {
+            }, v -> {
+            }, u -> {
+            });
+            ud.getDialogPane().setPrefSize(760, 620);
+            snapshotDialog(ud, dir.resolve("update" + suffix + ".png"));
+        }
+
         // Key hints for Build mode, over a viewport-coloured backdrop.
         KeyHints hints = new KeyHints();
         hints.show(List.of(KeyHints.Hint.of("Break", "LMB"), KeyHints.Hint.of("Place", "RMB"), KeyHints.Hint.of("Pick block", "MMB"),
