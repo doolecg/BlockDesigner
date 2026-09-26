@@ -64,6 +64,7 @@ class UiSnapshotsIT {
                         String n = t.name().toLowerCase() + (dark ? "-dark" : "-light");
                         snapshotDialog(new SettingsDialog(null, ws, () -> {
                         }, () -> {
+                        }, () -> {
                         }), dir.resolve("settings-" + n + ".png"));
                         Structure s = new Structure();
                         for (int x = 0; x < 6; x++) for (int z = 0; z < 6; z++) s.set(x, 0, z, BlockState.of("stone"));

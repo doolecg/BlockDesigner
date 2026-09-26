@@ -12,8 +12,8 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
 
 ## Windows builds
 
-- `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-0.3.0-portable.zip`. Nothing needs installing, the Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
-- `./gradlew :app:installer` builds `dist/BlockDesigner-0.3.0.exe`, a per-user setup with Start menu and desktop shortcuts. It also makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
+- `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-0.4.0-portable.zip`. Nothing needs installing, the Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
+- `./gradlew :app:installer` builds `dist/BlockDesigner-0.4.0.exe`, a per-user setup with Start menu and desktop shortcuts. It also makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
 - The version is `packageVersion` in `app/build.gradle.kts`. The icon is drawn by `packaging/make_icon.py` (needs Pillow); rerun it after changing the design.
 
 ## Features

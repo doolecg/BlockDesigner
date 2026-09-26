@@ -28,6 +28,10 @@ public final class Settings {
     public String themeMode;
     /** Show the start screen (recent projects, new, jar, download sites) when the app opens. */
     public boolean showStartScreen = true;
+    /** Look for a newer release on GitHub when the app opens. */
+    public boolean checkForUpdates = true;
+    /** A release version the user chose to skip; not offered again at startup. */
+    public String skippedVersion;
     /** Whether the Resource Tracker tab is open in the right panel. */
     public boolean showResources = true;
     public boolean showGrid = true;

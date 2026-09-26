@@ -1,6 +1,17 @@
 # BlockDesigner 0.4.0
 
-This release adds mobs: place pigs, villagers, iron golems, armour stands, paintings and more as stand-ins in your builds, drawn with Minecraft's own models and saved and exported with the schematic, as Litematica does. It also clears most of 0.3.0's known issues.
+This release adds mobs: place pigs, villagers, iron golems, armour stands, paintings and more as stand-ins in your builds, drawn with Minecraft's own models and saved and exported with the schematic, as Litematica does. It also clears most of 0.3.0's known issues. From this version on, BlockDesigner updates itself.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.0.exe** | You want a normal install: Start menu entry, optional desktop shortcut, and `.bdproj` projects that open with a double-click. Installs for your user only, so no admin is needed. Installing over 0.3.0 upgrades it in place. |
+| **BlockDesigner-0.4.0-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. Settings stay in a `data` folder next to the exe. To keep your 0.3.0 settings, copy its `data` folder across. |
+
+The requirements haven't changed: 64-bit Windows 10 or 11, OpenGL 3.3, and Minecraft: Java Edition installed.
+
+0.3.0 can't update itself, so install 0.4.0 by hand this once. After that, BlockDesigner offers each new version when it opens.
 
 ## New
 
@@ -28,6 +39,10 @@ This release adds mobs: place pigs, villagers, iron golems, armour stands, paint
 ### Tools
 - **New brush and eraser icons** in the tool dock: a paint brush and an eraser.
 - **New project button** at the top left, next to Open and Save (same as Ctrl+N).
+
+### Updates
+- **BlockDesigner updates itself.** When it opens, it checks GitHub for a newer release and shows that release's notes. Choose **Install and restart** and it downloads the update, checks the file against the release's checksum, closes, installs and opens again. The setup build runs the new installer in the same folder. The portable build replaces its files and keeps your `data` folder. If your project has unsaved changes, it asks to save it first.
+- Choose **Skip this version** to stop it asking about that release, or turn the check off in **Settings > General > Updates**. You can also click **Check for updates now** there.
 
 ## Fixes
 - **Across layers:** placing, breaking, Replace, the brushes, the eraser and WorldEdit now see every visible layer. Fences, walls, panes, redstone, rails and stair corners join blocks in other layers, and the sculpt brushes shape terrain spread over several layers. A cell taken in any layer counts as taken. Locked layers are read (things join them) but never changed.

@@ -23,6 +23,22 @@ dependencies {
     testRuntimeOnly(libs.junit.launcher)
 }
 
+// The version shown to users and checked against GitHub releases by the updater (Updater.currentVersion). Set it with
+// "version" in the root build.gradle.kts.
+val packageVersion = project.version.toString().removeSuffix("-SNAPSHOT")
+
+val versionResource = tasks.register("versionResource") {
+    val out = layout.buildDirectory.dir("generated/version")
+    inputs.property("version", packageVersion)
+    outputs.dir(out)
+    doLast {
+        val f = out.get().file("io/blockdesigner/app/version.properties").asFile
+        f.parentFile.mkdirs()
+        f.writeText("version=$packageVersion\n")
+    }
+}
+sourceSets.main { resources.srcDir(versionResource) }
+
 application {
     mainClass = "io.blockdesigner.app.Main"
     // JavaFX sits on the module path and LWJGL on the class path; both load native code. JOML reads memory via Unsafe.
@@ -39,14 +55,13 @@ application {
 // ./gradlew :app:installer  -> dist/BlockDesigner-<v>.exe setup (Start menu + desktop shortcut, .bdproj association).
 //                              Needs the WiX Toolset: unzip WiX 3.14 binaries into tools/wix3, or have WiX on PATH.
 
-val packageVersion = "0.3.0"
 val jdkBin = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(26) }
     .map { it.metadata.installationPath.dir("bin") }
 val jpackageExe = jdkBin.map { it.file("jpackage.exe").asFile.absolutePath }
 val distDir = rootProject.layout.projectDirectory.dir("dist")
 val imagesDir = layout.buildDirectory.dir("jpackage")
 val runtimeModules = listOf(
-    "java.base", "java.desktop", "java.logging", "java.management", "java.naming", "java.prefs",
+    "java.base", "java.desktop", "java.logging", "java.management", "java.naming", "java.net.http", "java.prefs",
     "java.scripting", "java.sql", "java.xml", "java.xml.crypto", "jdk.unsupported", "jdk.unsupported.desktop",
     "jdk.zipfs", "jdk.crypto.ec", "jdk.crypto.mscapi", "jdk.charsets", "jdk.localedata", "jdk.accessibility",
 ).joinToString(",")

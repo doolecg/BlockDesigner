@@ -4,6 +4,7 @@ import atlantafx.base.theme.PrimerDark;
 import atlantafx.base.theme.PrimerLight;
 import io.blockdesigner.app.Workspace;
 import io.blockdesigner.app.Workspace.ToolKind;
+import io.blockdesigner.app.update.Updater;
 import io.blockdesigner.assets.BlockAssets;
 import io.blockdesigner.assets.McInstallLocator;
 import io.blockdesigner.core.formats.SchematicFile;
@@ -21,6 +22,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
@@ -87,6 +90,7 @@ public final class MainWindow {
     private final BorderPane centerColumn = new BorderPane();
     private final java.util.Set<String> disabledPlugins;
     private final io.blockdesigner.app.plugins.PluginManager plugins;
+    private final Updater updater = new Updater();
 
     public MainWindow(Stage stage, Workspace ws) {
         this.stage = stage;
@@ -191,11 +195,14 @@ public final class MainWindow {
             }
         });
         ws.editor().undoStack().addListener(this::updateStatus);
-        stage.setOnCloseRequest(e -> {
-            viewport.detach();
-            plugins.shutdown();
-            ws.settings().save();
-        });
+        stage.setOnCloseRequest(e -> shutdown());
+    }
+
+    /** Stops the viewport and plugins and saves settings; run as the app closes. */
+    private void shutdown() {
+        viewport.detach();
+        plugins.shutdown();
+        ws.settings().save();
     }
 
     /** What plugins can reach: the scene, undoable edits, the viewport's world editing and feedback. */
@@ -359,6 +366,68 @@ public final class MainWindow {
         if (failed > 0) ws.statusProperty().set(failed + " plugin" + (failed == 1 ? "" : "s") + " failed to load · see Plugins > Manage plugins");
         if (ws.settings().showStartScreen) startScreen.open();
         startAssetLoading(false);
+        if (ws.settings().checkForUpdates) checkForUpdates(false);
+    }
+
+    // ---- updates ------------------------------------------------------------------------------------------------
+
+    /**
+     * Looks for a newer release on GitHub in the background. At startup ({@code manual} false) it stays quiet unless
+     * there's a version the user hasn't skipped; from Settings it also says when BlockDesigner is up to date or the
+     * check failed.
+     */
+    public void checkForUpdates(boolean manual) {
+        if (manual) ws.statusProperty().set("Checking for updates…");
+        Thread.ofVirtual().name("update-check").start(() -> {
+            try {
+                var release = updater.latest();
+                boolean newer = Updater.compareVersions(release.version(), Updater.currentVersion()) > 0;
+                Platform.runLater(() -> {
+                    if (newer && (manual || !release.version().equals(ws.settings().skippedVersion))) {
+                        showUpdate(release);
+                    } else if (manual) {
+                        ws.statusProperty().set("BlockDesigner " + Updater.currentVersion() + " is up to date");
+                        info("No updates", "You have the latest version, BlockDesigner " + Updater.currentVersion() + ".");
+                    }
+                });
+            } catch (Exception e) {
+                if (manual) Platform.runLater(() -> error("Couldn't check for updates", e.getMessage() == null ? e.toString() : e.getMessage()));
+            }
+        });
+    }
+
+    private void showUpdate(Updater.Release release) {
+        new UpdateDialog(stage, ws.darkProperty().get(), updater, release, this::readyToQuitForUpdate,
+                () -> {
+                    shutdown();
+                    Platform.exit();
+                },
+                version -> {
+                    ws.settings().skippedVersion = version;
+                    ws.settings().save();
+                },
+                url -> browser.accept(url)).show();
+    }
+
+    /** Offers to save the project before BlockDesigner closes to update; false if the user cancels. */
+    private boolean readyToQuitForUpdate() {
+        if (!ws.editor().undoStack().canUndo()) return true;
+        ButtonType saveFirst = new ButtonType("Save", ButtonBar.ButtonData.YES);
+        ButtonType dontSave = new ButtonType("Don't save", ButtonBar.ButtonData.NO);
+        Alert a = new Alert(Alert.AlertType.CONFIRMATION, "BlockDesigner will close to install the update.",
+                saveFirst, dontSave, ButtonType.CANCEL);
+        a.initOwner(stage);
+        a.setTitle("Save before updating?");
+        a.setHeaderText("Save changes to " + ws.projectNameProperty().get() + "?");
+        var choice = a.showAndWait().orElse(ButtonType.CANCEL);
+        if (choice == ButtonType.CANCEL) return false;
+        if (choice == saveFirst) {
+            Path before = ws.projectFileProperty().get();
+            save(false);
+            // Cancelled the file chooser for an unsaved project: don't quit.
+            if (before == null && ws.projectFileProperty().get() == null) return false;
+        }
+        return true;
     }
 
     /** Opens web links (the start screen's download sites); the app passes in its host services. */
@@ -403,7 +472,8 @@ public final class MainWindow {
     /** The Settings window (theme, mode, general options). */
     public void openSettings() {
         new SettingsDialog(stage, ws, () -> startAssetLoading(true),
-                () -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait()).showAndWait();
+                () -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait(),
+                () -> checkForUpdates(true)).showAndWait();
         ws.settings().save();
     }
 
@@ -799,6 +869,15 @@ public final class MainWindow {
     static String safeName(String s) {
         String n = s.replaceAll("[\\\\/:*?\"<>|]", "_").strip();
         return n.isEmpty() ? "untitled" : n;
+    }
+
+    public void info(String title, String message) {
+        Alert a = new Alert(Alert.AlertType.INFORMATION);
+        a.initOwner(stage);
+        a.setTitle(title);
+        a.setHeaderText(title);
+        a.setContentText(message);
+        a.show();
     }
 
     public void error(String title, String message) {

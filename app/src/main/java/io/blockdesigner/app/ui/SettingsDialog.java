@@ -34,7 +34,7 @@ import java.util.List;
 
 /**
  * The Settings window: Appearance (colour theme, dark / light / match Windows) and General (author, start screen,
- * Minecraft assets, plugins, where settings live). Changes apply immediately.
+ * Minecraft assets, plugins, updates, where settings live). Changes apply immediately.
  */
 final class SettingsDialog extends Dialog<Void> {
     private final Workspace ws;
@@ -47,7 +47,7 @@ final class SettingsDialog extends Dialog<Void> {
         themeCards.setPrefWrapLength(660);
     }
 
-    SettingsDialog(Window owner, Workspace ws, Runnable changeAssets, Runnable openPlugins) {
+    SettingsDialog(Window owner, Workspace ws, Runnable changeAssets, Runnable openPlugins, Runnable checkUpdates) {
         this.ws = ws;
         initOwner(owner);
         setTitle("Settings");
@@ -81,7 +81,7 @@ final class SettingsDialog extends Dialog<Void> {
         dp.getButtonTypes().add(ButtonType.CLOSE);
 
         appearance.setOnAction(e -> showAppearance());
-        general.setOnAction(e -> showGeneral(changeAssets, openPlugins));
+        general.setOnAction(e -> showGeneral(changeAssets, openPlugins, checkUpdates));
         nav.selectedToggleProperty().addListener((o, a, b) -> {
             if (b == null && a != null) a.setSelected(true);
         });
@@ -248,7 +248,7 @@ final class SettingsDialog extends Dialog<Void> {
 
     // ---- General ---------------------------------------------------------------------------------------------
 
-    private void showGeneral(Runnable changeAssets, Runnable openPlugins) {
+    private void showGeneral(Runnable changeAssets, Runnable openPlugins, Runnable checkUpdates) {
         Settings s = ws.settings();
         TextField author = new TextField(s.author);
         author.setPromptText("Your name");
@@ -281,11 +281,20 @@ final class SettingsDialog extends Dialog<Void> {
             }
         });
 
+        CheckBox autoUpdate = new CheckBox("Check for updates when BlockDesigner opens");
+        autoUpdate.setSelected(s.checkForUpdates);
+        autoUpdate.selectedProperty().addListener((o, a, b) -> s.checkForUpdates = b);
+        Button checkNow = new Button("Check for updates now", new FontIcon(Feather.REFRESH_CW));
+        checkNow.setOnAction(e -> checkUpdates.run());
+
         page.getChildren().setAll(title("General"),
                 section("You"), who, hint("Written into exported schematics, and used as the default data pack namespace."),
                 start,
                 section("Minecraft"), assets, hint("Blocks, models and textures come from a Minecraft client jar plus an instance's mods and resource packs."),
                 section("Extensions"), plugins,
+                section("Updates"), autoUpdate, checkNow,
+                hint("You have BlockDesigner " + io.blockdesigner.app.update.Updater.currentVersion()
+                        + ". New versions come from github.com/" + io.blockdesigner.app.update.Updater.REPO + "/releases."),
                 section("Files"), folder, hint(Settings.dir().toString()));
     }
 }
