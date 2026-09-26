@@ -98,7 +98,7 @@ public final class BlockPalette extends VBox {
         HBox header = new HBox(title);
         header.getStyleClass().add("panel-header");
 
-        search.setPromptText("Search blocks…  (Ctrl+F · e.g. oak stairs, create:shaft)");
+        search.setPromptText("Search blocks…  (" + Keybinds.keyOf(Keybinds.Action.SEARCH_BLOCKS) + " · e.g. oak stairs, create:shaft)");
         search.getStyleClass().add("search-field");
         search.textProperty().addListener((o, a, b) -> rebuild());
         HBox searchBox = new HBox(6, new FontIcon(Feather.SEARCH), search);
@@ -165,6 +165,18 @@ public final class BlockPalette extends VBox {
         ws.heldEntityProperty().addListener((o, a, b) -> updateSelectedCard());
         rebuild();
         updateSelectedCard();
+    }
+
+    /**
+     * The block under the mouse in the grid, or null. As in Minecraft's creative inventory, pressing a hotbar key over
+     * a block puts it in that slot (MainWindow asks this before switching slots).
+     */
+    public BlockState hoveredBlock() {
+        if (source == Source.MOBS) return null;
+        for (javafx.scene.Node n : tiles.getChildren()) {
+            if (n.isHover() && n.getUserData() instanceof BlockState st) return st;
+        }
+        return null;
     }
 
     /** Ctrl+F: jumps to the block search box. */
@@ -332,7 +344,7 @@ public final class BlockPalette extends VBox {
         mobGroups.setVisible(mobs);
         mobGroups.setManaged(mobs);
         categoryTitle.setText(mobs ? mobGroupTitle : categoryName);
-        search.setPromptText(mobs ? "Search mobs…  (or type a modded id, e.g. alexsmobs:elephant)" : "Search blocks…  (Ctrl+F · e.g. oak stairs, create:shaft)");
+        search.setPromptText(mobs ? "Search mobs…  (or type a modded id, e.g. alexsmobs:elephant)" : "Search blocks…  (" + Keybinds.keyOf(Keybinds.Action.SEARCH_BLOCKS) + " · e.g. oak stairs, create:shaft)");
         if (mobs) {
             rebuildMobs();
             return;
@@ -422,11 +434,14 @@ public final class BlockPalette extends VBox {
         iv.setSmooth(false);
         StackPane p = new StackPane(iv);
         p.getStyleClass().add("block-tile");
+        // Hovered + a hotbar key puts this block in that slot (see hoveredBlock).
+        p.setUserData(b.defaultState());
         Tooltip tip = new Tooltip(b.displayName() + "\n" + b.id());
         // In the Schematic tab the tooltip also says how many your layers use.
         tip.setOnShowing(e -> {
             Long n = source == Source.SCHEMATIC ? schematicCounts.get(b.id()) : null;
-            tip.setText(b.displayName() + "\n" + b.id() + (n == null ? "" : String.format("\n%,d in your layers", n)));
+            tip.setText(b.displayName() + "\n" + b.id() + (n == null ? "" : String.format("\n%,d in your layers", n))
+                    + "\nA hotbar key (" + Keybinds.keysOf(Keybinds.Action.HOTBAR_1) + "…" + Keybinds.keysOf(Keybinds.Action.HOTBAR_9) + ") puts it in that slot");
         });
         Tooltip.install(p, tip);
         p.setOnMouseClicked(e -> {

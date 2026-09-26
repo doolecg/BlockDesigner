@@ -107,7 +107,8 @@ final class ViewCube extends VBox {
         name.setMouseTransparent(true);
         projection.getStyleClass().addAll("flat", "small", "view-cube-toggle");
         projection.setFocusTraversable(false);
-        projection.setTooltip(new Tooltip("Perspective / orthographic (P / O, Numpad 5)"));
+        projection.setTooltip(Keybinds.tooltip("Perspective / orthographic", "Switch the camera's projection (" + Keybinds.keyOf(Keybinds.Action.VIEW_ORTHO_TOGGLE) + " toggles)",
+                Keybinds.Action.PERSPECTIVE, Keybinds.Action.ORTHOGRAPHIC));
         projection.setOnAction(e -> onToggleProjection.run());
         getChildren().addAll(canvas, name, projection);
 

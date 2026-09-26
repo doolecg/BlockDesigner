@@ -177,6 +177,51 @@ public final class Keybinds {
 
     private final Settings settings;
 
+    // ---- labels and tooltips ------------------------------------------------------------------------------------
+    // Every key the UI shows (button tooltips, menu hints, toasts) comes from here, so it always matches Settings ›
+    // Keybinds. MainWindow installs the app's instance.
+
+    private static Keybinds current;
+
+    static void install(Keybinds k) {
+        current = k;
+    }
+
+    /** The main key bound to an action (or its alternative), e.g. "Shift+Z"; "" when unbound or not installed. */
+    public static String keyOf(Action a) {
+        if (current == null) return text(a.defaults().isEmpty() ? null : a.defaults().getFirst());
+        KeyCombination[] k = current.get(a);
+        return text(k[0] != null ? k[0] : k[1]);
+    }
+
+    /** The keys of several actions, e.g. "P / O"; "" when none is bound. */
+    public static String keysOf(Action... actions) {
+        List<String> keys = new ArrayList<>();
+        for (Action a : actions) {
+            String k = keyOf(a);
+            if (!k.isEmpty()) keys.add(k);
+        }
+        return String.join(" / ", keys);
+    }
+
+    /** "Name (key)", or just the name when the actions have no key. */
+    public static String named(String name, Action... actions) {
+        String k = keysOf(actions);
+        return k.isEmpty() ? name : name + " (" + k + ")";
+    }
+
+    /**
+     * A tooltip reading "Title (key)" over a description, with the key looked up each time it shows (so a rebind
+     * shows at once). Several actions list all their keys ("Perspective / orthographic (P / O)").
+     */
+    public static javafx.scene.control.Tooltip tooltip(String title, String description, Action... actions) {
+        javafx.scene.control.Tooltip t = new javafx.scene.control.Tooltip();
+        Runnable fill = () -> t.setText(named(title, actions) + (description == null || description.isBlank() ? "" : "\n" + description));
+        fill.run();
+        t.setOnShowing(e -> fill.run());
+        return t;
+    }
+
     public Keybinds(Settings settings) {
         this.settings = settings;
         if (settings.keybinds == null) settings.keybinds = new java.util.LinkedHashMap<>();
@@ -358,10 +403,11 @@ public final class Keybinds {
             case INSERT -> "Ins";
             case HOME -> "Home";
             case TAB -> "Tab";
-            case LEFT -> "←";
-            case RIGHT -> "→";
-            case UP -> "↑";
-            case DOWN -> "↓";
+            // Spelled out: the key-label fonts don't all have arrow glyphs.
+            case LEFT -> "Left";
+            case RIGHT -> "Right";
+            case UP -> "Up";
+            case DOWN -> "Down";
             case DECIMAL -> "Num .";
             case NUMPAD0, NUMPAD1, NUMPAD2, NUMPAD3, NUMPAD4, NUMPAD5, NUMPAD6, NUMPAD7, NUMPAD8, NUMPAD9 -> "Num " + c.getName().substring(c.getName().length() - 1);
             case CONTEXT_MENU -> "Menu";

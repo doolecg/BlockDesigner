@@ -1,3 +1,10 @@
+import java.net.URI
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
+
 plugins {
     application
     alias(libs.plugins.javafx)
@@ -80,6 +87,139 @@ fun appImageArgs(dest: String, extraJavaOptions: List<String>): List<String> {
     ) + opts.flatMap { listOf("--java-options", it) }
 }
 
+// ---- Code signing ----------------------------------------------------------------------------------------------
+// Windows Smart App Control and SmartScreen block unsigned programs they don't already know, and every release is a
+// new file. When a certificate is configured, the packaging tasks sign the launcher (BlockDesigner.exe), the native
+// DLLs that JavaFX, LWJGL and JNA unpack from their jars at runtime (they ship unsigned; the Java runtime's own DLLs
+// are already signed by Eclipse / Microsoft), and the setup .exe. Without a certificate nothing is signed.
+//
+// Configure it outside the repo, in ~/.gradle/gradle.properties or as environment variables:
+//   blockdesigner.sign.args      (env BLOCKDESIGNER_SIGN_ARGS)  signtool options, everything between "sign" and the files:
+//     certificate in the Windows store (e.g. a Certum / SimplySign card):
+//         /sha1 <certificate thumbprint> /fd SHA256 /tr http://time.certum.pl /td SHA256
+//     a .pfx file:           /f C:\path\cert.pfx /p <password> /fd SHA256 /tr http://timestamp.digicert.com /td SHA256
+//     Azure Trusted Signing: /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256
+//                            /dlib C:\path\Azure.CodeSigning.Dlib.dll /dmdf C:\path\metadata.json
+//   blockdesigner.signtool       (env BLOCKDESIGNER_SIGNTOOL)   signtool.exe to use; otherwise tools/signtool (fetched
+//                                by ./gradlew :app:fetchSigntool), then the Windows SDK, then PATH.
+//   blockdesigner.sign.required  true: fail the build instead of skipping when signing isn't set up (for releases).
+
+fun signSetting(name: String, env: String): String? =
+    (findProperty(name) as String?)?.takeIf { it.isNotBlank() } ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+
+/** Splits signtool options like a command line: spaces separate, double quotes keep paths with spaces together. */
+fun splitArgs(s: String): List<String> {
+    val out = mutableListOf<String>()
+    val cur = StringBuilder()
+    var quoted = false
+    for (c in s) {
+        when {
+            c == '"' -> quoted = !quoted
+            c.isWhitespace() && !quoted -> if (cur.isNotEmpty()) { out += cur.toString(); cur.clear() }
+            else -> cur.append(c)
+        }
+    }
+    if (cur.isNotEmpty()) out += cur.toString()
+    return out
+}
+
+fun findSigntool(): File? {
+    signSetting("blockdesigner.signtool", "BLOCKDESIGNER_SIGNTOOL")?.let { return File(it) }
+    // The newest x64 signtool under a folder (the NuGet build tools and the Windows SDK both use bin/<version>/x64).
+    fun newestIn(root: File): File? = root.takeIf { it.isDirectory }?.walkTopDown()
+        ?.filter { it.name.equals("signtool.exe", true) && it.parentFile.name == "x64" }
+        ?.maxByOrNull { it.parentFile.parentFile.name }
+    return newestIn(rootProject.file("tools/signtool"))
+        ?: newestIn(File(System.getenv("ProgramFiles(x86)") ?: "C:\\Program Files (x86)", "Windows Kits/10/bin"))
+        ?: System.getenv("PATH").orEmpty().split(File.pathSeparator).map { File(it, "signtool.exe") }.firstOrNull { it.isFile }
+}
+
+/** Runs a command, streaming its output into the build log; fails the build on a non-zero exit. */
+fun runChecked(cmd: List<String>, what: String) {
+    val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
+    p.inputStream.bufferedReader().forEachLine { logger.lifecycle("  $it") }
+    if (p.waitFor() != 0) throw GradleException("$what failed (exit ${p.exitValue()})")
+}
+
+/** Signs files with the configured certificate; returns false (after a warning) when signing isn't set up. */
+fun signFiles(files: List<File>): Boolean {
+    if (files.isEmpty()) return true
+    val args = signSetting("blockdesigner.sign.args", "BLOCKDESIGNER_SIGN_ARGS")
+    val required = (findProperty("blockdesigner.sign.required") as String?).toBoolean()
+    val tool = findSigntool()
+    if (args == null || tool == null || !tool.isFile) {
+        val why = if (args == null) "no certificate is configured (blockdesigner.sign.args)" else "signtool.exe wasn't found (run :app:fetchSigntool)"
+        if (required) throw GradleException("Can't sign: $why.")
+        logger.warn("Not signing ${files.size} file(s): $why. Windows Smart App Control may block this build.")
+        return false
+    }
+    logger.lifecycle("Signing ${files.size} file(s) with ${tool.absolutePath}")
+    // A batch per call keeps a hardware token or cloud signer to a handful of round trips.
+    files.chunked(40).forEach { batch ->
+        runChecked(listOf(tool.absolutePath, "sign") + splitArgs(args) + batch.map { it.absolutePath }, "signtool sign")
+    }
+    return true
+}
+
+/** Whether a PE file already carries a valid Authenticode signature (the runtime's DLLs, Microsoft's CRT). */
+fun isSigned(tool: File, f: File): Boolean =
+    ProcessBuilder(tool.absolutePath, "verify", "/pa", "/q", f.absolutePath).redirectErrorStream(true).start()
+        .also { it.inputStream.readAllBytes() }.waitFor() == 0
+
+/**
+ * Signs an app image in place: the launcher, and every unsigned DLL inside the jars in app/ (swapped for its signed
+ * copy, so the libraries unpack signed natives at runtime).
+ */
+fun signAppImage(image: File) {
+    val launcher = File(image, "BlockDesigner.exe")
+    val tool = findSigntool()
+    val configured = signSetting("blockdesigner.sign.args", "BLOCKDESIGNER_SIGN_ARGS") != null && tool != null && tool.isFile
+    if (!configured) {
+        signFiles(listOf(launcher))
+        return
+    }
+    val work = layout.buildDirectory.dir("signing/${image.name}").get().asFile.also { it.deleteRecursively(); it.mkdirs() }
+    // jar -> (entry -> extracted file) for every unsigned DLL
+    val natives = mutableMapOf<File, MutableMap<String, File>>()
+    File(image, "app").listFiles { f -> f.name.endsWith(".jar") }.orEmpty().forEach { jar ->
+        ZipFile(jar).use { zip ->
+            zip.entries().asSequence().filter { !it.isDirectory && it.name.endsWith(".dll", true) }.forEach { e ->
+                val out = File(work, "${jar.nameWithoutExtension}/${e.name}").also { it.parentFile.mkdirs() }
+                zip.getInputStream(e).use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+                if (!isSigned(tool!!, out)) natives.getOrPut(jar) { mutableMapOf() }[e.name] = out
+            }
+        }
+    }
+    signFiles(listOf(launcher) + natives.values.flatMap { it.values })
+    natives.forEach { (jar, entries) ->
+        FileSystems.newFileSystem(jar.toPath()).use { fs ->
+            entries.forEach { (name, file) ->
+                Files.copy(file.toPath(), fs.getPath(name), StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+    }
+    logger.lifecycle("Signed ${image.name}: the launcher and ${natives.values.sumOf { it.size }} native DLL(s) in ${natives.size} jar(s)")
+}
+
+tasks.register("fetchSigntool") {
+    group = "distribution"
+    description = "Downloads signtool.exe (Microsoft.Windows.SDK.BuildTools from nuget.org) into tools/signtool."
+    doLast {
+        val index = URI("https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/index.json").toURL().readText()
+        val version = Regex("\"([0-9.]+)\"").findAll(index).map { it.groupValues[1] }.last()
+        val dest = rootProject.file("tools/signtool").also { it.deleteRecursively(); it.mkdirs() }
+        val pkg = URI("https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.buildtools/$version/microsoft.windows.sdk.buildtools.$version.nupkg").toURL()
+        // A .nupkg is a zip: keep only the x64 signing tools.
+        ZipInputStream(pkg.openStream()).use { zin ->
+            generateSequence { zin.nextEntry }.filter { !it.isDirectory && it.name.contains("/x64/") && it.name.startsWith("bin/") }.forEach { e ->
+                val out = File(dest, e.name).also { it.parentFile.mkdirs() }
+                out.outputStream().use { zin.copyTo(it) }
+            }
+        }
+        logger.lifecycle("signtool $version: ${findSigntool()}")
+    }
+}
+
 val portableImage = tasks.register<Exec>("portableImage") {
     group = "distribution"
     description = "Builds the portable app folder dist/BlockDesigner."
@@ -87,6 +227,7 @@ val portableImage = tasks.register<Exec>("portableImage") {
     doFirst { delete(distDir.dir("BlockDesigner")) }
     // $APPDIR is expanded by the launcher: settings go to <portable folder>/data.
     commandLine(appImageArgs(distDir.asFile.absolutePath, listOf("-Dblockdesigner.dataDir=\$APPDIR/../data")))
+    doLast { signAppImage(distDir.dir("BlockDesigner").asFile) }
 }
 
 tasks.register<Zip>("portable") {
@@ -103,6 +244,7 @@ val installerImage = tasks.register<Exec>("installerImage") {
     dependsOn(tasks.named("installDist"))
     doFirst { delete(imagesDir) }
     commandLine(appImageArgs(imagesDir.get().asFile.absolutePath, emptyList()))
+    doLast { signAppImage(imagesDir.get().dir("BlockDesigner").asFile) }
 }
 
 tasks.register<Exec>("installer") {
@@ -124,6 +266,8 @@ tasks.register<Exec>("installer") {
         // Fixed so newer installers upgrade older ones in place.
         "--win-upgrade-uuid", "3f0f6a4e-5b1c-4f3e-9d7a-2b8e6c1d4a90",
     )
+    // The app inside is signed by installerImage; this signs the setup itself (what SmartScreen checks first).
+    doLast { signFiles(listOf(distDir.file("BlockDesigner-$packageVersion.exe").asFile)) }
 }
 
 // PluginManagerTest loads the example plugin's jar.

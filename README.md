@@ -12,9 +12,28 @@ Requires JDK 25+. `gradle.properties` points Gradle at a local Temurin 26. On fi
 
 ## Windows builds
 
-- `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-0.4.0-portable.zip`. Nothing needs installing, the Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
-- `./gradlew :app:installer` builds `dist/BlockDesigner-0.4.0.exe`, a per-user setup with Start menu and desktop shortcuts. It also makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
-- The version is `packageVersion` in `app/build.gradle.kts`. The icon is drawn by `packaging/make_icon.py` (needs Pillow); rerun it after changing the design.
+- `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-<version>-portable.zip`. Nothing needs installing, the Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
+- `./gradlew :app:installer` builds `dist/BlockDesigner-<version>.exe`, a per-user setup with Start menu and desktop shortcuts. It also makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
+- The version is `version` in the root `build.gradle.kts`. The icon is drawn by `packaging/make_icon.py` (needs Pillow); rerun it after changing the design.
+
+### Code signing
+
+Windows Smart App Control blocks unsigned programs it doesn't recognise, and SmartScreen warns about them. Every release is a new, unknown file, so releases should be signed. When a certificate is set up, `:app:portable` and `:app:installer` sign the following:
+- `BlockDesigner.exe`;
+- the setup `.exe`;
+- the native DLLs that JavaFX, LWJGL and JNA unpack from their jars at runtime (they ship unsigned).
+
+The Java runtime's own DLLs are already signed by Eclipse and Microsoft. Without a certificate, the build warns and leaves everything unsigned.
+
+1. Run `./gradlew :app:fetchSigntool` once. It downloads `signtool.exe` from Microsoft's SDK build tools on nuget.org into `tools/signtool`, which is git-ignored. An installed Windows SDK works too.
+2. Put the signtool options in `~/.gradle/gradle.properties` as `blockdesigner.sign.args`, or in the `BLOCKDESIGNER_SIGN_ARGS` environment variable. Never put them in the repo. The value is everything between `signtool sign` and the file names:
+   - A certificate in the Windows store, such as a USB token or Certum SimplySign: `/sha1 <thumbprint> /fd SHA256 /tr http://time.certum.pl /td SHA256`
+   - A `.pfx` file: `/f C:\certs\blockdesigner.pfx /p <password> /fd SHA256 /tr http://timestamp.digicert.com /td SHA256`
+   - Azure Trusted Signing: `/fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib <path>\Azure.CodeSigning.Dlib.dll /dmdf <path>\metadata.json`
+   In `gradle.properties`, write a backslash as `\` or use forward slashes (`C:/certs/blockdesigner.pfx`). A path with spaces goes in double quotes.
+3. For releases, add `-Pblockdesigner.sign.required=true`. The build then fails instead of quietly shipping unsigned files.
+
+A self-signed certificate signs fine but doesn't satisfy Smart App Control or SmartScreen. The certificate has to come from a code-signing authority that Windows trusts.
 
 ## Features
 
@@ -98,6 +117,7 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 | Shift+X | Replace mode: right-click swaps the aimed block and keeps its facing |
 | Shift+Z | Shuffle mode: place random blocks from the hotbar |
 | 1 – 9 | Hold a hotbar slot |
+| 1 – 9 over a palette block | Put that block in that hotbar slot, like Minecraft's creative inventory |
 | Delete | Empty the held hotbar slot |
 | Shift+C | Clear the hotbar |
 

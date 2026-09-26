@@ -97,7 +97,7 @@ final class SymmetryPopup extends Popup {
         Button here = new Button("Centre on aimed block", new FontIcon(Feather.CROSSHAIR));
         here.getStyleClass().add("small");
         here.setFocusTraversable(false);
-        here.setTooltip(new Tooltip("Shift+M"));
+        here.setTooltip(Keybinds.tooltip("Centre on aimed block", "Move the mirror planes to the block you're looking at", Keybinds.Action.SYMMETRY_CENTRE));
         here.setOnAction(e -> {
             centreHere.run();
             sync();

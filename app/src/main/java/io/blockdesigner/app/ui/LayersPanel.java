@@ -54,8 +54,8 @@ public final class LayersPanel extends VBox {
         title.getStyleClass().add("panel-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button add = iconButton(Feather.PLUS, "New empty layer (Ctrl+Shift+N)", this::newLayer);
-        Button imp = iconButton(Feather.DOWNLOAD, "Import schematic… (Ctrl+I)", actions.importSchematic());
+        Button add = iconButton(Feather.PLUS, Keybinds.tooltip("New empty layer", "Added above the active layer", Keybinds.Action.NEW_LAYER), this::newLayer);
+        Button imp = iconButton(Feather.DOWNLOAD, Keybinds.tooltip("Import schematic…", "Place a .nbt, .litematic or .schem as a new layer (or drop the file here)", Keybinds.Action.IMPORT), actions.importSchematic());
         HBox header = new HBox(6, title, spacer, imp, add);
         header.setAlignment(Pos.CENTER_LEFT);
         header.getStyleClass().add("panel-header");
@@ -130,7 +130,7 @@ public final class LayersPanel extends VBox {
     }
 
     private Region placeholder() {
-        Label l = new Label("No layers yet.\nImport a schematic, drop one here,\nor start building in Build mode (G).");
+        Label l = new Label("No layers yet.\nImport a schematic, drop one here,\nor start building in " + Keybinds.named("Build mode", Keybinds.Action.TOOL_BUILD) + ".");
         l.getStyleClass().add("placeholder-text");
         l.setWrapText(true);
         return new VBox(l);
@@ -178,9 +178,14 @@ public final class LayersPanel extends VBox {
     }
 
     public static Button iconButton(Feather icon, String tip, Runnable action) {
+        return iconButton(icon, new Tooltip(tip), action);
+    }
+
+    /** An icon button with a key-aware tooltip ({@link Keybinds#tooltip}). */
+    public static Button iconButton(Feather icon, Tooltip tip, Runnable action) {
         Button b = new Button(null, new FontIcon(icon));
         b.getStyleClass().addAll("flat", "icon-button");
-        b.setTooltip(new Tooltip(tip));
+        b.setTooltip(tip);
         b.setOnAction(e -> action.run());
         return b;
     }
@@ -190,9 +195,12 @@ public final class LayersPanel extends VBox {
         private final Label name = new Label();
         private final Label meta = new Label();
         private final TextField editor = new TextField();
-        private final ToggleButton eye = toggle(Feather.EYE, Feather.EYE_OFF, "Show / hide");
-        private final ToggleButton lock = toggle(Feather.UNLOCK, Feather.LOCK, "Lock");
-        private final ToggleButton ghost = toggle(Feather.SQUARE, Feather.LAYERS, "Ghost (translucent)");
+        private final ToggleButton eye = toggle(Feather.EYE, Feather.EYE_OFF,
+                Keybinds.tooltip("Show / hide", "Hidden layers aren't drawn, edited or exported (keys act on the selected layers)", Keybinds.Action.HIDE_LAYERS));
+        private final ToggleButton lock = toggle(Feather.UNLOCK, Feather.LOCK,
+                Keybinds.tooltip("Lock", "Locked layers are drawn but can't be edited or moved", Keybinds.Action.LOCK_LAYERS));
+        private final ToggleButton ghost = toggle(Feather.SQUARE, Feather.LAYERS,
+                Keybinds.tooltip("Ghost", "Drawn see-through, as a reference to build over", Keybinds.Action.GHOST_LAYERS));
         private final VBox text = new VBox(1, name, meta);
         private final HBox root;
         /** Source-format badges, made once per cell (rows refresh often while editing). */
@@ -254,11 +262,11 @@ public final class LayersPanel extends VBox {
                 e.consume();
             });
 
-            MenuItem rename = new MenuItem("Rename", new FontIcon(Feather.EDIT_2));
+            MenuItem rename = new MenuItem(Keybinds.named("Rename", Keybinds.Action.RENAME_LAYER), new FontIcon(Feather.EDIT_2));
             rename.setOnAction(e -> startRename());
             MenuItem focus = new MenuItem("Focus camera", new FontIcon(Feather.CROSSHAIR));
             focus.setOnAction(e -> actions.focusLayer().accept(getItem()));
-            MenuItem dup = new MenuItem("Duplicate", new FontIcon(Feather.COPY));
+            MenuItem dup = new MenuItem(Keybinds.named("Duplicate", Keybinds.Action.DUPLICATE_LAYERS), new FontIcon(Feather.COPY));
             dup.setOnAction(e -> {
                 Layer copy = getItem().duplicate(getItem().name() + " copy");
                 ws.editor().addLayer(copy, ws.scene().indexOf(getItem()) + 1);
@@ -268,13 +276,13 @@ public final class LayersPanel extends VBox {
                 int idx = ws.scene().indexOf(getItem());
                 if (idx > 0) ws.editor().mergeDown(getItem(), ws.scene().layers().get(idx - 1));
             });
-            MenuItem mergeSel = new MenuItem("Merge selected", new FontIcon(Feather.GIT_MERGE));
+            MenuItem mergeSel = new MenuItem(Keybinds.named("Merge selected", Keybinds.Action.MERGE_LAYERS), new FontIcon(Feather.GIT_MERGE));
             mergeSel.setOnAction(e -> mergeSelected());
             MenuItem fix = new MenuItem("Fix block shapes", new FontIcon(Feather.LINK));
             fix.setOnAction(e -> actions.fixShapes().accept(getItem()));
             MenuItem export = new MenuItem("Export this layer…", new FontIcon(Feather.SHARE));
             export.setOnAction(e -> actions.exportLayer().accept(getItem()));
-            MenuItem delete = new MenuItem("Delete", new FontIcon(Feather.TRASH_2));
+            MenuItem delete = new MenuItem(Keybinds.named("Delete", Keybinds.Action.DELETE_LAYERS), new FontIcon(Feather.TRASH_2));
             delete.setOnAction(e -> ws.editor().removeLayer(getItem()));
             ContextMenu menu = new ContextMenu(rename, focus, dup, new SeparatorMenuItem(), mergeDown, mergeSel, fix,
                     new SeparatorMenuItem(), export, new SeparatorMenuItem(), delete);
@@ -286,10 +294,10 @@ public final class LayersPanel extends VBox {
             setContextMenu(menu);
         }
 
-        private ToggleButton toggle(Feather off, Feather on, String tip) {
+        private ToggleButton toggle(Feather off, Feather on, Tooltip tip) {
             ToggleButton t = new ToggleButton(null, new FontIcon(off));
             t.getStyleClass().addAll("flat", "icon-toggle");
-            t.setTooltip(new Tooltip(tip));
+            t.setTooltip(tip);
             t.selectedProperty().addListener((o, a, sel) -> t.setGraphic(new FontIcon(sel ? on : off)));
             return t;
         }

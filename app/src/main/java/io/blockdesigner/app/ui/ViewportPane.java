@@ -251,25 +251,25 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(sliceBadge, Pos.TOP_RIGHT);
         StackPane.setMargin(sliceBadge, new javafx.geometry.Insets(14, 150, 0, 0));
         settingsButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        settingsButton.setTooltip(new javafx.scene.control.Tooltip("Viewport settings (N): field of view, clipping, fog, overlays, controls"));
+        settingsButton.setTooltip(Keybinds.tooltip("Viewport settings", "Field of view, clipping, fog, overlays, controls", Keybinds.Action.VIEWPORT_SETTINGS));
         settingsButton.setFocusTraversable(false);
         settingsButton.setOnAction(e -> toggleSettings());
         StackPane.setAlignment(settingsButton, Pos.TOP_RIGHT);
         StackPane.setMargin(settingsButton, new javafx.geometry.Insets(10, 12, 0, 0));
         keysButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        keysButton.setTooltip(new javafx.scene.control.Tooltip("Keyboard shortcuts (Alt+K or F1)"));
+        keysButton.setTooltip(Keybinds.tooltip("Keyboard shortcuts", "Every key and mouse control (change keys in Settings › Keybinds)", Keybinds.Action.SHORTCUTS));
         keysButton.setFocusTraversable(false);
         keysButton.setOnAction(e -> toggleShortcuts());
         StackPane.setAlignment(keysButton, Pos.TOP_RIGHT);
         StackPane.setMargin(keysButton, new javafx.geometry.Insets(52, 12, 0, 0));
         filterButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        filterButton.setTooltip(new javafx.scene.control.Tooltip("By type (Alt+T): select or replace blocks by type"));
+        filterButton.setTooltip(Keybinds.tooltip("Select or replace by type", "Pick block types to select, or to swap for another block", Keybinds.Action.SELECT_BY_TYPE));
         filterButton.setFocusTraversable(false);
         filterButton.setOnAction(e -> openSelectByType(null));
         StackPane.setAlignment(filterButton, Pos.TOP_RIGHT);
         StackPane.setMargin(filterButton, new javafx.geometry.Insets(94, 12, 0, 0));
         commandButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        commandButton.setTooltip(new javafx.scene.control.Tooltip("WorldEdit commands (T or /): /set, /replace, /walls, /copy, /paste, /stack, /sphere…"));
+        commandButton.setTooltip(Keybinds.tooltip("WorldEdit commands", "/set, /replace, /walls, /copy, /paste, /stack, /sphere…", Keybinds.Action.COMMAND_BAR));
         commandButton.setFocusTraversable(false);
         commandButton.setOnAction(e -> openCommandBar());
         StackPane.setAlignment(commandButton, Pos.TOP_RIGHT);
@@ -323,7 +323,7 @@ public final class ViewportPane extends StackPane {
             requestRedraw();
         }, this::centreSymmetryHere);
         symmetryButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        symmetryButton.setTooltip(new javafx.scene.control.Tooltip("Symmetry (M): mirror X / Y / Z and radial copies for Build mode"));
+        symmetryButton.setTooltip(Keybinds.tooltip("Symmetry", "Mirror X / Y / Z and radial copies for Build mode", Keybinds.Action.SYMMETRY));
         symmetryButton.setFocusTraversable(false);
         symmetryButton.setOnAction(e -> {
             javafx.geometry.Point2D p = symmetryButton.localToScreen(0, 0);
@@ -365,15 +365,17 @@ public final class ViewportPane extends StackPane {
             updateHotbarVisibility();
             requestRedraw();
             showToast(switch (b) {
-                case BUILD -> ws.replaceProperty().get() ? "Build mode · Replace · left break · right replace · middle pick · R places again"
+                case BUILD -> ws.replaceProperty().get() ? "Build mode · Replace · left break · right replace · middle pick" + keyNote(Keybinds.Action.REPLACE_MODE, "places again")
                         : shape() == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE
-                        ? "Build mode · left break · right place · middle pick · hold Alt for shapes" + keyNote(Keybinds.Action.TOOL_BUILD, "to leave")
-                        : "Build mode · " + shape().label + " · right-drag to place · hold Alt to change shape" + keyNote(Keybinds.Action.TOOL_BUILD, "to leave");
+                        ? "Build mode · left break · right place · middle pick" + keyNote(Keybinds.Action.SHAPE_WHEEL, "(hold) for shapes") + keyNote(Keybinds.Action.TOOL_BUILD, "to leave")
+                        : "Build mode · " + shape().label + " · right-drag to place" + keyNote(Keybinds.Action.SHAPE_WHEEL, "(hold) to change shape") + keyNote(Keybinds.Action.TOOL_BUILD, "to leave");
                 case SELECT -> "Select mode";
                 case VIEW -> "View mode";
                 case MOVE -> "Move · drag an arrow, square or the centre" + (keyText(Keybinds.Action.TOOL_MOVE).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_MOVE));
                 case ROTATE -> "Rotate · drag a ring to turn 90° · E";
-                case BRUSH -> "Brush · drag to paint · right-drag smooths · Alt+1…0 modes · Shift+right-click settings · - / = size · , / . strength";
+                case BRUSH -> "Brush · drag to paint · right-drag smooths · Shift+right-click settings"
+                        + keyNote(Keybinds.Action.BRUSH_SMALLER, "/ " + keyText(Keybinds.Action.BRUSH_BIGGER) + " size")
+                        + keyNote(Keybinds.Action.BRUSH_WEAKER, "/ " + keyText(Keybinds.Action.BRUSH_STRONGER) + " strength");
                 case ERASER -> "Eraser · drag to remove blocks · - / = size" + (keyText(Keybinds.Action.TOOL_ERASER).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_ERASER));
             });
         });
@@ -1884,7 +1886,7 @@ public final class ViewportPane extends StackPane {
                     item(String.format("Fill region %d×%d×%d with held block", rb.sizeX(), rb.sizeY(), rb.sizeZ()), "/set hand", () -> runCommand("/set hand")),
                     item("Walls of region with held block", "/walls hand", () -> runCommand("/walls hand")),
                     item("Copy region", "/copy", () -> runCommand("/copy")),
-                    item("Clear region", "Esc", this::clearRegionAndSelection),
+                    item("Clear region", keyOrNull(Keybinds.Action.CANCEL), this::clearRegionAndSelection),
                     new javafx.scene.control.SeparatorMenuItem());
         }
         if (hoverEntity != null) {
@@ -1917,7 +1919,7 @@ public final class ViewportPane extends StackPane {
                                 false, java.util.Map.of(), sliceY != null), java.util.Set.of(type.name()), held, true))));
             }
             byType.getItems().addAll(
-                    item("Select or replace…", "Alt+T", () -> openSelectByType(type)));
+                    item("Select or replace…", keyOrNull(Keybinds.Action.SELECT_BY_TYPE), () -> openSelectByType(type)));
             contextMenu.getItems().add(byType);
         }
         if (n > 0) {
@@ -1930,14 +1932,14 @@ public final class ViewportPane extends StackPane {
                     item("Move to active layer" + (ws.activeLayerProperty().get() == null ? "" : " (" + ws.activeLayerProperty().get().name() + ")"),
                             null, this::moveSelectionToActiveLayer),
                     item("Move or rotate", keyOrNull(Keybinds.Action.TOOL_MOVE), () -> ws.toolProperty().set(ToolKind.MOVE)),
-                    item("Clear selection", "Esc", this::clearBlockSelection));
+                    item("Clear selection", keyOrNull(Keybinds.Action.CANCEL), this::clearBlockSelection));
         }
         if (layer != null) {
             if (!contextMenu.getItems().isEmpty()) contextMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
             contextMenu.getItems().addAll(
                     item("Select all in " + layer.name(), null, () -> selectAllIn(layer)),
-                    item("Select or replace by type…", "Alt+T", () -> openSelectByType(null)),
-                    item("Frame " + layer.name(), null, () -> frameLayer(layer)),
+                    item("Select or replace by type…", keyOrNull(Keybinds.Action.SELECT_BY_TYPE), () -> openSelectByType(null)),
+                    item("Frame " + layer.name(), keyOrNull(Keybinds.Action.FRAME_ACTIVE), () -> frameLayer(layer)),
                     item("Fix block shapes in " + layer.name(), null, () -> fixLayerShapes(layer)),
                     item("Hide " + layer.name(), null, () -> ws.editor().modifyLayer(layer, "Hide " + layer.name(), null, x -> x.setVisible(false))),
                     item(layer.locked() ? "Unlock " + layer.name() : "Lock " + layer.name(), null,
@@ -3520,7 +3522,7 @@ public final class ViewportPane extends StackPane {
         Box r = worldEdit.region();
         regionChanged();
         boolean both = worldEdit.pos1() != null && worldEdit.pos2() != null;
-        showToast((first ? "pos1 " : "pos2 ") + p + (both ? String.format(" · %d×%d×%d = %,d blocks · T for commands", r.sizeX(), r.sizeY(), r.sizeZ(), r.volume())
+        showToast((first ? "pos1 " : "pos2 ") + p + (both ? String.format(" · %d×%d×%d = %,d blocks", r.sizeX(), r.sizeY(), r.sizeZ(), r.volume()) + keyNote(Keybinds.Action.COMMAND_BAR, "for commands")
                 : first ? " · right-click pos2" : " · left-click pos1"));
     }
 
@@ -3881,7 +3883,7 @@ public final class ViewportPane extends StackPane {
         String text = sd.tooBig ? sd.shape.label + " · too big (over " + String.format("%,d", io.blockdesigner.core.place.ShapeTool.MAX_BLOCKS) + " blocks)"
                 : sd.shape.label + size + " · " + String.format("%,d", sd.cells.size()) + " block" + (sd.cells.size() == 1 ? "" : "s")
                 + (sd.shape.usesHeight() ? " · wheel: height " + sd.height : "") + (sd.replace ? " · replacing" : "")
-                + " · release to place · Esc cancels";
+                + " · release to place" + keyNote(Keybinds.Action.CANCEL, "cancels");
         shapeInfo.setText(text);
         shapeInfo.setOpacity(1);
         shapeInfo.setVisible(true);
@@ -3985,8 +3987,9 @@ public final class ViewportPane extends StackPane {
         String blocks = n == 0 ? "" : String.format("%,d block%s", n, n == 1 ? "" : "s");
         String what = blocks.isEmpty() ? mobs : mobs.isEmpty() ? blocks : blocks + " and " + mobs;
         showToast(what.isEmpty() ? "Selection cleared"
-                : what + " selected" + box + (ne > 0 ? " · arrows move · Alt+scroll turns · Del removes"
-                : keyNote(Keybinds.Action.TOOL_MOVE, "moves") + keyNote(Keybinds.Action.TOOL_ROTATE, "rotates") + keyNote(Keybinds.Action.COMMAND_BAR, "for commands")) + " · Esc clears");
+                : what + " selected" + box + (ne > 0 ? keyNote(Keybinds.Action.NUDGE_FORWARD, "/ " + Keybinds.keysOf(Keybinds.Action.NUDGE_BACK, Keybinds.Action.NUDGE_LEFT, Keybinds.Action.NUDGE_RIGHT) + " move")
+                + " · Alt+scroll turns" + keyNote(Keybinds.Action.DELETE, "removes")
+                : keyNote(Keybinds.Action.TOOL_MOVE, "moves") + keyNote(Keybinds.Action.TOOL_ROTATE, "rotates") + keyNote(Keybinds.Action.COMMAND_BAR, "for commands")) + keyNote(Keybinds.Action.CANCEL, "clears"));
         requestRedraw();
     }
 
@@ -4075,7 +4078,8 @@ public final class ViewportPane extends StackPane {
             frameAll();
             return;
         }
-        showToast("Click to place · R or Alt+scroll rotate · Ctrl/Shift+scroll adjust · Esc cancel");
+        showToast("Click to place" + keyNote(Keybinds.Action.PLACE, "places") + " · " + (keyText(Keybinds.Action.ROTATE_PLACEMENT).isEmpty() ? "" : keyText(Keybinds.Action.ROTATE_PLACEMENT) + " or ")
+                + "Alt+scroll rotate · Ctrl/Shift+scroll adjust" + keyNote(Keybinds.Action.CANCEL, "cancels"));
         requestFocus();
     }
 
@@ -4174,6 +4178,7 @@ public final class ViewportPane extends StackPane {
         this.keys = keys;
         brushPopup.setKeys(this::keyText);
         symmetryPopup.setKeys(this::keyText);
+        hotbar.setKeys(this::keyText);
     }
 
     /** Frames the selected blocks if there are any, otherwise the active layer (or everything when there is none). */
@@ -4220,7 +4225,7 @@ public final class ViewportPane extends StackPane {
         ws.settings().showKeyHints = !ws.settings().showKeyHints;
         ws.settings().save();
         updateKeyHints();
-        showToast(ws.settings().showKeyHints ? "Key hints on · Shift+F1 hides them" : "Key hints off · Shift+F1 shows them");
+        showToast(ws.settings().showKeyHints ? "Key hints on" + keyNote(Keybinds.Action.KEY_HINTS, "hides them") : "Key hints off" + keyNote(Keybinds.Action.KEY_HINTS, "shows them"));
     }
 
     /** Picks the key hints for what is going on now: placing an import, dragging a shape, flying, or the tool. */
@@ -4335,6 +4340,7 @@ public final class ViewportPane extends StackPane {
             return;
         }
         setFly(false);
+        shortcuts.refresh();
         if (shortcutsPopover == null) shortcutsPopover = SidePopover.create("Keyboard shortcuts", shortcuts);
         SidePopover.show(shortcutsPopover, keysButton);
     }

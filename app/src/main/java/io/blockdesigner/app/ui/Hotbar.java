@@ -26,8 +26,15 @@ final class Hotbar extends HBox {
     private static final PseudoClass SHUFFLE = PseudoClass.getPseudoClass("shuffle");
     private static final PseudoClass ON = PseudoClass.getPseudoClass("on");
     // Mode toggles at the left of the bar: always shown, dim when off and lit when on, with a small label underneath.
-    private final Label replaceBadge = toggle("Replace (R)", org.kordamp.ikonli.feather.Feather.REFRESH_CW);
-    private final Label shuffleBadge = toggle("Shuffle (Z)", org.kordamp.ikonli.feather.Feather.SHUFFLE);
+    private final Label replaceBadge = toggle("Replace", org.kordamp.ikonli.feather.Feather.REFRESH_CW);
+    private final Label shuffleBadge = toggle("Shuffle", org.kordamp.ikonli.feather.Feather.SHUFFLE);
+
+    /** Labels the mode toggles with their keys from Settings › Keybinds ("Replace (Shift+X)"). */
+    void setKeys(java.util.function.Function<Keybinds.Action, String> keyText) {
+        String r = keyText.apply(Keybinds.Action.REPLACE_MODE), s = keyText.apply(Keybinds.Action.SHUFFLE);
+        replaceBadge.setText(r.isEmpty() ? "Replace" : "Replace (" + r + ")");
+        shuffleBadge.setText(s.isEmpty() ? "Shuffle" : "Shuffle (" + s + ")");
+    }
 
     private final Workspace ws;
     private final StackPane[] slots = new StackPane[Workspace.HOTBAR_SIZE];
@@ -56,11 +63,11 @@ final class Hotbar extends HBox {
             slots[i] = p;
             getChildren().add(p);
         }
-        shuffleBadge.setTooltip(new Tooltip("Shuffle (Z): placing picks a random block from the hotbar"));
+        shuffleBadge.setTooltip(Keybinds.tooltip("Shuffle", "Placing picks a random block from the hotbar", Keybinds.Action.SHUFFLE));
         shuffleBadge.setOnMouseClicked(e -> ws.shuffleProperty().set(!ws.shuffleProperty().get()));
         getChildren().addFirst(shuffleBadge);
-        replaceBadge.setTooltip(new Tooltip("Replace mode (R): right-click swaps the block you aim at for the held block, "
-                + "keeping its facing and shape. Hold and drag to paint."));
+        replaceBadge.setTooltip(Keybinds.tooltip("Replace mode", "Right-click swaps the block you aim at for the held block, "
+                + "keeping its facing and shape. Hold and drag to paint.", Keybinds.Action.REPLACE_MODE));
         replaceBadge.setOnMouseClicked(e -> ws.replaceProperty().set(!ws.replaceProperty().get()));
         getChildren().addFirst(replaceBadge);
         ws.shuffleProperty().addListener((o, a, b) -> refresh());

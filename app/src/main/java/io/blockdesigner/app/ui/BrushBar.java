@@ -34,10 +34,11 @@ final class BrushBar extends HBox {
         this.changed = changed;
         mode.getStyleClass().addAll("small", "brush-mode-button");
         mode.setFocusTraversable(false);
-        mode.setTooltip(new Tooltip("Brush mode and settings (Shift+right-click in the viewport) · Alt+1…0 pick a mode"));
+        mode.setTooltip(Keybinds.tooltip("Brush mode and settings", "Also Shift+right-click in the viewport. Mode keys: "
+                + Keybinds.keyOf(Keybinds.Action.BRUSH_MODE_1) + " … " + Keybinds.keyOf(Keybinds.Action.BRUSH_MODE_10)));
         mode.setOnAction(e -> openPopup.run());
         strength.getStyleClass().add("brush-value");
-        strength.setTooltip(new Tooltip("Strength (, / .)"));
+        strength.setTooltip(Keybinds.tooltip("Strength", "How strongly each stamp changes the terrain", Keybinds.Action.BRUSH_WEAKER, Keybinds.Action.BRUSH_STRONGER));
         getStyleClass().add("brush-bar");
         setSpacing(8);
         setAlignment(Pos.CENTER);
@@ -58,8 +59,8 @@ final class BrushBar extends HBox {
             b.getStyleClass().addAll("flat", "small");
             b.setFocusTraversable(false);
         }
-        minus.setTooltip(new Tooltip("Smaller (-)"));
-        plus.setTooltip(new Tooltip("Bigger (=)"));
+        minus.setTooltip(Keybinds.tooltip("Smaller brush", null, Keybinds.Action.BRUSH_SMALLER));
+        plus.setTooltip(Keybinds.tooltip("Bigger brush", null, Keybinds.Action.BRUSH_BIGGER));
         minus.setOnAction(e -> step(-1));
         plus.setOnAction(e -> step(1));
         size.setMajorTickUnit(1);

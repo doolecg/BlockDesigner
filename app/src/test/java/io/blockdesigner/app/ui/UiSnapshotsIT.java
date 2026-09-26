@@ -397,6 +397,25 @@ class UiSnapshotsIT {
         cbox.layout();
         save(cbox.snapshot(null, null), dir.resolve("view-cube" + suffix + ".png"));
 
+        // The shortcuts list, keys filled in from the key binds (one rebound, one unbound, to see both).
+        {
+            Settings ks = new Settings();
+            Keybinds kb2 = new Keybinds(ks);
+            kb2.set(Keybinds.Action.SYMMETRY, 0, Keybinds.parse("F7"));
+            kb2.set(Keybinds.Action.TOOL_ROTATE, 0, null);
+            Keybinds.install(kb2);
+            ShortcutsPanel sp3 = new ShortcutsPanel();
+            javafx.scene.layout.StackPane spBox = new javafx.scene.layout.StackPane(sp3);
+            spBox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+            spBox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+            spBox.setStyle("-fx-background-color: -color-bg-default; -fx-padding: 12;");
+            new javafx.scene.Scene(spBox, 820, 640);
+            spBox.applyCss();
+            spBox.layout();
+            save(spBox.snapshot(null, null), dir.resolve("shortcuts" + suffix + ".png"));
+            Keybinds.install(null);
+        }
+
         // Key hints for Build mode, over a viewport-coloured backdrop.
         KeyHints hints = new KeyHints();
         hints.show(List.of(KeyHints.Hint.of("Break", "LMB"), KeyHints.Hint.of("Place", "RMB"), KeyHints.Hint.of("Pick block", "MMB"),

@@ -37,7 +37,10 @@ public final class ToolDock extends VBox {
         add(ws, group, ToolKind.ERASER, ToolIcons.eraser(17), "Eraser", Keybinds.Action.TOOL_ERASER, "drag to remove blocks; - / = size");
         getChildren().add(new Separator());
         flyToggle.getStyleClass().addAll("flat", "tool-button");
-        flyToggle.setTooltip(new Tooltip("Creative flight (C): WASD, Space/Shift, mouse look"));
+        flyToggle.setTooltip(Keybinds.tooltip("Creative flight", "Fly with "
+                + Keybinds.keyOf(Keybinds.Action.FLY_FORWARD) + Keybinds.keyOf(Keybinds.Action.FLY_LEFT) + Keybinds.keyOf(Keybinds.Action.FLY_BACK)
+                + Keybinds.keyOf(Keybinds.Action.FLY_RIGHT) + ", " + Keybinds.keysOf(Keybinds.Action.FLY_UP, Keybinds.Action.FLY_DOWN)
+                + " up / down, mouse to look", Keybinds.Action.FLY));
         flyToggle.setOnAction(e -> viewport.setFly(flyToggle.isSelected()));
         viewport.onFlyChanged(() -> flyToggle.setSelected(viewport.isFlying()));
         getChildren().add(flyToggle);
@@ -56,12 +59,7 @@ public final class ToolDock extends VBox {
         b.getStyleClass().addAll("flat", "tool-button");
         b.setToggleGroup(g);
         // The key is looked up each time the tooltip shows, so it follows Settings › Keybinds.
-        Tooltip t = new Tooltip();
-        t.setOnShowing(e -> {
-            String k = viewport.keyText(key);
-            t.setText(name + (k.isEmpty() ? "" : " (" + k + ")") + ": " + tip);
-        });
-        b.setTooltip(t);
+        b.setTooltip(Keybinds.tooltip(name, Character.toUpperCase(tip.charAt(0)) + tip.substring(1), key));
         b.setOnAction(e -> {
             if (!b.isSelected()) b.setSelected(true);
             ws.toolProperty().set(kind);

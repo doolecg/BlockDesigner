@@ -99,6 +99,7 @@ public final class MainWindow {
         this.ws = ws;
         this.viewport = new ViewportPane(ws);
         this.keys = new Keybinds(ws.settings());
+        Keybinds.install(keys);
         viewport.setKeybinds(keys);
         this.disabledPlugins = new java.util.LinkedHashSet<>(ws.settings().disabledPlugins);
         this.plugins = new io.blockdesigner.app.plugins.PluginManager(io.blockdesigner.app.Settings.dir().resolve("plugins"), pluginHost(), disabledPlugins);
@@ -543,9 +544,9 @@ public final class MainWindow {
         name.textProperty().bindBidirectional(ws.projectNameProperty());
         name.setPrefColumnCount(14);
 
-        Button newDoc = LayersPanel.iconButton(Feather.FILE_PLUS, "New project (Ctrl+N)", this::newProject);
-        Button open = LayersPanel.iconButton(Feather.FOLDER, "Open project or schematic (Ctrl+O)", this::openDialog);
-        Button save = LayersPanel.iconButton(Feather.SAVE, "Save project (Ctrl+S)", () -> save(false));
+        Button newDoc = LayersPanel.iconButton(Feather.FILE_PLUS, Keybinds.tooltip("New project", "Start an empty project", Keybinds.Action.NEW_PROJECT), this::newProject);
+        Button open = LayersPanel.iconButton(Feather.FOLDER, Keybinds.tooltip("Open", "A project (.bdproj) or a schematic: .nbt, .litematic, .schem", Keybinds.Action.OPEN), this::openDialog);
+        Button save = LayersPanel.iconButton(Feather.SAVE, Keybinds.tooltip("Save project", "Save as a .bdproj project (Save as: " + Keybinds.keyOf(Keybinds.Action.SAVE_AS) + ")", Keybinds.Action.SAVE), () -> save(false));
         Button imp = new Button("Import", new FontIcon(Feather.DOWNLOAD));
         imp.getStyleClass().add("flat");
         imp.setOnAction(e -> importDialog());
@@ -561,20 +562,20 @@ public final class MainWindow {
         pluginMenu.setOnShowing(e -> fillPluginMenu(pluginMenu));
         fillPluginMenu(pluginMenu);
 
-        Button undo = LayersPanel.iconButton(Feather.CORNER_UP_LEFT, "Undo (Ctrl+Z)", () -> ws.editor().undoStack().undo());
-        Button redo = LayersPanel.iconButton(Feather.CORNER_UP_RIGHT, "Redo (Ctrl+Y)", () -> ws.editor().undoStack().redo());
+        Button undo = LayersPanel.iconButton(Feather.CORNER_UP_LEFT, Keybinds.tooltip("Undo", "Nothing to undo", Keybinds.Action.UNDO), () -> ws.editor().undoStack().undo());
+        Button redo = LayersPanel.iconButton(Feather.CORNER_UP_RIGHT, Keybinds.tooltip("Redo", "Nothing to redo", Keybinds.Action.REDO), () -> ws.editor().undoStack().redo());
         ws.editor().undoStack().addListener(() -> {
             undo.setDisable(!ws.editor().undoStack().canUndo());
             redo.setDisable(!ws.editor().undoStack().canRedo());
-            undo.setTooltip(new Tooltip(ws.editor().undoStack().undoLabel().map(s -> "Undo " + s).orElse("Undo") + " (Ctrl+Z)"));
-            redo.setTooltip(new Tooltip(ws.editor().undoStack().redoLabel().map(s -> "Redo " + s).orElse("Redo") + " (Ctrl+Y)"));
+            undo.setTooltip(Keybinds.tooltip("Undo", ws.editor().undoStack().undoLabel().orElse("Nothing to undo"), Keybinds.Action.UNDO));
+            redo.setTooltip(Keybinds.tooltip("Redo", ws.editor().undoStack().redoLabel().orElse("Nothing to redo"), Keybinds.Action.REDO));
         });
         undo.setDisable(true);
         redo.setDisable(true);
 
         Button theme = LayersPanel.iconButton(Feather.MOON, "Light / dark (Settings has themes)",
                 () -> ws.themeModeProperty().set(ws.darkProperty().get() ? "LIGHT" : "DARK"));
-        Button assets = LayersPanel.iconButton(Feather.SETTINGS, "Settings: themes, appearance, general (Ctrl+,)", this::openSettings);
+        Button assets = LayersPanel.iconButton(Feather.SETTINGS, Keybinds.tooltip("Settings", "General, appearance and themes, keybinds", Keybinds.Action.SETTINGS), this::openSettings);
         assetBadge.getStyleClass().add("badge");
         assetBadge.setCursor(javafx.scene.Cursor.HAND);
         assetBadge.setOnMouseClicked(e -> startAssetLoading(true));
@@ -590,7 +591,7 @@ public final class MainWindow {
     /** Export menu: the Export window, one entry per card (with its format icon), then plugin exporters. */
     private void fillExportMenu(MenuButton menu) {
         List<MenuItem> items = new ArrayList<>();
-        MenuItem all = new MenuItem("Export…  (Ctrl+E)", new FontIcon(Feather.UPLOAD));
+        MenuItem all = new MenuItem(Keybinds.named("Export…", Keybinds.Action.EXPORT), new FontIcon(Feather.UPLOAD));
         all.setOnAction(e -> exportDialog(null, null));
         items.add(all);
         items.add(new SeparatorMenuItem());
@@ -598,7 +599,7 @@ public final class MainWindow {
         items.add(exportItem("WorldEdit (.schem)…", FormatIcons.Kind.WORLDEDIT, "sponge"));
         items.add(exportItem("Create / Structure (.nbt)…", FormatIcons.Kind.CREATE, "vanilla"));
         items.add(new SeparatorMenuItem());
-        MenuItem datapack = new MenuItem("Worldgen data pack…  (Ctrl+Shift+E)", FormatIcons.icon(FormatIcons.Kind.DATAPACK, 16));
+        MenuItem datapack = new MenuItem(Keybinds.named("Worldgen data pack…", Keybinds.Action.EXPORT_DATAPACK), FormatIcons.icon(FormatIcons.Kind.DATAPACK, 16));
         datapack.setOnAction(e -> exportDatapack());
         items.add(datapack);
         boolean first = true;
@@ -967,7 +968,7 @@ public final class MainWindow {
         run.put(Keybinds.Action.SETTINGS, this::openSettings);
         run.put(Keybinds.Action.SEARCH_BLOCKS, () -> palette.focusSearch());
         run.put(Keybinds.Action.FULL_SCREEN, () -> {
-            stage.setFullScreenExitHint("Esc leaves full screen");
+            stage.setFullScreenExitHint("Esc or " + Keybinds.keyOf(Keybinds.Action.FULL_SCREEN) + " leaves full screen");
             stage.setFullScreen(!stage.isFullScreen());
         });
         run.forEach((action, r) -> {
@@ -1072,8 +1073,17 @@ public final class MainWindow {
                 case BRUSH_STRONGER -> brush ? () -> viewport.stepBrushStrength(1) : null;
                 case BRUSH_MODE_1, BRUSH_MODE_2, BRUSH_MODE_3, BRUSH_MODE_4, BRUSH_MODE_5, BRUSH_MODE_6, BRUSH_MODE_7, BRUSH_MODE_8,
                      BRUSH_MODE_9, BRUSH_MODE_10 -> brush ? () -> viewport.setBrushMode(a.ordinal() - Keybinds.Action.BRUSH_MODE_1.ordinal()) : null;
-                case HOTBAR_1, HOTBAR_2, HOTBAR_3, HOTBAR_4, HOTBAR_5, HOTBAR_6, HOTBAR_7, HOTBAR_8, HOTBAR_9 ->
-                        () -> ws.selectHotbarSlot(a.ordinal() - Keybinds.Action.HOTBAR_1.ordinal());
+                case HOTBAR_1, HOTBAR_2, HOTBAR_3, HOTBAR_4, HOTBAR_5, HOTBAR_6, HOTBAR_7, HOTBAR_8, HOTBAR_9 -> () -> {
+                    int slot = a.ordinal() - Keybinds.Action.HOTBAR_1.ordinal();
+                    // Over a block in the palette the key fills that slot, like Minecraft's creative inventory.
+                    io.blockdesigner.core.model.BlockState over = palette.hoveredBlock();
+                    if (over != null) {
+                        ws.putInHotbar(slot, over);
+                        viewport.showToast(BlockInfoHud.name(ws.assets(), over) + " → hotbar slot " + (slot + 1));
+                    } else {
+                        ws.selectHotbarSlot(slot);
+                    }
+                };
                 case VIEW_FRONT, VIEW_BACK, VIEW_RIGHT, VIEW_LEFT, VIEW_TOP, VIEW_BOTTOM, VIEW_OPPOSITE, VIEW_ORTHO_TOGGLE,
                      ORBIT_LEFT, ORBIT_RIGHT, ORBIT_UP, ORBIT_DOWN, FRAME_ACTIVE -> () -> viewport.cameraKey(a);
                 case SHORTCUTS -> viewport::toggleShortcuts;
@@ -1191,7 +1201,7 @@ public final class MainWindow {
         } finally {
             ws.editor().undoStack().endGroup();
         }
-        viewport.showToast((ls.size() == 1 ? "Deleted " + ls.getFirst().name() : "Deleted " + ls.size() + " layers") + " · Ctrl+Z to undo");
+        viewport.showToast((ls.size() == 1 ? "Deleted " + ls.getFirst().name() : "Deleted " + ls.size() + " layers") + " · " + Keybinds.keyOf(Keybinds.Action.UNDO) + " to undo");
     }
 
     /** [ and ]: the layer below / above becomes the active one. */
