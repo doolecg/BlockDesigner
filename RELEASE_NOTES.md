@@ -1,3 +1,24 @@
+# BlockDesigner 0.4.9
+
+A small fix to update prompts: BlockDesigner only asks you to update when there's a newer version.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.9.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.9.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.9-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. A copy installed in AppData moves to Program Files with this update, because it installs with the `.msi`. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Fixed
+- **No update prompt when you're up to date.** In 0.4.8, a copy in AppData was asked to move to Program Files even on the latest version. Now the move just happens as part of the next real update, and the update window says so.
+
+---
+
 # BlockDesigner 0.4.8
 
 A fix for updating from 0.4.6 and earlier. Those versions couldn't install 0.4.7 by themselves, and sent you to this page instead. Now they update as usual, and afterwards BlockDesigner offers the move to `C:\Program Files`.

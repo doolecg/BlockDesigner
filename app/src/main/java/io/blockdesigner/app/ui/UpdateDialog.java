@@ -39,7 +39,7 @@ final class UpdateDialog extends Dialog<Void> {
      * @param quit        closes BlockDesigner once the installer is waiting for it
      * @param skip        remembers that the user doesn't want this version
      */
-    /** Same version or newer, from a per-user AppData install: the move to Program Files. */
+    /** A newer version for a per-user AppData install: updating also moves it to Program Files (the .msi). */
     private final boolean move;
 
     UpdateDialog(Window owner, boolean dark, Updater updater, Updater.Release release, BooleanSupplier readyToQuit,
@@ -52,8 +52,7 @@ final class UpdateDialog extends Dialog<Void> {
         dp.getStyleClass().addAll("app-root", dark ? "dark" : "light");
 
         this.move = Updater.offersMove(release);
-        boolean sameVersion = Updater.compareVersions(release.version(), Updater.currentVersion()) <= 0;
-        Label title = new Label(move && sameVersion ? "Move BlockDesigner to Program Files" : "BlockDesigner " + release.version() + " is available",
+        Label title = new Label("BlockDesigner " + release.version() + " is available",
                 new FontIcon(Feather.DOWNLOAD_CLOUD));
         title.getStyleClass().add("export-title");
         title.setGraphicTextGap(12);

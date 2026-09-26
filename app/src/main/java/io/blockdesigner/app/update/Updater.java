@@ -97,7 +97,7 @@ public final class Updater {
         return mode() == Mode.INSTALLED && root != null && local != null && root.toAbsolutePath().startsWith(Path.of(local));
     }
 
-    /** Whether a release is the move to Program Files for this copy: a per-user install, and the release has an .msi. */
+    /** Whether updating this copy to {@code r} also moves it to Program Files: a per-user install, and the release has an .msi. */
     public static boolean offersMove(Release r) {
         return isPerUserInstall() && r.installer() != null && r.installer().name().toLowerCase(java.util.Locale.ROOT).endsWith(".msi");
     }

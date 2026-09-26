@@ -722,9 +722,9 @@ public final class MainWindow {
         Thread.ofVirtual().name("update-check").start(() -> {
             try {
                 var release = updater.latest();
-                // A per-user AppData copy is also offered the move to Program Files at the same version.
-                boolean newer = Updater.compareVersions(release.version(), Updater.currentVersion()) > 0
-                        || (Updater.offersMove(release) && Updater.compareVersions(release.version(), Updater.currentVersion()) >= 0);
+                // Only when there's a newer version. A per-user AppData copy then updates with the .msi, which is
+                // also its move to Program Files (the update window says so).
+                boolean newer = Updater.compareVersions(release.version(), Updater.currentVersion()) > 0;
                 Platform.runLater(() -> {
                     if (newer && (manual || !release.version().equals(ws.settings().skippedVersion))) {
                         showUpdate(release);
