@@ -8,11 +8,16 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Place / break sounds, mixed on one low-latency audio line: the bundled {@code sounds/place.wav} and
+ * The app's sounds, mixed on one low-latency audio line. Place / break: the bundled {@code sounds/place.wav} and
  * {@code sounds/break.wav} (more variants can be added as place-2.wav, break-2.wav…; each play picks a different one).
  * Every other click plays at a slightly random pitch (like Minecraft's pitch variation), the ones between at the
  * original pitch. Recordings are mixed down to mono, trimmed of silence and levelled on load. If they are missing,
  * simple synthesised thuds stand in; with no audio device the sounds quietly do nothing.
+ * <p>
+ * Painting: {@code sounds/paint.wav} is split by its loudness into an intro (played once when a stroke starts), a
+ * steady middle that loops (crossfaded so the seam doesn't click) while the stroke goes on, and the tail, which plays
+ * when the stroke ends. UI: soft synthesised pick-up and put-down pops and a tick for the hotbar, which buttons and
+ * menu items share, in the spirit of the Extra Sounds mod.
  */
 final class BlockSounds {
     private static final float RATE = 44100;
@@ -20,6 +25,15 @@ final class BlockSounds {
     private static final int VARIANTS = 5, CHUNK = 128, BUFFER_FRAMES = 1024;
 
     private final float[][] place, breaks;
+    /** The paint sound's parts (null without a paint.wav): intro, crossfaded loop, and the tail (fading in). */
+    private final float[] paintIntro, paintLoop, paintTail;
+    /** UI sounds, synthesised. */
+    private final float[] pickUp, putDown, tick;
+    // Paint voice state, guarded by voices: 0 off, 1 intro, 2 looping, 3 fading out (the tail is then a normal voice).
+    private int paintState, paintPos;
+    private float paintGain, paintFade;
+    /** Fade used when painting stops and the tail takes over, so the two meet without a click. */
+    private static final float PAINT_XFADE = 0.04f;
     private final List<Voice> voices = new ArrayList<>();
     private final Random random = new Random();
     private SourceDataLine line;
@@ -50,10 +64,93 @@ final class BlockSounds {
         }
         place = p;
         breaks = b;
+        float[][] paint = splitLoop(loadRaw("paint"));
+        paintIntro = paint == null ? null : paint[0];
+        paintLoop = paint == null ? null : paint[1];
+        paintTail = paint == null ? null : paint[2];
+        pickUp = blip(520, 980, 0.07, 0.08, 0.7);
+        putDown = blip(900, 480, 0.08, 0.1, 0.7);
+        tick = blip(1800, 1700, 0.012, 0.2, 0.45);
         // Open the audio device now (it can take a few hundred ms), so the first click isn't late.
         Thread warm = new Thread(this::open, "block-sounds-open");
         warm.setDaemon(true);
         warm.start();
+    }
+
+    /**
+     * Splits a painting recording into intro, loop and tail by its loudness: the loop is the steady middle (where the
+     * sound stays above 55% of its loudest), trimmed of silence at both ends. The loop's end is crossfaded into its
+     * start so it repeats without a seam, and the whole sound is levelled a little softer than a click, as it plays
+     * for as long as the stroke lasts. Null without a recording.
+     */
+    static float[][] splitLoop(float[][] recordings) {
+        if (recordings.length == 0) return null;
+        float[] s = recordings[0];
+        int win = (int) (RATE * 0.02), windows = s.length / win;
+        if (windows < 8) return null;
+        double[] env = new double[windows];
+        double max = 0;
+        for (int w = 0; w < windows; w++) {
+            double sum = 0;
+            for (int i = w * win; i < (w + 1) * win; i++) sum += s[i] * s[i];
+            env[w] = Math.sqrt(sum / win);
+            max = Math.max(max, env[w]);
+        }
+        int first = 0, last = windows - 1;
+        while (first < last && env[first] < max * 0.03) first++;
+        while (last > first && env[last] < max * 0.03) last--;
+        int a = first, b = last;
+        while (a < last && env[a] < max * 0.55) a++;
+        while (b > a && env[b] < max * 0.55) b--;
+        // Too short a steady part to loop well: loop everything that isn't silence.
+        if ((b - a) * win < RATE * 0.25) {
+            a = first;
+            b = last;
+        }
+        int start = first * win, loopA = a * win, loopB = (b + 1) * win, end = Math.min(s.length, (last + 1) * win);
+        int n = loopB - loopA, x = (int) Math.min(RATE * 0.12, n / 4.0);
+        float[] loop = new float[n - x];
+        for (int i = 0; i < loop.length; i++) {
+            if (i < x) {
+                // Equal-power crossfade of the loop's last x samples into its first x.
+                double t = (double) i / x;
+                loop[i] = (float) (s[loopA + i] * Math.sqrt(t) + s[loopA + n - x + i] * Math.sqrt(1 - t));
+            } else {
+                loop[i] = s[loopA + i];
+            }
+        }
+        float[] intro = java.util.Arrays.copyOfRange(s, start, loopA);
+        // The tail carries on from where the loop wraps (sample n - x of the steady part) to the end of the sound.
+        float[] tail = java.util.Arrays.copyOfRange(s, loopA + n - x, end);
+        int fade = Math.min(tail.length, (int) (RATE * PAINT_XFADE));
+        for (int i = 0; i < fade; i++) tail[i] *= (float) i / fade;
+        // Level by the loop, which is what's heard most.
+        double sum = 0, peak = 1e-6;
+        for (float v : loop) {
+            sum += v * v;
+            peak = Math.max(peak, Math.abs(v));
+        }
+        for (float v : intro) peak = Math.max(peak, Math.abs(v));
+        for (float v : tail) peak = Math.max(peak, Math.abs(v));
+        float k = (float) Math.min(0.14 / Math.sqrt(sum / loop.length), 0.9 / peak);
+        for (float[] part : new float[][]{intro, loop, tail}) for (int i = 0; i < part.length; i++) part[i] *= k;
+        return new float[][]{intro, loop, tail};
+    }
+
+    /** The bundled {@code <name>.wav}, {@code <name>-2.wav}… as mono float samples at {@link #RATE}, as recorded. */
+    static float[][] loadRaw(String name) {
+        List<float[]> out = new ArrayList<>();
+        for (int i = 1; i <= 32; i++) {
+            var url = BlockSounds.class.getResource("/io/blockdesigner/app/sounds/" + name + (i == 1 ? "" : "-" + i) + ".wav");
+            if (url == null) break;
+            try (var in = AudioSystem.getAudioInputStream(url)) {
+                float[] mono = toMono(in);
+                if (mono.length > 0) out.add(mono);
+            } catch (Exception e) {
+                // unreadable file: skip that variant
+            }
+        }
+        return out.toArray(new float[0][]);
     }
 
     /** The bundled {@code <name>.wav}, {@code <name>-2.wav}… as mono float samples at {@link #RATE}, levelled. */
@@ -120,6 +217,82 @@ final class BlockSounds {
         double rms = Math.sqrt(sum / Math.max(1, n));
         float k = (float) Math.min(0.28 / rms, 0.95 / peak);
         for (int i = 0; i < s.length; i++) s[i] *= k;
+        return s;
+    }
+
+    // ---- painting ----------------------------------------------------------------------------------------------
+
+    /** A brush stroke started: the intro plays, then the loop repeats until {@link #paintStop()}. */
+    void paintStart(double volume) {
+        if (volume <= 0 || line == null || paintLoop == null) return;
+        synchronized (voices) {
+            paintState = paintIntro.length > 0 ? 1 : 2;
+            paintPos = 0;
+            paintGain = (float) volume;
+            paintFade = 1;
+            voices.notifyAll();
+        }
+    }
+
+    /** The stroke ended: the loop fades out as the end of the recording plays. */
+    void paintStop() {
+        synchronized (voices) {
+            if (paintState == 0 || paintState == 3) return;
+            paintState = 3;
+            if (paintTail.length > 0) voices.add(new Voice(paintTail, paintGain, 1, new double[]{0}));
+        }
+    }
+
+    // ---- UI ------------------------------------------------------------------------------------------------------
+
+    /** A button, toggle or menu item was clicked: the same tick as the hotbar (its first slot's pitch). */
+    void click(double volume) {
+        tick(volume, 0);
+    }
+
+    /** A block was taken (from the palette, or picked in the world). */
+    void pickUp(double volume) {
+        ui(pickUp, volume * 0.55, 1);
+    }
+
+    /** A block was put in the hotbar. */
+    void putDown(double volume) {
+        ui(putDown, volume * 0.55, 1);
+    }
+
+    /** The held hotbar slot changed: a tick that rises a little with the slot number. */
+    void tick(double volume, int slot) {
+        ui(tick, volume * 0.45, 1 + slot * 0.03);
+    }
+
+    private void ui(float[] samples, double volume, double rate) {
+        if (volume <= 0 || line == null) return;
+        synchronized (voices) {
+            if (voices.size() >= 8) voices.removeFirst();
+            voices.add(new Voice(samples, (float) volume, rate, new double[]{0}));
+            voices.notifyAll();
+        }
+    }
+
+    /**
+     * A short UI sound: a sine gliding from {@code fromHz} to {@code toHz} over {@code seconds} with a quick attack
+     * and decay, plus a touch of filtered noise ({@code noise}) for texture, peaking at {@code gain}.
+     */
+    static float[] blip(double fromHz, double toHz, double seconds, double noise, double gain) {
+        int n = (int) (RATE * seconds);
+        float[] s = new float[n];
+        Random r = new Random(11);
+        double phase = 0, lp = 0, peak = 1e-9;
+        for (int i = 0; i < n; i++) {
+            double t = (double) i / n;
+            phase += 2 * Math.PI * (fromHz + (toHz - fromHz) * t) / RATE;
+            double env = Math.min(1, i / (RATE * 0.002)) * Math.pow(1 - t, 2.2);
+            lp += 0.35 * ((r.nextDouble() * 2 - 1) - lp);
+            s[i] = (float) ((Math.sin(phase) + noise * lp) * env);
+            peak = Math.max(peak, Math.abs(s[i]));
+        }
+        float k = (float) (gain / peak);
+        for (int i = 0; i < n; i++) s[i] *= k;
         return s;
     }
 
@@ -190,6 +363,31 @@ final class BlockSounds {
                     }
                     v.pos[0] = p;
                     if (p >= smp.length - 1) it.remove();
+                }
+                // The paint loop: intro once, then the loop over and over; on stop it fades as the tail plays.
+                if (paintState != 0) {
+                    float fadeStep = 1f / (RATE * PAINT_XFADE);
+                    for (int k = 0; k < CHUNK && paintState != 0; k++) {
+                        float v;
+                        if (paintState == 1) {
+                            v = paintIntro[paintPos++];
+                            if (paintPos >= paintIntro.length) {
+                                paintState = 2;
+                                paintPos = 0;
+                            }
+                        } else {
+                            v = paintLoop[paintPos++ % paintLoop.length];
+                            paintPos %= paintLoop.length;
+                        }
+                        if (paintState == 3) {
+                            paintFade -= fadeStep;
+                            if (paintFade <= 0) {
+                                paintState = 0;
+                                break;
+                            }
+                        }
+                        acc[k] += v * paintGain * paintFade;
+                    }
                 }
             }
             for (int k = 0; k < CHUNK; k++) {

@@ -1,3 +1,32 @@
+# BlockDesigner 0.4.5
+
+Sounds: painting with the brush has its own looping sound, and the interface has soft sounds for clicks, picking up blocks and the hotbar. Clicking a button over the 3D view no longer also breaks, places or paints behind it.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.5.exe** | You want a normal install. Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.5-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand (see [0.4.2](https://github.com/doolecg/BlockDesigner/releases/tag/0.4.2)).
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Painting sound:** the paint brush plays a brushing sound while you paint. It loops for as long as you hold the button, and its ending plays when you let go. It replaces the thud the brush used to make on every dab. The eraser keeps its break sounds.
+- **UI sounds**, in the spirit of the Extra Sounds mod:
+  - buttons, toggles and menu items play a soft tick, the same one as changing hotbar slots;
+  - taking a block from the palette or picking one in the world plays a pick-up pop;
+  - a block landing in the hotbar plays a put-down pop.
+  
+  Turn them off under Viewport settings › Editing › UI sounds. The place / break switch is now "Build sounds (place, break, paint)", and both share the volume slider.
+
+## Fixed
+- **Clicking the interface over the 3D view no longer acts on the world behind it.** This covers the viewport buttons, the hotbar, the brush bar, the view cube and the command line. Before, a click there could also break, place or paint the block behind the button.
+
+---
+
 # BlockDesigner 0.4.4
 
 Plugin API v2: plugins can now add transforms with a live preview, side panels, their own tools, importers and richer exporters. Also in this release: every key label now shows your keybinds, and you can fill hotbar slots straight from the palette.

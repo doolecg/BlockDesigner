@@ -63,6 +63,8 @@ public final class Settings {
     /** Place / break thuds and their volume (0..1). */
     public boolean blockSounds = true;
     public double soundVolume = 0.6;
+    /** Clicks for buttons and menus, pops for picking up and putting down blocks, a tick for hotbar slots. */
+    public boolean uiSounds = true;
     /** Chips fly out of broken blocks. */
     public boolean breakParticles = true;
     /** Hotbar block states (nine slots, "" for empty). */
@@ -129,6 +131,7 @@ public final class Settings {
         brushRate = d.brushRate;
         blockSounds = d.blockSounds;
         soundVolume = d.soundVolume;
+        uiSounds = d.uiSounds;
         breakParticles = d.breakParticles;
         fovDeg = d.fovDeg;
         clipEnd = d.clipEnd;

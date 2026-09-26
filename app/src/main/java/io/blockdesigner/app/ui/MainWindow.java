@@ -183,9 +183,16 @@ public final class MainWindow {
             while (c.next()) {
                 for (javafx.stage.Window w : c.getAddedSubList()) {
                     if (w instanceof Stage st && st.getIcons().isEmpty()) st.getIcons().setAll(appIcons());
+                    // Clicks in every window and popup (dialogs, menus) get the UI click sound.
+                    if (w.getScene() != null) installClickSounds(w.getScene());
+                    w.sceneProperty().addListener((o, a, sc) -> {
+                        if (sc != null) installClickSounds(sc);
+                    });
                 }
             }
         });
+        installClickSounds(scene);
+        palette.setOnPickUp(viewport::uiPickUp);
 
         ws.scene().addListener(new Scene.Listener() {
             @Override
@@ -251,6 +258,28 @@ public final class MainWindow {
         if (left > 0) s.leftPanelWidth = left;
         if (mainSplit.getItems().contains(rightPanel) && rightPanel.getWidth() > 0) s.rightPanelWidth = rightPanel.getWidth();
         if (!leftSplit.getDividers().isEmpty()) s.leftSplit = leftSplit.getDividerPositions()[0];
+    }
+
+    private final java.util.Set<javafx.scene.Scene> clickSoundScenes = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /**
+     * The UI click for buttons, toggles, check boxes and menu items in {@code scene}: buttons report themselves with
+     * an action event; menu items live in popups, so a mouse release on one counts (not on a submenu's own row).
+     */
+    private void installClickSounds(javafx.scene.Scene scene) {
+        if (!clickSoundScenes.add(scene)) return;
+        scene.addEventFilter(javafx.event.ActionEvent.ACTION, e -> {
+            if (e.getTarget() instanceof javafx.scene.control.ButtonBase) viewport.uiClick();
+        });
+        scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_RELEASED, e -> {
+            for (javafx.scene.Node n = e.getTarget() instanceof javafx.scene.Node t ? t : null; n != null; n = n.getParent()) {
+                if (n.getStyleClass().contains("menu")) return;
+                if (n.getStyleClass().contains("menu-item")) {
+                    viewport.uiClick();
+                    return;
+                }
+            }
+        });
     }
 
     /** Stops the viewport and plugins and saves settings; run as the app closes. */

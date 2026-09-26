@@ -359,6 +359,8 @@ public final class ViewportPane extends StackPane {
         updateSymmetryButton();
         StackPane.setAlignment(keyHints, Pos.BOTTOM_RIGHT);
         StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, 14, 0));
+        hotbarSounds();
+        for (javafx.scene.Node ui : new javafx.scene.Node[]{hotbar, brushBar, viewCube, commandBar, hud, sliceBadge, keyHints}) markUi(ui);
         getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, brushBar, pluginToolBar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar,
                 shapeInfo, symmetryButton, keyHints, shapeRadial);
         keyHintsTick.setCycleCount(javafx.animation.Animation.INDEFINITE);
@@ -985,8 +987,28 @@ public final class ViewportPane extends StackPane {
         hud.show(ws.assets(), BlockTransformer.defaults().apply(local, hover.layer().transform()), hover.world(), hover.layer());
     }
 
+    /** Marks a panel over the viewport as UI: presses on it never reach the world behind it. */
+    private static final String UI_OVERLAY = "viewport-ui-overlay";
+
+    private static void markUi(javafx.scene.Node n) {
+        n.getProperties().put(UI_OVERLAY, Boolean.TRUE);
+    }
+
+    /**
+     * Whether a mouse event started on the viewport's own UI (a button, the hotbar, the brush bar, the view cube…)
+     * rather than on the world: those clicks mustn't also break, place or paint behind the button.
+     */
+    private boolean onUi(MouseEvent e) {
+        for (javafx.scene.Node n = e.getTarget() instanceof javafx.scene.Node t ? t : null; n != null && n != this; n = n.getParent()) {
+            if (n instanceof javafx.scene.control.Control || n.getProperties().containsKey(UI_OVERLAY)) return true;
+        }
+        return false;
+    }
+
     private void onPress(MouseEvent e) {
         requestFocus();
+        // The shape wheel handles its own clicks below; any other UI keeps the click to itself.
+        if (!(altAlone || shapeRadial.isOpen()) && onUi(e)) return;
         if (altAlone || shapeRadial.isOpen()) {
             // Clicking a sector picks it (the sector handles that); any other press closes the wheel and carries on,
             // so Alt+middle-drag still swings the view.
@@ -1098,6 +1120,8 @@ public final class ViewportPane extends StackPane {
     }
 
     private void onDrag(MouseEvent e) {
+        // A drag keeps the target it was pressed on: one that started on UI (a slider, the hotbar) stays there.
+        if (onUi(e)) return;
         if (fly) {
             flyLook(e);
             return;
@@ -1156,6 +1180,7 @@ public final class ViewportPane extends StackPane {
     }
 
     private void onRelease(MouseEvent e) {
+        if (onUi(e) && stroke == null && holdAction == null && shapeDrag == null && gizmoDrag == null) return;
         if (shapeDrag != null && e.getButton() == MouseButton.SECONDARY) {
             commitShape();
             dragButton = null;
@@ -1727,6 +1752,8 @@ public final class ViewportPane extends StackPane {
         }
         if (hover == null) return false;
         BlockState s = BlockTransformer.defaults().apply(hover.layer().structure().get(hover.local()), hover.layer().transform());
+        uiPickUp();
+        quietHotbar = System.nanoTime();
         ws.recordInHotbar(s);
         showToast("Picked " + BlockInfoHud.name(ws.assets(), s));
         return true;
@@ -2703,6 +2730,8 @@ public final class ViewportPane extends StackPane {
         BlockPos last;
         long lastStamp;
         int changed;
+        /** Whether this stroke plays the paint loop (instead of a thud per dab). */
+        boolean looped;
         /** Cells this stroke drew or erased (world): the brush won't stamp on its own paint or through its own hole. */
         final java.util.Set<BlockPos> touched = new java.util.HashSet<>();
 
@@ -2777,6 +2806,9 @@ public final class ViewportPane extends StackPane {
             return;
         }
         stroke = new Stroke(mode, invert);
+        // The paint brush has its own looping sound (the eraser keeps its break sounds).
+        stroke.looped = ws.toolProperty().get() == ToolKind.BRUSH && ws.settings().blockSounds;
+        if (stroke.looped) sounds.paintStart(ws.settings().soundVolume);
         stroke.start = brushCenter(mode);
         stroke.normal = hover != null ? hover.normal() : new BlockPos(0, 1, 0);
         ws.editor().undoStack().beginGroup(mode.label);
@@ -2819,6 +2851,7 @@ public final class ViewportPane extends StackPane {
 
     private void endStroke() {
         if (stroke == null) return;
+        if (stroke.looped) sounds.paintStop();
         stroke = null;
         ws.editor().undoStack().endGroup();
         requestRedraw();
@@ -2841,7 +2874,7 @@ public final class ViewportPane extends StackPane {
             default -> sculptCells(c);
         };
         stroke.changed += n;
-        if (n > 0 && ws.settings().blockSounds && System.nanoTime() - lastBrushSound > 70_000_000L) {
+        if (n > 0 && ws.settings().blockSounds && !stroke.looped && System.nanoTime() - lastBrushSound > 70_000_000L) {
             lastBrushSound = System.nanoTime();
             boolean removing = switch (stroke.mode) {
                 case ERASE, ERODE, LOWER -> true;
@@ -4480,6 +4513,36 @@ public final class ViewportPane extends StackPane {
     private String keyNote(Keybinds.Action a, String what) {
         String k = keyText(a);
         return k.isEmpty() ? "" : " · " + k + " " + what;
+    }
+
+    // ---- UI sounds ----------------------------------------------------------------------------------------------
+
+    /** When a pick-up or put-down just played: the hotbar's own tick / pop stays quiet for a moment after. */
+    private long quietHotbar;
+
+    /** A button, toggle or menu item was clicked (any window). */
+    public void uiClick() {
+        if (ws.settings().uiSounds) sounds.click(ws.settings().soundVolume);
+    }
+
+    /** A block (or mob) was taken into the hand. */
+    public void uiPickUp() {
+        if (ws.settings().uiSounds) sounds.pickUp(ws.settings().soundVolume);
+    }
+
+    /** Plays the hotbar's sounds: a pop when a block lands in a slot, a tick when the held slot changes. */
+    private void hotbarSounds() {
+        ws.hotbar().addListener((javafx.collections.ListChangeListener<BlockState>) c -> {
+            boolean added = false;
+            while (c.next()) if (c.wasAdded() && c.getAddedSubList().stream().anyMatch(java.util.Objects::nonNull)) added = true;
+            if (!added || !ws.settings().uiSounds || System.nanoTime() - quietHotbar < 80_000_000L) return;
+            quietHotbar = System.nanoTime();
+            sounds.putDown(ws.settings().soundVolume);
+        });
+        ws.hotbarSlotProperty().addListener((o, a, b) -> {
+            if (!ws.settings().uiSounds || System.nanoTime() - quietHotbar < 80_000_000L) return;
+            sounds.tick(ws.settings().soundVolume, b.intValue());
+        });
     }
 
     /** A key other than Alt went down (possibly with Alt): an Alt+key shortcut, so the shape wheel must not open. */

@@ -179,6 +179,14 @@ public final class BlockPalette extends VBox {
         return null;
     }
 
+    /** Told when a block or mob is taken from the grid (for the pick-up sound). */
+    private Runnable onPickUp = () -> {
+    };
+
+    void setOnPickUp(Runnable r) {
+        onPickUp = r;
+    }
+
     /** Ctrl+F: jumps to the block search box. */
     public void focusSearch() {
         search.requestFocus();
@@ -423,6 +431,7 @@ public final class BlockPalette extends VBox {
         p.setOnMouseClicked(e -> {
             ws.holdEntity(id);
             ws.toolProperty().set(Workspace.ToolKind.BUILD);
+            onPickUp.run();
         });
         return p;
     }
@@ -447,6 +456,7 @@ public final class BlockPalette extends VBox {
         p.setOnMouseClicked(e -> {
             ws.holdBlock(b.defaultState());
             ws.toolProperty().set(Workspace.ToolKind.BUILD);
+            onPickUp.run();
         });
         // Drag onto the hotbar to keep it there.
         p.setOnDragDetected(e -> {
