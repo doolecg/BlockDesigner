@@ -1,3 +1,24 @@
+# BlockDesigner 0.4.2
+
+A fix for updating. In 0.4.0 and 0.4.1, **Install and restart** could download the update, close BlockDesigner, and then never install it or open again. That happened when the install folder's path had a space in it, as it does for any Windows user name with a space. The setup then waited on an error box that stayed hidden.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.2.exe** | You want a normal install. Installing over 0.4.0 or 0.4.1 upgrades it in place. |
+| **BlockDesigner-0.4.2-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+**If you are on 0.4.0 or 0.4.1, install this one by hand:** download the `.exe` above and run it. BlockDesigner updates itself from 0.4.2 on. Everything new in 0.4.1 is listed in the [0.4.1 release](https://github.com/doolecg/BlockDesigner/releases/tag/0.4.1).
+
+## Fixed
+- **Updating works** when the install folder's path has spaces in it. The setup gets the folder in a form it accepts.
+- **The setup's progress shows** instead of running hidden. If it ever stops responding, BlockDesigner gives up on it after 15 minutes and opens again anyway, rather than staying closed.
+- **Trying again after a failed update works.** Each attempt downloads into its own folder, so a file left open by an earlier attempt can't block it.
+- **Update errors are readable sentences** instead of a bare file path.
+
+---
+
 # BlockDesigner 0.4.1
 
 A polish release. The block palette now looks and sorts like Minecraft's creative menu, shapes grow out of whichever face you start them on, and Select by type can replace blocks as well.

@@ -104,7 +104,7 @@ final class UpdateDialog extends Dialog<Void> {
             status.setText("Downloading " + asset.name() + "…");
             worker = Thread.ofVirtual().name("update-download").start(() -> {
                 try {
-                    Path dir = Updater.workDir();
+                    Path dir = Updater.attemptDir();
                     Path file = updater.download(asset, dir, p -> Platform.runLater(() -> bar.setProgress(p)));
                     Path ready = file;
                     if (mode == Updater.Mode.PORTABLE) {
@@ -130,7 +130,7 @@ final class UpdateDialog extends Dialog<Void> {
                     Platform.runLater(() -> {
                         bar.setVisible(false);
                         bar.setManaged(false);
-                        status.setText("Update failed: " + ex.getMessage());
+                        status.setText("Update failed: " + Updater.describe(ex));
                         install.setDisable(false);
                         dp.lookupButton(SKIP).setDisable(false);
                     });

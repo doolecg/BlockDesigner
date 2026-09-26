@@ -217,12 +217,68 @@ public final class Updater {
     }
 
     /**
+     * A fresh folder under {@link #workDir()} for one update attempt, so a file left locked by an earlier attempt
+     * (a setup that is still running) can't stop this one. Older attempts are cleared where possible.
+     */
+    public static Path attemptDir() throws IOException {
+        Path work = workDir();
+        if (Files.isDirectory(work)) {
+            try (var old = Files.list(work)) {
+                for (Path p : old.toList()) deleteQuietly(p);
+            }
+        }
+        return Files.createDirectories(work.resolve(Long.toString(System.currentTimeMillis())));
+    }
+
+    private static void deleteQuietly(Path p) {
+        try {
+            if (Files.isDirectory(p)) {
+                try (var in = Files.list(p)) {
+                    for (Path c : in.toList()) deleteQuietly(c);
+                }
+            }
+            Files.deleteIfExists(p);
+        } catch (IOException | RuntimeException ignored) {
+            // in use: left for the next attempt
+        }
+    }
+
+    /** A sentence for an update error (a bare file-system exception message is just a path). */
+    public static String describe(Exception e) {
+        if (e instanceof java.nio.file.FileSystemException f) {
+            String why = f.getReason() != null ? f.getReason() : e.getClass().getSimpleName().replace("Exception", "").replaceAll("(?<=[a-z])(?=[A-Z])", " ").toLowerCase(java.util.Locale.ROOT);
+            return "couldn't write " + f.getFile() + " (" + why + "). An earlier update may still be running; restart Windows or try again later.";
+        }
+        String m = e.getMessage();
+        return m == null || m.isBlank() ? e.getClass().getSimpleName() : m;
+    }
+
+    /**
      * Starts a hidden helper that waits for this process to exit, installs {@code downloaded} (the setup .exe, or the
      * folder the portable zip was unpacked into), then opens the new version. Call it right before quitting.
      */
     public static void launchInstaller(Mode mode, Path downloaded) throws IOException {
         Path root = appRoot();
         if (mode == Mode.DEV || root == null) throw new IOException("This copy wasn't started from an install.");
+        String script = installScript(mode, downloaded, root);
+
+        // The script lives outside WORK so it can delete that folder; UTF-8 with a BOM so Windows PowerShell 5.1
+        // reads non-ASCII paths correctly.
+        Path ps1 = Files.createTempFile("BlockDesigner-update-", ".ps1");
+        script += "Remove-Item -LiteralPath " + ps(ps1.toString()) + " -Force -ErrorAction SilentlyContinue\n";
+        Files.writeString(ps1, "\uFEFF" + script, StandardCharsets.UTF_8);
+        new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-WindowStyle", "Hidden", "-File", ps1.toString())
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start();
+    }
+
+    /** How long the setup may run before the helper gives up on it and opens BlockDesigner again anyway. */
+    static final int SETUP_TIMEOUT_MS = 15 * 60 * 1000;
+
+    /** The helper script for {@link #launchInstaller}: wait for this process, install, then open BlockDesigner. */
+    static String installScript(Mode mode, Path downloaded, Path root) {
         Map<String, String> vars = new HashMap<>();
         vars.put("PID", Long.toString(ProcessHandle.current().pid()));
         vars.put("ROOT", ps(root.toString()));
@@ -231,12 +287,26 @@ public final class Updater {
         String script = switch (mode) {
             case INSTALLED -> {
                 vars.put("SETUP", ps(downloaded.toString()));
+                vars.put("TIMEOUT", Integer.toString(SETUP_TIMEOUT_MS));
                 // The jpackage setup passes its arguments on to msiexec: /passive shows only a progress bar, and
-                // INSTALLDIR keeps the upgrade in the folder the user chose last time.
-                vars.put("ARGS", ps("/passive INSTALLDIR=\"" + root + "\""));
+                // INSTALLDIR keeps the upgrade in the folder it was installed to. The setup re-quotes any argument
+                // with a space as a whole ("INSTALLDIR=C:\Users\A B\..."), which msiexec rejects (it then waits on
+                // its usage box), so the folder goes in as its 8.3 short path; without one it is left out and the
+                // upgrade goes to the default folder. The setup's window is shown on purpose: this script runs
+                // hidden, and anything it starts would otherwise inherit that and ask its questions invisibly. If
+                // the setup hangs anyway, it is stopped after a while so BlockDesigner still opens again.
                 yield """
                         Wait-Process -Id {PID} -ErrorAction SilentlyContinue
-                        Start-Process -FilePath {SETUP} -ArgumentList {ARGS} -Wait
+                        $setupArgs = '/passive'
+                        try {
+                            $short = (New-Object -ComObject Scripting.FileSystemObject).GetFolder({ROOT}).ShortPath
+                            if ($short -and $short -notmatch ' ') { $setupArgs += ' INSTALLDIR=' + $short }
+                        } catch { }
+                        $setup = Start-Process -FilePath {SETUP} -ArgumentList $setupArgs -WindowStyle Normal -PassThru
+                        if (-not $setup.WaitForExit({TIMEOUT})) {
+                            Get-CimInstance Win32_Process -Filter "ParentProcessId=$($setup.Id)" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                            Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue
+                        }
                         Start-Process -FilePath {EXE}
                         Remove-Item -LiteralPath {WORK} -Recurse -Force -ErrorAction SilentlyContinue
                         """;
@@ -256,17 +326,7 @@ public final class Updater {
             case DEV -> throw new IllegalStateException();
         };
         for (var e : vars.entrySet()) script = script.replace("{" + e.getKey() + "}", e.getValue());
-
-        // The script lives outside WORK so it can delete that folder; UTF-8 with a BOM so Windows PowerShell 5.1
-        // reads non-ASCII paths correctly.
-        Path ps1 = Files.createTempFile("BlockDesigner-update-", ".ps1");
-        script += "Remove-Item -LiteralPath " + ps(ps1.toString()) + " -Force -ErrorAction SilentlyContinue\n";
-        Files.writeString(ps1, "﻿" + script, StandardCharsets.UTF_8);
-        new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-WindowStyle", "Hidden", "-File", ps1.toString())
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .start();
+        return script;
     }
 
     /** A PowerShell single-quoted string literal. */

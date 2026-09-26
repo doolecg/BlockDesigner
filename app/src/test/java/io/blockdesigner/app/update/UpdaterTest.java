@@ -58,4 +58,27 @@ class UpdaterTest {
     void knowsItsOwnVersion() {
         assertThat(Updater.currentVersion()).matches("\\d+\\.\\d+\\.\\d+");
     }
+
+    @Test
+    void installerNeverGetsAQuotedFolderWithSpaces() {
+        // msiexec rejects "INSTALLDIR=C:\Users\A B\..." (the setup re-quotes it like that) and waits on a hidden usage box.
+        Path root = Path.of("C:\\Users\\Dayle Frost\\AppData\\Local\\BlockDesigner");
+        String script = Updater.installScript(Updater.Mode.INSTALLED, Path.of("C:\\Temp\\BlockDesigner-9.9.9.exe"), root);
+        assertThat(script).doesNotContain("INSTALLDIR=\"").doesNotContain("-Wait\n");
+        assertThat(script).contains("ShortPath").contains("-WindowStyle Normal").contains("WaitForExit(" + Updater.SETUP_TIMEOUT_MS + ")");
+        assertThat(script).contains("Start-Process -FilePath 'C:\\Users\\Dayle Frost\\AppData\\Local\\BlockDesigner\\BlockDesigner.exe'");
+    }
+
+    @Test
+    void shortPathOfAFolderWithSpacesHasNone(@TempDir Path dir) throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(System.getProperty("os.name").startsWith("Windows"));
+        Path spaced = java.nio.file.Files.createDirectories(dir.resolve("Dayle Frost"));
+        Process p = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                "(New-Object -ComObject Scripting.FileSystemObject).GetFolder('" + spaced + "').ShortPath").redirectErrorStream(true).start();
+        String out = new String(p.getInputStream().readAllBytes()).strip();
+        p.waitFor();
+        // 8.3 names can be switched off per volume; then the script leaves INSTALLDIR out, which is also fine.
+        org.junit.jupiter.api.Assumptions.assumeFalse(out.contains(" "), "8.3 short names are off on this volume");
+        assertThat(java.nio.file.Files.isDirectory(Path.of(out))).isTrue();
+    }
 }
