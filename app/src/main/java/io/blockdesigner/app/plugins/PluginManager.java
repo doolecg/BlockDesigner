@@ -6,18 +6,26 @@ import io.blockdesigner.core.edit.SceneEditor;
 import io.blockdesigner.core.formats.SchematicFormat;
 import io.blockdesigner.core.formats.Schematics;
 import io.blockdesigner.core.model.BlockState;
+import io.blockdesigner.core.model.Box;
 import io.blockdesigner.core.model.Layer;
 import io.blockdesigner.core.model.Scene;
 import io.blockdesigner.core.model.Structure;
 import io.blockdesigner.core.version.McVersion;
 import io.blockdesigner.core.worldedit.WorldEdit;
+import io.blockdesigner.plugin.BlockCatalog;
 import io.blockdesigner.plugin.BlockDesignerPlugin;
 import io.blockdesigner.plugin.PluginAction;
 import io.blockdesigner.plugin.PluginApi;
 import io.blockdesigner.plugin.PluginCommand;
 import io.blockdesigner.plugin.PluginContext;
 import io.blockdesigner.plugin.PluginExporter;
+import io.blockdesigner.plugin.PluginImporter;
 import io.blockdesigner.plugin.PluginInfo;
+import io.blockdesigner.plugin.PluginPanel;
+import io.blockdesigner.plugin.PluginTool;
+import io.blockdesigner.plugin.PluginTransform;
+import io.blockdesigner.plugin.SceneEvent;
+import io.blockdesigner.plugin.Subscription;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -58,6 +66,38 @@ public final class PluginManager {
     public record Action(Plugin plugin, PluginAction action) {
     }
 
+    /** A transform together with the plugin that added it. */
+    public record Transform(Plugin plugin, PluginTransform transform) {
+        /** {@code plugin/transform-id}, unique across plugins. */
+        public String key() {
+            return plugin.info().id() + "/" + transform.id();
+        }
+    }
+
+    /** A tool together with the plugin that added it. */
+    public record Tool(Plugin plugin, PluginTool tool) {
+        /** {@code plugin/tool-id}, unique across plugins; the key its options and key bind are kept under. */
+        public String key() {
+            return plugin.info().id() + "/" + tool.id();
+        }
+    }
+
+    /** An importer together with the plugin that added it. */
+    public record Import(Plugin plugin, PluginImporter importer) {
+        /** {@code plugin/importer-id}, unique across plugins; the key its options are remembered under. */
+        public String key() {
+            return plugin.info().id() + "/" + importer.id();
+        }
+    }
+
+    /** A panel together with the plugin that added it. */
+    public record Panel(Plugin plugin, PluginPanel panel) {
+        /** {@code plugin/panel-id}, unique across plugins. */
+        public String key() {
+            return plugin.info().id() + "/" + panel.id();
+        }
+    }
+
     /** One plugin jar and its current state. */
     public final class Plugin {
         private final PluginInfo info;
@@ -71,6 +111,11 @@ public final class PluginManager {
         private final List<PluginExporter> exporters = new ArrayList<>();
         private final List<PluginAction> actions = new ArrayList<>();
         private final List<String> commands = new ArrayList<>();
+        private final List<PluginTransform> transforms = new ArrayList<>();
+        private final List<PluginPanel> panels = new ArrayList<>();
+        private final List<PluginImporter> importers = new ArrayList<>();
+        private final List<PluginTool> tools = new ArrayList<>();
+        private Context context;
 
         private Plugin(PluginInfo info, Path jar) {
             this.info = info;
@@ -103,9 +148,18 @@ public final class PluginManager {
             List<String> parts = new ArrayList<>();
             if (!formats.isEmpty()) parts.add(formats.size() + (formats.size() == 1 ? " format" : " formats"));
             if (!exporters.isEmpty()) parts.add(exporters.size() + (exporters.size() == 1 ? " exporter" : " exporters"));
+            if (!importers.isEmpty()) parts.add(importers.size() + (importers.size() == 1 ? " importer" : " importers"));
             if (!actions.isEmpty()) parts.add(actions.size() + (actions.size() == 1 ? " action" : " actions"));
             if (!commands.isEmpty()) parts.add(commands.size() + (commands.size() == 1 ? " command" : " commands"));
+            if (!tools.isEmpty()) parts.add(tools.size() + (tools.size() == 1 ? " tool" : " tools"));
+            if (!transforms.isEmpty()) parts.add(transforms.size() + (transforms.size() == 1 ? " transform" : " transforms"));
+            if (!panels.isEmpty()) parts.add(panels.size() + (panels.size() == 1 ? " panel" : " panels"));
             return parts.isEmpty() ? "nothing registered" : String.join(" · ", parts);
+        }
+
+        /** The context handed to the plugin while it is enabled (null otherwise). */
+        public PluginContext context() {
+            return context;
         }
 
         private void log(String line) {
@@ -121,13 +175,33 @@ public final class PluginManager {
     /** Jars that couldn't even be read (no descriptor, broken zip), by file name. */
     private final Map<String, String> broken = new LinkedHashMap<>();
 
+    private final SceneEventBus events;
+    private final BlockCatalog catalog;
+    private final io.blockdesigner.plugin.AssetAccess assetAccess;
+    private final OptionStore optionStore;
+    private boolean transformCommand;
+
     /**
      * @param disabled ids the user switched off; this set is updated as plugins are enabled and disabled
      */
     public PluginManager(Path folder, PluginHost host, Set<String> disabled) {
+        this(folder, host, disabled, new LinkedHashMap<>());
+    }
+
+    /**
+     * @param disabled     ids the user switched off; this set is updated as plugins are enabled and disabled
+     * @param savedOptions where the last values of plugin options are kept (the settings' map), updated in place
+     */
+    public PluginManager(Path folder, PluginHost host, Set<String> disabled, Map<String, Map<String, String>> savedOptions) {
         this.folder = folder;
         this.host = host;
         this.disabled = disabled;
+        this.catalog = new AppBlockCatalog(host::assets);
+        this.assetAccess = new AppAssetAccess(host::assets);
+        this.optionStore = new OptionStore(savedOptions);
+        this.events = new SceneEventBus(host.scene(), host::selection, host::runLater, (owner, t) -> {
+            if (owner instanceof Plugin p) p.log("Event listener failed: " + t);
+        });
     }
 
     public Path folder() {
@@ -156,6 +230,82 @@ public final class PluginManager {
         List<Action> out = new ArrayList<>();
         for (Plugin p : plugins.values()) for (PluginAction a : p.actions) out.add(new Action(p, a));
         return out;
+    }
+
+    public List<Transform> transforms() {
+        List<Transform> out = new ArrayList<>();
+        for (Plugin p : plugins.values()) for (PluginTransform t : p.transforms) out.add(new Transform(p, t));
+        return out;
+    }
+
+    /** A transform by its id ({@code weather}) or, when two plugins use the same id, {@code plugin/id}. */
+    public Optional<Transform> findTransform(String id) {
+        List<Transform> all = transforms();
+        for (Transform t : all) if (t.key().equals(id)) return Optional.of(t);
+        return all.stream().filter(t -> t.transform().id().equals(id)).findFirst();
+    }
+
+    public List<Tool> tools() {
+        List<Tool> out = new ArrayList<>();
+        for (Plugin p : plugins.values()) for (PluginTool t : p.tools) out.add(new Tool(p, t));
+        return out;
+    }
+
+    public List<Import> importers() {
+        List<Import> out = new ArrayList<>();
+        for (Plugin p : plugins.values()) for (PluginImporter i : p.importers) out.add(new Import(p, i));
+        return out;
+    }
+
+    /** The importer for a file, by its extension. */
+    public Optional<Import> importerFor(Path file) {
+        String n = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        for (Import i : importers()) {
+            for (String ext : i.importer().extensions()) if (n.endsWith("." + ext.toLowerCase(java.util.Locale.ROOT))) return Optional.of(i);
+        }
+        return Optional.empty();
+    }
+
+    public List<Panel> panels() {
+        List<Panel> out = new ArrayList<>();
+        for (Plugin p : plugins.values()) for (PluginPanel x : p.panels) out.add(new Panel(p, x));
+        return out;
+    }
+
+    /** The block catalog plugins see. */
+    public BlockCatalog blocks() {
+        return catalog;
+    }
+
+    /** Block models, the atlas and texture files plugins see. */
+    public io.blockdesigner.plugin.AssetAccess assets() {
+        return assetAccess;
+    }
+
+    /** Last-used option values per plugin feature. */
+    public OptionStore optionStore() {
+        return optionStore;
+    }
+
+    /** The selection changed: tells plugins listening for {@link SceneEvent.SelectionChanged} (measured via the host). */
+    public void selectionChanged() {
+        events.selectionChanged();
+    }
+
+    /** A project was opened or a new one started: tells plugins listening for {@link SceneEvent.ProjectOpened}. */
+    public void projectOpened(Optional<Path> file) {
+        events.projectOpened(file);
+    }
+
+    /** Writes a line to the plugin's log (shown in the Plugins window). */
+    public void log(Plugin p, String line) {
+        p.log(line);
+    }
+
+    /** Logs a failure of one of a plugin's features against it and shows it as a toast. */
+    public void report(Plugin p, String what, Throwable t) {
+        p.log(what + " failed: " + t);
+        host.toast("✖ " + p.info().name() + ": " + (t.getMessage() == null ? t.toString() : t.getMessage()));
     }
 
     /** Runs a plugin's menu action; an exception is logged against the plugin and shown as a toast. */
@@ -287,7 +437,8 @@ public final class PluginManager {
                 throw new IllegalStateException(p.info.mainClass() + " does not implement BlockDesignerPlugin");
             }
             p.instance = (BlockDesignerPlugin) main.getDeclaredConstructor().newInstance();
-            p.instance.enable(new Context(p));
+            p.context = new Context(p);
+            p.instance.enable(p.context);
             p.state = State.ENABLED;
             p.log("Enabled · " + p.contributions());
         } catch (Throwable t) {
@@ -301,6 +452,8 @@ public final class PluginManager {
 
     /** Calls disable, removes everything the plugin registered and closes its class loader. */
     private void unload(Plugin p) {
+        // Let the app put down the plugin's active tool (and its preview) while the plugin is still whole.
+        if (!p.tools.isEmpty()) host.pluginUnloading(p);
         if (p.instance != null) {
             try {
                 p.instance.disable();
@@ -315,6 +468,20 @@ public final class PluginManager {
         p.commands.clear();
         p.exporters.clear();
         p.actions.clear();
+        p.transforms.clear();
+        p.importers.clear();
+        p.tools.clear();
+        updateTransformCommand();
+        for (PluginPanel panel : p.panels) {
+            try {
+                panel.dispose();
+            } catch (Throwable t) {
+                p.log("Error while closing panel '" + panel.id() + "': " + t);
+            }
+        }
+        p.panels.clear();
+        events.removeAll(p);
+        p.context = null;
         if (p.loader != null) {
             try {
                 p.loader.close();
@@ -329,6 +496,37 @@ public final class PluginManager {
     /** Disables everything (app shutdown). */
     public void shutdown() {
         for (Plugin p : plugins.values()) unload(p);
+        events.close();
+    }
+
+    /** {@code /transform <id>} exists while any plugin has a transform. */
+    private void updateTransformCommand() {
+        boolean want = plugins.values().stream().anyMatch(p -> !p.transforms.isEmpty());
+        if (want == transformCommand) return;
+        if (want) {
+            try {
+                WorldEdit.register(new WorldEdit.Command("transform", "/transform <id>", "Open a plugin transform (/transform lists them)"),
+                        (args, flags, c, region) -> transformCommand(args));
+                transformCommand = true;
+            } catch (IllegalArgumentException taken) {
+                // A plugin already has a /transform command of its own; the menus still offer the transforms.
+            }
+        } else {
+            WorldEdit.unregister("transform");
+            transformCommand = false;
+        }
+    }
+
+    private WorldEdit.Result transformCommand(List<String> args) {
+        if (args.isEmpty()) {
+            List<String> ids = transforms().stream().map(t -> t.transform().id() + " (" + t.transform().name() + ")").toList();
+            return WorldEdit.Result.ok("Transforms: " + String.join(", ", ids), 0);
+        }
+        Optional<Transform> t = findTransform(args.getFirst());
+        if (t.isEmpty()) return WorldEdit.Result.error("No transform '" + args.getFirst() + "' · /transform lists them");
+        // The command runs inside an edit (an undo group); the dialog opens once that is over.
+        host.runLater(() -> host.openTransform(t.get()));
+        return WorldEdit.Result.ok("Opening " + t.get().transform().name() + "…", 0);
     }
 
     // ---- the context handed to each plugin -------------------------------------------------------------------
@@ -378,6 +576,63 @@ public final class PluginManager {
         @Override
         public void registerAction(PluginAction action) {
             p.actions.add(action);
+        }
+
+        @Override
+        public void registerTransform(PluginTransform transform) {
+            if (!transform.id().matches("[a-z0-9_]+")) throw new IllegalArgumentException("Transform ids use a-z, 0-9 and _ only: " + transform.id());
+            for (PluginTransform t : p.transforms) {
+                if (t.id().equals(transform.id())) throw new IllegalArgumentException("Transform id '" + transform.id() + "' registered twice");
+            }
+            p.transforms.add(transform);
+            updateTransformCommand();
+        }
+
+        @Override
+        public void registerPanel(PluginPanel panel) {
+            if (!panel.id().matches("[a-z0-9_.-]+")) throw new IllegalArgumentException("Panel ids use a-z, 0-9, _ . - only: " + panel.id());
+            for (PluginPanel x : p.panels) {
+                if (x.id().equals(panel.id())) throw new IllegalArgumentException("Panel id '" + panel.id() + "' registered twice");
+            }
+            p.panels.add(panel);
+        }
+
+        @Override
+        public void registerTool(PluginTool tool) {
+            if (!tool.id().matches("[a-z0-9_.-]+")) throw new IllegalArgumentException("Tool ids use a-z, 0-9, _ . - only: " + tool.id());
+            for (PluginTool t : p.tools) {
+                if (t.id().equals(tool.id())) throw new IllegalArgumentException("Tool id '" + tool.id() + "' registered twice");
+            }
+            p.tools.add(tool);
+        }
+
+        @Override
+        public void registerImporter(PluginImporter importer) {
+            for (PluginImporter i : p.importers) {
+                if (i.id().equals(importer.id())) throw new IllegalArgumentException("Importer id '" + importer.id() + "' registered twice");
+            }
+            if (importer.extensions().isEmpty()) throw new IllegalArgumentException("Importer '" + importer.id() + "' has no extensions");
+            p.importers.add(importer);
+        }
+
+        @Override
+        public <E extends SceneEvent> Subscription on(Class<E> type, Consumer<? super E> listener) {
+            return events.subscribe(p, type, listener);
+        }
+
+        @Override
+        public BlockCatalog blocks() {
+            return catalog;
+        }
+
+        @Override
+        public io.blockdesigner.plugin.AssetAccess assets() {
+            return assetAccess;
+        }
+
+        @Override
+        public Optional<Box> selection() {
+            return host.selection();
         }
 
         @Override

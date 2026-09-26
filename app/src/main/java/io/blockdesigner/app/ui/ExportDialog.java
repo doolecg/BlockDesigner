@@ -176,7 +176,14 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
     private final VBox detail = new VBox(12);
     private final Label error = new Label();
     private final ProgressIndicator busy = new ProgressIndicator();
+    /** What a plugin exporter says it is doing (its Progress messages). */
+    private final Label progressText = new Label();
     private Choice current;
+    /** Last-used plugin exporter options (kept in the settings) and the values on the open plugin card. */
+    private final io.blockdesigner.app.plugins.OptionStore pluginOptions;
+    private final io.blockdesigner.plugin.BlockCatalog blocks;
+    private OptionsEditor pluginEditor;
+    private final Label pluginSummary = new Label();
 
     // Controls that survive switching cards (their values carry over).
     private final ComboBox<McVersion> version = new ComboBox<>();
@@ -197,6 +204,8 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
         this.ws = ws;
         this.scan = scan;
         this.fixedLayers = layers;
+        this.pluginOptions = new io.blockdesigner.app.plugins.OptionStore(ws.settings().pluginOptions);
+        this.blocks = new io.blockdesigner.app.plugins.AppBlockCatalog(ws::assets);
         initOwner(owner);
         setTitle("Export");
         setResizable(true);
@@ -252,6 +261,10 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
         error.setMinHeight(Region.USE_PREF_SIZE);
         busy.setMaxSize(22, 22);
         busy.setVisible(false);
+        progressText.getStyleClass().add("export-hint");
+        pluginSummary.getStyleClass().add("export-summary");
+        pluginSummary.setWrapText(true);
+        pluginSummary.setMinHeight(Region.USE_PREF_SIZE);
 
         // ---- cards
         VBox cards = new VBox(4);
@@ -397,6 +410,16 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
             what.getChildren().add(fixed);
         }
         what.getChildren().add(summary);
+        pluginEditor = null;
+        if (c instanceof PluginChoice pc) {
+            what.getChildren().add(pluginSummary);
+            PluginExporter ex = pc.export().exporter();
+            if (!ex.options().isEmpty()) {
+                pluginEditor = new OptionsEditor(pluginOptions.load(optionsKey(pc), ex.options(), blocks), blocks,
+                        () -> ws.selectedBlockProperty().get(), v -> {
+                });
+            }
+        }
 
         // Options
         GridPane opts = new GridPane();
@@ -406,6 +429,7 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
         opts.addRow(r++, fieldLabel("Minecraft version"), version);
         if (c instanceof FormatChoice fc && fc.format() == Schematics.VANILLA) opts.add(includeAir, 1, r++);
         if (c instanceof FormatChoice fc && fc.format() == Schematics.SPONGE) opts.addRow(r++, fieldLabel("WorldEdit format"), sponge);
+        if (pluginEditor != null) opts.add(pluginEditor, 0, r++, 2, 1);
 
         // Where
         rebuildFolders(c);
@@ -431,7 +455,7 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
 
         Region grow = new Region();
         VBox.setVgrow(grow, Priority.ALWAYS);
-        HBox status = new HBox(8, busy, error);
+        HBox status = new HBox(8, busy, progressText, error);
         status.setAlignment(Pos.CENTER_LEFT);
         detail.getChildren().addAll(section("What"), what, section("Options"), opts, section("Save to"), where, grow, status);
         refresh();
@@ -552,7 +576,28 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
                 box == null ? "empty" : box.sizeX() + " × " + box.sizeY() + " × " + box.sizeZ(), ids.size(), ids.size() == 1 ? "" : "s"));
         summary.getStyleClass().removeAll("export-summary-empty");
         if (ls.isEmpty() || blocks == 0) summary.getStyleClass().add("export-summary-empty");
+        refreshPluginSummary(ls, blocks);
         updatePath();
+    }
+
+    private static String optionsKey(PluginChoice pc) {
+        return io.blockdesigner.app.plugins.OptionStore.key(pc.export().plugin().info().id(), "exporter", pc.export().exporter().id());
+    }
+
+    /** The plugin exporter's own line about what it would write (skipped for huge builds: it needs them merged). */
+    private void refreshPluginSummary(List<Layer> ls, long blocks) {
+        String text = null;
+        if (current instanceof PluginChoice pc && !ls.isEmpty() && blocks > 0 && blocks <= 2_000_000) {
+            try {
+                text = pc.export().exporter().summary(Scene.flatten(ls));
+            } catch (RuntimeException e) {
+                text = "✖ " + e.getMessage();
+            }
+        }
+        boolean show = text != null && !text.isBlank();
+        pluginSummary.setText(show ? text : "");
+        pluginSummary.setVisible(show);
+        pluginSummary.setManaged(show);
     }
 
     private void updatePath() {
@@ -616,18 +661,36 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
             merged = Scene.flatten(copies);
         }
         Structure mergedFinal = merged;
+        // The assets as they are now (the property belongs to the FX thread; the export runs off it).
+        io.blockdesigner.assets.BlockAssets loaded = ws.assets();
+        io.blockdesigner.plugin.AssetAccess assetAccess = new io.blockdesigner.app.plugins.AppAssetAccess(() -> loaded);
+        io.blockdesigner.plugin.OptionValues optionValues = null;
+        if (c instanceof PluginChoice pc) {
+            optionValues = pluginEditor != null ? pluginEditor.values() : pc.export().exporter().options().defaults();
+            pluginOptions.save(optionsKey(pc), optionValues);
+        }
+        io.blockdesigner.plugin.OptionValues optionsFinal = optionValues;
+        // Progress messages come from the export thread; the latest one is shown on the next pulse.
+        io.blockdesigner.plugin.Progress progress = (fraction, message) -> Platform.runLater(() -> {
+            busy.setProgress(fraction < 0 ? ProgressIndicator.INDETERMINATE_PROGRESS : Math.min(1, fraction));
+            if (message != null) progressText.setText(message);
+        });
+        busy.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        progressText.setText("");
         busy.setVisible(true);
         error.setText("");
         getDialogPane().lookupAll(".button").forEach(b -> b.setDisable(true));
         CompletableFuture.supplyAsync(() -> {
             try {
                 Files.createDirectories(dir);
-                return write(c, src, dir, n, author, v, wo, mergedFinal, perLayer, copies);
+                return write(c, src, dir, n, author, v, wo, mergedFinal, perLayer, copies, optionsFinal, progress,
+                        assetAccess);
             } catch (IOException | RuntimeException e) {
                 throw new java.util.concurrent.CompletionException(e);
             }
         }).whenComplete((out, t) -> Platform.runLater(() -> {
             busy.setVisible(false);
+            progressText.setText("");
             getDialogPane().lookupAll(".button").forEach(b -> b.setDisable(false));
             if (t != null) {
                 Throwable cause = t.getCause() != null ? t.getCause() : t;
@@ -640,14 +703,15 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
     }
 
     private static Outcome write(Choice c, Source src, Path dir, String n, String author, McVersion v, WriteOptions wo, Structure merged,
-                                 Map<String, Structure> perLayer, List<Layer> layers) throws IOException {
+                                 Map<String, Structure> perLayer, List<Layer> layers, io.blockdesigner.plugin.OptionValues options,
+                                 io.blockdesigner.plugin.Progress progress, io.blockdesigner.plugin.AssetAccess assets) throws IOException {
         List<Path> written = new ArrayList<>();
         long blocks = 0;
         if (c instanceof PluginChoice pc) {
             PluginExporter ex = pc.export().exporter();
             Path t = ex.writesFolder() ? dir.resolve(n) : dir.resolve(n + "." + ex.extension());
             if (ex.writesFolder()) Files.createDirectories(t);
-            ex.export(new PluginExporter.Request(n, author, v, merged, List.copyOf(layers), t));
+            ex.export(new PluginExporter.Request(n, author, v, merged, List.copyOf(layers), t, options, progress, assets));
             return new Outcome(List.of(t), merged.blockCount(), false);
         }
         SchematicFormat format = ((FormatChoice) c).format();

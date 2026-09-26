@@ -270,8 +270,9 @@ tasks.register<Exec>("installer") {
     doLast { signFiles(listOf(distDir.file("BlockDesigner-$packageVersion.exe").asFile)) }
 }
 
-// PluginManagerTest loads the example plugin's jar.
+// PluginManagerTest loads the example plugins' jars (hello-plugin for API 1, palette-tools for API 2).
 tasks.named<Test>("test") {
-    dependsOn(":examples:hello-plugin:jar")
+    dependsOn(":examples:hello-plugin:jar", ":examples:palette-tools:jar")
     systemProperty("blockdesigner.examplePluginDir", rootProject.file("examples/hello-plugin/build/libs").absolutePath)
+    systemProperty("blockdesigner.paletteToolsDir", rootProject.file("examples/palette-tools/build/libs").absolutePath)
 }

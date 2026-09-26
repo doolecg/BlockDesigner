@@ -1,3 +1,40 @@
+# BlockDesigner 0.4.4
+
+Plugin API v2: plugins can now add transforms with a live preview, side panels, their own tools, importers and richer exporters. Also in this release: every key label now shows your keybinds, and you can fill hotbar slots straight from the palette.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.4.exe** | You want a normal install. Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.4-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and 0.4.3 update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand (see [0.4.2](https://github.com/doolecg/BlockDesigner/releases/tag/0.4.2)).
+
+**Windows Smart App Control:** this build isn't code-signed yet. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting, even after a successful install or update. The build is ready to sign as soon as a certificate is in place.
+
+## New
+- **Plugin API v2.** Plugins that declare `"api": 2` can add:
+  - **Transforms** with an options dialog and a live preview as ghosts in the view. They have a seed and a Reroll button, and apply as one undo step. They appear under Plugins › Transform, in the viewport's right-click menu and as `/transform <id>`.
+  - **Panels** as closable tabs on the right.
+  - **Tools** in the tool dock, with options above the hotbar. Each stroke is one undo step.
+  - **Importers** for Import and drag and drop, such as images turned into pixel art.
+  - **Richer exporters**, with options, progress and access to block models and textures.
+  - **Supporting pieces:** declarative options (remembered per plugin), scene events, and a block catalog that knows block families (oak → stairs, slabs, fences…) and cracked or mossy variants.
+
+  API 1 plugins keep working unchanged. There is a new example plugin, `examples/palette-tools`, with Weathering, Palette swap and Gradient transforms, a Palette panel, a colour-palette exporter, a pixel-art importer and a Wall tool. See `PLUGINS.md` and `docs/plugin-api-v2.md`.
+- **Fill hotbar slots from the palette:** hover a block in the palette and press a hotbar key (1–9) to put it in that slot, like Minecraft's creative inventory.
+- **Tooltips show the key and what the button does**, on every button that has a key.
+
+## Changed
+- **Every key the app shows comes from Settings › Keybinds:** button tooltips, menu hints, the Shortcuts list (F1), status messages and the hotbar's Replace / Shuffle labels. A few of these still showed old keys, such as "Shuffle (Z)" and "R places again".
+- **Arrow keys are written out** as Left / Right / Up / Down in key labels.
+
+## For builders of BlockDesigner
+- **Code signing step:** the packaging tasks can now sign the app, its native DLLs (JavaFX, LWJGL, JNA) and the installer. See "Code signing" in the README; `./gradlew :app:fetchSigntool` downloads `signtool.exe`.
+
+---
+
 # BlockDesigner 0.4.3
 
 Every keyboard key can now be changed. Settings › Keybinds covers the viewport too: flying, camera views, nudging, the hotbar, brush modes and more.

@@ -232,6 +232,18 @@ final class LayeredEdit implements WorldEdit.World, AutoCloseable {
         return !sessions.isEmpty();
     }
 
+    /** Shows what was written so far (fires change events) without ending the edit, for edits spread over a drag. */
+    void flush() {
+        sessions.values().forEach(SceneEditor.BlockSession::flush);
+    }
+
+    /** Puts back every block written and records nothing (entities added or removed stay as they are). */
+    void rollback() {
+        sessions.values().forEach(SceneEditor.BlockSession::rollback);
+        sessions.clear();
+        written.clear();
+    }
+
     @Override
     public void close() {
         sessions.values().forEach(SceneEditor.BlockSession::close);

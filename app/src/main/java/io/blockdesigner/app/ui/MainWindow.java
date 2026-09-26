@@ -93,6 +93,7 @@ public final class MainWindow {
     private final java.util.Set<String> disabledPlugins;
     private final io.blockdesigner.app.plugins.PluginManager plugins;
     private final Updater updater = new Updater();
+    private ToolDock toolDock;
 
     public MainWindow(Stage stage, Workspace ws) {
         this.stage = stage;
@@ -102,7 +103,10 @@ public final class MainWindow {
         Keybinds.install(keys);
         viewport.setKeybinds(keys);
         this.disabledPlugins = new java.util.LinkedHashSet<>(ws.settings().disabledPlugins);
-        this.plugins = new io.blockdesigner.app.plugins.PluginManager(io.blockdesigner.app.Settings.dir().resolve("plugins"), pluginHost(), disabledPlugins);
+        this.plugins = new io.blockdesigner.app.plugins.PluginManager(io.blockdesigner.app.Settings.dir().resolve("plugins"), pluginHost(), disabledPlugins,
+                ws.settings().pluginOptions);
+        viewport.onSelectionChanged(plugins::selectionChanged);
+        viewport.setTransformItems(this::transformItems);
 
         resolveDark();
         applyTheme();
@@ -128,6 +132,7 @@ public final class MainWindow {
 
         // Centre: viewport with floating dock and loading overlay
         ToolDock dock = new ToolDock(ws, viewport);
+        toolDock = dock;
         StackPane.setAlignment(dock, Pos.CENTER_LEFT);
         StackPane.setMargin(dock, new Insets(0, 0, 0, 12));
         loadingOverlay.getStyleClass().add("loading-overlay");
@@ -317,8 +322,216 @@ public final class MainWindow {
             public void pluginsChanged() {
                 ws.settings().disabledPlugins = new ArrayList<>(disabledPlugins);
                 ws.settings().save();
+                syncPluginPanels();
+                if (toolDock != null) toolDock.setPluginTools(plugins.tools(), MainWindow.this::pickPluginTool, MainWindow.this::pluginToolKeyText);
+            }
+
+            @Override
+            public void pluginUnloading(io.blockdesigner.app.plugins.PluginManager.Plugin plugin) {
+                if (viewport.pluginTool().map(t -> t.plugin() == plugin).orElse(false)) {
+                    viewport.setPluginTool(null, null);
+                    ws.toolProperty().set(ToolKind.SELECT);
+                }
+            }
+
+            @Override
+            public void runLater(Runnable task) {
+                Platform.runLater(task);
+            }
+
+            @Override
+            public io.blockdesigner.assets.BlockAssets assets() {
+                return ws.assets();
+            }
+
+            @Override
+            public java.util.Optional<io.blockdesigner.core.model.Box> selection() {
+                return viewport.selectionBounds();
+            }
+
+            @Override
+            public void openTransform(io.blockdesigner.app.plugins.PluginManager.Transform transform) {
+                MainWindow.this.openTransform(transform);
             }
         };
+    }
+
+    // ---- plugin tools -----------------------------------------------------------------------------------------
+
+    /** Makes a plugin tool the active tool. */
+    private void pickPluginTool(io.blockdesigner.app.plugins.PluginManager.Tool t) {
+        if (viewport.setPluginTool(t, plugins)) ws.toolProperty().set(ToolKind.PLUGIN);
+        else if (ws.toolProperty().get() == ToolKind.PLUGIN) ws.toolProperty().set(ToolKind.SELECT);
+    }
+
+    /** The key that picks a plugin tool: the user's (settings file) or the plugin's default; null for none. */
+    private KeyCombination pluginToolKey(io.blockdesigner.app.plugins.PluginManager.Tool t) {
+        String k = ws.settings().pluginToolKeys.getOrDefault(t.key(), t.tool().defaultKey());
+        if (k == null || k.isBlank()) return null;
+        try {
+            KeyCombination kc = KeyCombination.valueOf(k);
+            // A key already bound to one of BlockDesigner's own actions keeps doing that.
+            for (Keybinds.Action a : Keybinds.Action.values()) {
+                for (KeyCombination bound : keys.get(a)) if (kc.equals(bound)) return null;
+            }
+            return kc;
+        } catch (RuntimeException bad) {
+            return null;
+        }
+    }
+
+    private String pluginToolKeyText(io.blockdesigner.app.plugins.PluginManager.Tool t) {
+        KeyCombination k = pluginToolKey(t);
+        return k == null ? "" : Keybinds.text(k);
+    }
+
+    /** Picks the plugin tool bound to this key, if any. */
+    private boolean pluginToolShortcut(KeyEvent e) {
+        for (var t : plugins.tools()) {
+            KeyCombination k = pluginToolKey(t);
+            if (k != null && k.match(e)) {
+                pickPluginTool(t);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ---- plugin transforms ------------------------------------------------------------------------------------
+
+    private TransformDialog openTransformDialog;
+
+    /** Opens a plugin transform's dialog on the current selection (or layer), or says why it can't. */
+    private void openTransform(io.blockdesigner.app.plugins.PluginManager.Transform t) {
+        if (viewport.transformTarget(t.transform().scope()) == null) {
+            viewport.showToast(viewport.transformTargetMissing(t.transform().scope()));
+            return;
+        }
+        if (openTransformDialog != null) openTransformDialog.close();
+        openTransformDialog = new TransformDialog(stage, ws, plugins, t, viewport);
+        openTransformDialog.show();
+    }
+
+    /** One menu item per plugin transform, for the Plugins menu and the viewport's right-click menu. */
+    private List<MenuItem> transformItems() {
+        List<MenuItem> out = new ArrayList<>();
+        for (var t : plugins.transforms()) {
+            MenuItem m = new MenuItem(t.transform().name() + "…", ToolIcons.plugin(t.transform().icon(), 14));
+            m.setOnAction(e -> openTransform(t));
+            out.add(m);
+        }
+        return out;
+    }
+
+    // ---- plugin panels ----------------------------------------------------------------------------------------
+
+    /** A plugin panel's tab in the right-hand tabs, created the first time it is shown. */
+    private final class PanelTab implements io.blockdesigner.plugin.PanelContext {
+        final io.blockdesigner.app.plugins.PluginManager.Panel panel;
+        final javafx.scene.control.Tab tab = new javafx.scene.control.Tab();
+        final Label badge = new Label();
+        final List<Runnable> onShown = new ArrayList<>();
+        boolean created;
+
+        PanelTab(io.blockdesigner.app.plugins.PluginManager.Panel panel) {
+            this.panel = panel;
+            Label title = new Label(panel.panel().title());
+            badge.getStyleClass().add("badge");
+            badge.setVisible(false);
+            badge.setManaged(false);
+            HBox head = new HBox(6, ToolIcons.plugin(panel.panel().icon(), 14), title, badge);
+            head.setAlignment(Pos.CENTER_LEFT);
+            tab.setGraphic(head);
+            tab.setTooltip(new Tooltip(panel.panel().title() + " · from the plugin " + panel.plugin().info().name()));
+            tab.selectedProperty().addListener((o, a, selected) -> {
+                if (selected) shown();
+            });
+        }
+
+        /** Builds the content on first show, then runs the plugin's on-shown actions. */
+        void shown() {
+            if (!created) {
+                created = true;
+                try {
+                    tab.setContent(panel.panel().create(this));
+                } catch (Throwable t) {
+                    plugins.report(panel.plugin(), "Panel '" + panel.panel().title() + "'", t);
+                    Label err = new Label("This panel failed to open: " + t.getMessage());
+                    err.setWrapText(true);
+                    err.getStyleClass().add("plugin-error");
+                    err.setPadding(new Insets(12));
+                    tab.setContent(err);
+                }
+            }
+            for (Runnable r : List.copyOf(onShown)) {
+                try {
+                    r.run();
+                } catch (Throwable t) {
+                    plugins.log(panel.plugin(), "Panel '" + panel.panel().title() + "' on-shown action failed: " + t);
+                }
+            }
+        }
+
+        @Override
+        public io.blockdesigner.plugin.PluginContext plugin() {
+            return panel.plugin().context();
+        }
+
+        @Override
+        public boolean isShowing() {
+            return tab.isSelected() && sideTabs.getTabs().contains(tab) && mainSplit.getItems().contains(rightPanel) && stage.isShowing();
+        }
+
+        @Override
+        public void onShown(Runnable action) {
+            onShown.add(action);
+        }
+
+        @Override
+        public void setBadge(String text) {
+            boolean show = text != null && !text.isBlank();
+            badge.setText(show ? text : "");
+            badge.setVisible(show);
+            badge.setManaged(show);
+        }
+
+        @Override
+        public void reveal() {
+            reopenTab(tab);
+        }
+    }
+
+    private final java.util.Map<String, PanelTab> pluginTabs = new java.util.LinkedHashMap<>();
+    /** Set while plugin tabs are added or removed with their plugins, so that isn't mistaken for the user closing them. */
+    private boolean syncingPanels;
+
+    /**
+     * Adds tabs for newly enabled plugins' panels and removes those of disabled ones. Every panel docks on the right
+     * for now; {@link io.blockdesigner.plugin.PluginPanel.Dock LEFT and BOTTOM} fall back to it.
+     */
+    private void syncPluginPanels() {
+        if (rightPanel.getCenter() == null) return; // the tabs aren't built yet (setRightPanel adds them)
+        java.util.Map<String, io.blockdesigner.app.plugins.PluginManager.Panel> now = new java.util.LinkedHashMap<>();
+        for (var p : plugins.panels()) now.put(p.key(), p);
+        syncingPanels = true;
+        try {
+            for (var it = pluginTabs.entrySet().iterator(); it.hasNext(); ) {
+                var e = it.next();
+                var current = now.get(e.getKey());
+                if (current != null && current.panel() == e.getValue().panel.panel()) continue;
+                sideTabs.getTabs().remove(e.getValue().tab);
+                it.remove();
+            }
+            for (var e : now.entrySet()) {
+                if (pluginTabs.containsKey(e.getKey())) continue;
+                PanelTab pt = new PanelTab(e.getValue());
+                pluginTabs.put(e.getKey(), pt);
+                if (!ws.settings().closedPluginPanels.contains(e.getKey())) sideTabs.getTabs().add(pt.tab);
+            }
+        } finally {
+            syncingPanels = false;
+        }
+        sideTabsChanged();
     }
 
     /** Right-hand panel: the Resource Tracker tab. */
@@ -332,25 +545,41 @@ public final class MainWindow {
         if (ws.settings().showResources) sideTabs.getTabs().add(resourcesTab);
         sideTabs.getTabs().addListener((javafx.collections.ListChangeListener<javafx.scene.control.Tab>) c -> sideTabsChanged());
         sideTabsChanged();
+        syncPluginPanels();
     }
 
     private void reopenTab(javafx.scene.control.Tab tab) {
         if (!sideTabs.getTabs().contains(tab)) sideTabs.getTabs().add(tab);
         sideTabs.getSelectionModel().select(tab);
+        // A tab that was already selected doesn't fire a selection change: run its on-shown actions anyway.
+        for (PanelTab pt : pluginTabs.values()) if (pt.tab == tab) pt.shown();
     }
 
     /** Syncs settings, the closed-tabs bar and whether the right panel is shown at all. */
     private void sideTabsChanged() {
         boolean resources = sideTabs.getTabs().contains(resourcesTab);
         ws.settings().showResources = resources;
+        if (!syncingPanels) {
+            // Remember which plugin panels the user closed, so they stay closed next time.
+            for (var e : pluginTabs.entrySet()) {
+                boolean open = sideTabs.getTabs().contains(e.getValue().tab);
+                if (open) ws.settings().closedPluginPanels.remove(e.getKey());
+                else if (!ws.settings().closedPluginPanels.contains(e.getKey())) ws.settings().closedPluginPanels.add(e.getKey());
+            }
+        }
 
         closedTabsBar.getChildren().clear();
-        if (!resources) closedTabsBar.getChildren().add(closedTabButton(resourcesTab, Feather.PACKAGE));
+        if (!resources) closedTabsBar.getChildren().add(closedTabButton(resourcesTab, resourcesTab.getText(), new FontIcon(Feather.PACKAGE)));
+        for (PanelTab pt : pluginTabs.values()) {
+            if (!sideTabs.getTabs().contains(pt.tab)) {
+                closedTabsBar.getChildren().add(closedTabButton(pt.tab, pt.panel.panel().title(), ToolIcons.plugin(pt.panel.panel().icon(), 14)));
+            }
+        }
         boolean anyClosed = !closedTabsBar.getChildren().isEmpty();
         closedTabsBar.setVisible(anyClosed);
         closedTabsBar.setManaged(anyClosed);
 
-        boolean anyOpen = resources;
+        boolean anyOpen = !sideTabs.getTabs().isEmpty();
         if (anyOpen && !mainSplit.getItems().contains(rightPanel)) {
             mainSplit.getItems().add(rightPanel);
             double w = ws.settings().rightPanelWidth, total = mainSplit.getWidth();
@@ -361,10 +590,10 @@ public final class MainWindow {
     }
 
     /** A vertical tab (icon plus rotated title) that reopens a closed side tab. */
-    private javafx.scene.Node closedTabButton(javafx.scene.control.Tab tab, Feather icon) {
-        Button b = new Button(tab.getText(), new FontIcon(icon));
+    private javafx.scene.Node closedTabButton(javafx.scene.control.Tab tab, String title, javafx.scene.Node icon) {
+        Button b = new Button(title, icon);
         b.getStyleClass().addAll("flat", "closed-tab");
-        b.setTooltip(new Tooltip("Open " + tab.getText()));
+        b.setTooltip(new Tooltip("Open " + title));
         b.setRotate(90);
         b.setOnAction(e -> reopenTab(tab));
         return new javafx.scene.Group(b);
@@ -499,6 +728,7 @@ public final class MainWindow {
         ws.projectNameProperty().set("Untitled");
         ws.projectFileProperty().set(null);
         projectExtrasLoaded(Map.of());
+        plugins.projectOpened(java.util.Optional.empty());
         ws.statusProperty().set("New project");
     }
 
@@ -624,9 +854,15 @@ public final class MainWindow {
         return m;
     }
 
-    /** Plugins menu: every plugin action, then the Plugins window. */
+    /** Plugins menu: the transforms, every plugin action, then the Plugins window. */
     private void fillPluginMenu(MenuButton menu) {
         List<MenuItem> items = new ArrayList<>();
+        List<MenuItem> transforms = transformItems();
+        if (!transforms.isEmpty()) {
+            javafx.scene.control.Menu tm = new javafx.scene.control.Menu("Transform", new FontIcon(Feather.SLIDERS));
+            tm.getItems().setAll(transforms);
+            items.add(tm);
+        }
         for (var a : plugins.actions()) {
             MenuItem m = new MenuItem(a.action().label());
             m.setOnAction(e -> plugins.run(a));
@@ -743,11 +979,19 @@ public final class MainWindow {
 
     // ---- import / open / save -------------------------------------------------------------------------------
 
-    /** Every readable extension, including formats added by plugins. */
+    /** Every readable extension, including formats and importers added by plugins. */
     private FileChooser.ExtensionFilter schematicFilter() {
-        List<String> exts = Schematics.formats().stream().filter(SchematicFormat::canRead)
-                .flatMap(f -> f.extensions().stream()).distinct().map(e -> "*." + e).toList();
+        List<String> exts = java.util.stream.Stream.concat(
+                        Schematics.formats().stream().filter(SchematicFormat::canRead).flatMap(f -> f.extensions().stream()),
+                        plugins.importers().stream().flatMap(i -> i.importer().extensions().stream()))
+                .distinct().map(e -> "*." + e).toList();
         return new FileChooser.ExtensionFilter("Schematics (" + String.join(", ", exts) + ")", exts);
+    }
+
+    /** One filter per plugin importer, after the combined one. */
+    private List<FileChooser.ExtensionFilter> importerFilters() {
+        return plugins.importers().stream().map(i -> new FileChooser.ExtensionFilter(i.importer().displayName(),
+                i.importer().extensions().stream().map(e -> "*." + e).toList())).toList();
     }
 
     private File initialDir() {
@@ -761,14 +1005,25 @@ public final class MainWindow {
         FileChooser fc = new FileChooser();
         fc.setTitle("Import schematics");
         fc.getExtensionFilters().add(schematicFilter());
+        fc.getExtensionFilters().addAll(importerFilters());
         File dir = initialDir();
         if (dir != null) fc.setInitialDirectory(dir);
         List<File> files = fc.showOpenMultipleDialog(stage);
         if (files != null) files.forEach(f -> importFile(f.toPath()));
     }
 
-    /** Reads a schematic and starts placement; multi-region Litematica files become one layer per region. */
+    /**
+     * Reads a schematic and starts placement; multi-region Litematica files become one layer per region. Files no
+     * schematic format reads go to a plugin importer for their extension.
+     */
     public void importFile(Path file) {
+        if (!Schematics.isSupported(file)) {
+            var imp = plugins.importerFor(file);
+            if (imp.isPresent()) {
+                importWithPlugin(imp.get(), file);
+                return;
+            }
+        }
         ws.statusProperty().set("Reading " + file.getFileName() + "…");
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -792,6 +1047,60 @@ public final class MainWindow {
             ws.settings().addRecent(file);
             ws.statusProperty().set(String.format("Imported %s — %,d blocks (DataVersion %d)", file.getFileName(), sf.totalBlocks(), sf.dataVersion()));
             if (ws.projectNameProperty().get().equals("Untitled") && ws.scene().layers().isEmpty()) ws.projectNameProperty().set(sf.name());
+            viewport.beginPlacement(layers, null);
+        }, Platform::runLater).exceptionally(this::fail);
+    }
+
+    /** Imports through a plugin: asks for its options (if any), reads on a background thread, then starts placement. */
+    private void importWithPlugin(io.blockdesigner.app.plugins.PluginManager.Import imp, Path file) {
+        var importer = imp.importer();
+        String key = io.blockdesigner.app.plugins.OptionStore.key(imp.plugin().info().id(), "importer", importer.id());
+        io.blockdesigner.plugin.OptionValues values = plugins.optionStore().load(key, importer.options(), plugins.blocks());
+        if (!importer.options().isEmpty()) {
+            OptionsEditor editor = new OptionsEditor(values, plugins.blocks(), () -> ws.selectedBlockProperty().get(), v -> {
+            });
+            javafx.scene.control.Dialog<ButtonType> d = new javafx.scene.control.Dialog<>();
+            d.initOwner(stage);
+            d.setTitle(importer.displayName());
+            d.setHeaderText("Import " + file.getFileName());
+            d.getDialogPane().getStylesheets().add(MainWindow.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+            d.getDialogPane().getStyleClass().addAll("app-root", ws.darkProperty().get() ? "dark" : "light");
+            editor.setPrefWidth(380);
+            d.getDialogPane().setContent(editor);
+            d.getDialogPane().getButtonTypes().setAll(new ButtonType("Import", ButtonBar.ButtonData.OK_DONE), ButtonType.CANCEL);
+            var choice = d.showAndWait();
+            if (choice.isEmpty() || choice.get().getButtonData() != ButtonBar.ButtonData.OK_DONE) return;
+            values = editor.values();
+            plugins.optionStore().save(key, values);
+        }
+        io.blockdesigner.plugin.OptionValues chosen = values;
+        ws.statusProperty().set("Reading " + file.getFileName() + " with " + importer.displayName() + "…");
+        io.blockdesigner.plugin.Progress progress = (fraction, message) -> {
+            if (message != null) Platform.runLater(() -> ws.statusProperty().set(message));
+        };
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return importer.importFile(file, chosen, progress, plugins.blocks());
+            } catch (Exception e) {
+                plugins.log(imp.plugin(), importer.displayName() + " failed on " + file.getFileName() + ": " + e);
+                throw new RuntimeException("Could not read " + file.getFileName() + ": " + e.getMessage(), e);
+            }
+        }).thenAcceptAsync(imported -> {
+            List<Layer> layers = new ArrayList<>();
+            for (var il : imported == null ? List.<io.blockdesigner.plugin.PluginImporter.ImportedLayer>of() : imported) {
+                Layer l = new Layer(il.name(), il.blocks());
+                l.setOffset(il.offset());
+                l.setSource("plugin:" + imp.key());
+                layers.add(l);
+            }
+            if (layers.isEmpty() || layers.stream().allMatch(l -> l.structure().isEmpty())) {
+                ws.statusProperty().set(file.getFileName() + ": nothing to import");
+                viewport.showToast("Nothing to import in " + file.getFileName());
+                return;
+            }
+            ws.settings().addRecent(file);
+            long blocks = layers.stream().mapToLong(l -> l.structure().blockCount()).sum();
+            ws.statusProperty().set(String.format("Imported %s with %s — %,d blocks", file.getFileName(), importer.displayName(), blocks));
             viewport.beginPlacement(layers, null);
         }, Platform::runLater).exceptionally(this::fail);
     }
@@ -823,6 +1132,7 @@ public final class MainWindow {
             ws.projectFileProperty().set(file);
             ws.settings().addRecent(file);
             projectExtrasLoaded(c.extras());
+            plugins.projectOpened(java.util.Optional.of(file));
             viewport.frameAll();
             ws.statusProperty().set("Opened " + file.getFileName());
         }, Platform::runLater).exceptionally(this::fail);
@@ -997,6 +1307,11 @@ public final class MainWindow {
             }
             if (startScreen.isVisible()) {
                 if (e.getCode() == KeyCode.ESCAPE) startScreen.close();
+                e.consume();
+                return;
+            }
+            // The active plugin tool sees plain keys first (R to turn, Esc to cancel…); then keys that pick plugin tools.
+            if (viewport.pluginToolKey(e) || pluginToolShortcut(e)) {
                 e.consume();
                 return;
             }
@@ -1226,7 +1541,7 @@ public final class MainWindow {
             if (files == null || files.isEmpty()) return;
             for (File f : files) {
                 if (f.getName().endsWith("." + ProjectFile.EXTENSION)) openProject(f.toPath());
-                else if (Schematics.isSupported(f.toPath())) importFile(f.toPath());
+                else if (Schematics.isSupported(f.toPath()) || plugins.importerFor(f.toPath()).isPresent()) importFile(f.toPath());
             }
             e.setDropCompleted(true);
         });
