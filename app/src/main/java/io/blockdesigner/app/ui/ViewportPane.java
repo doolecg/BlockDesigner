@@ -224,6 +224,9 @@ public final class ViewportPane extends StackPane {
     // Paint brush / eraser: the options bar and the stroke being painted (one undo step)
     private BrushBar brushBar;
     private BrushPopup brushPopup;
+    /** The active mode, top-left ("Build mode · Sphere", "Brush · Smooth"…), and the coloured frame of the edit modes. */
+    private final Label modeBadge = new Label();
+    private final javafx.scene.layout.Region modeFrame = new javafx.scene.layout.Region();
     private Stroke stroke;
     private long lastBrushSound;
     // WorldEdit: pos1 / pos2 region, clipboard and the "/" command bar
@@ -298,7 +301,8 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(commandBar, Pos.BOTTOM_LEFT);
         StackPane.setMargin(commandBar, new javafx.geometry.Insets(0, 0, 74, 12));
         StackPane.setAlignment(hud, Pos.TOP_LEFT);
-        StackPane.setMargin(hud, new javafx.geometry.Insets(12, 0, 0, 12));
+        // Under the mode badge.
+        StackPane.setMargin(hud, new javafx.geometry.Insets(50, 0, 0, 12));
         javafx.scene.shape.Rectangle ch = new javafx.scene.shape.Rectangle(18, 2), cv = new javafx.scene.shape.Rectangle(2, 18);
         ch.getStyleClass().add("crosshair-bar");
         cv.getStyleClass().add("crosshair-bar");
@@ -328,8 +332,25 @@ public final class ViewportPane extends StackPane {
                 brushPopup.show(getScene().getWindow(), p.getX(), p.getY() - 330);
             }
         });
-        StackPane.setAlignment(brushBar, Pos.BOTTOM_CENTER);
-        StackPane.setMargin(brushBar, new javafx.geometry.Insets(0, 0, 76, 0));
+        // The brush options run along the top of the view, like a sculpting app's tool header, starting where the
+        // mode badge is and stopping short of the view cube and the buttons down the right.
+        StackPane.setAlignment(brushBar, Pos.TOP_LEFT);
+        StackPane.setMargin(brushBar, new javafx.geometry.Insets(12, 0, 0, 12));
+        brushBar.maxWidthProperty().bind(widthProperty().subtract(250));
+        brushBar.setOnPickMode(m -> {
+            ws.settings().brushMode = m.name();
+            brushBar.sync();
+            brushPopup.sync();
+            updateModeBadge();
+            requestRedraw();
+        });
+        modeBadge.getStyleClass().add("mode-badge");
+        modeBadge.setMouseTransparent(true);
+        StackPane.setAlignment(modeBadge, Pos.TOP_LEFT);
+        StackPane.setMargin(modeBadge, new javafx.geometry.Insets(12, 0, 0, 12));
+        modeFrame.getStyleClass().add("mode-frame");
+        modeFrame.setMouseTransparent(true);
+        modeFrame.setVisible(false);
         pluginToolBar.getStyleClass().add("brush-bar");
         pluginToolBar.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
         pluginToolBar.setVisible(false);
@@ -360,7 +381,11 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(keyHints, Pos.BOTTOM_RIGHT);
         StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, 14, 0));
         hotbarSounds();
+        ws.replaceProperty().addListener((o, x, y) -> updateModeBadge());
+        ws.shuffleProperty().addListener((o, x, y) -> updateModeBadge());
+        onFlyChanged(this::updateModeBadge);
         for (javafx.scene.Node ui : new javafx.scene.Node[]{hotbar, brushBar, viewCube, commandBar, hud, sliceBadge, keyHints}) markUi(ui);
+        getChildren().addAll(modeFrame, modeBadge);
         getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, brushBar, pluginToolBar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar,
                 shapeInfo, symmetryButton, keyHints, shapeRadial);
         keyHintsTick.setCycleCount(javafx.animation.Animation.INDEFINITE);
@@ -394,8 +419,8 @@ public final class ViewportPane extends StackPane {
             showToast(switch (b) {
                 case BUILD -> ws.replaceProperty().get() ? "Build mode · Replace · left break · right replace · middle pick" + keyNote(Keybinds.Action.REPLACE_MODE, "places again")
                         : shape() == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE
-                        ? "Build mode · left break · right place · middle pick" + keyNote(Keybinds.Action.SHAPE_WHEEL, "(hold) for shapes") + keyNote(Keybinds.Action.TOOL_BUILD, "to leave")
-                        : "Build mode · " + shape().label + " · right-drag to place" + keyNote(Keybinds.Action.SHAPE_WHEEL, "(hold) to change shape") + keyNote(Keybinds.Action.TOOL_BUILD, "to leave");
+                        ? "Build mode · left break · right place · middle pick" + keyNote(Keybinds.Action.SHAPE_WHEEL, "(hold) for shapes") + keyNote(Keybinds.Action.CANCEL, "to leave")
+                        : "Build mode · " + shape().label + " · right-drag to place" + keyNote(Keybinds.Action.SHAPE_WHEEL, "(hold) to change shape") + keyNote(Keybinds.Action.CANCEL, "to leave");
                 case SELECT -> "Select mode";
                 case VIEW -> "View mode";
                 case MOVE -> "Move · drag an arrow, square or the centre" + (keyText(Keybinds.Action.TOOL_MOVE).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_MOVE));
@@ -869,6 +894,7 @@ public final class ViewportPane extends StackPane {
         ws.settings().brushMode = modes[index].name();
         if (ws.toolProperty().get() != ToolKind.BRUSH) ws.toolProperty().set(ToolKind.BRUSH);
         brushBar.sync();
+        updateModeBadge();
         brushPopup.sync();
         showToast("Brush: " + modes[index].label + " · " + modes[index].description);
         requestRedraw();
@@ -4082,6 +4108,7 @@ public final class ViewportPane extends StackPane {
     public void pickShape(io.blockdesigner.core.place.ShapeTool.Shape s) {
         shapeRadial.close();
         ws.settings().buildShape = s.name();
+        updateModeBadge();
         if (ws.toolProperty().get() != ToolKind.BUILD) ws.toolProperty().set(ToolKind.BUILD);
         showToast(s == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE ? "No shape · right-click places single blocks"
                 : "Shape: " + s.label + " · right-drag to place · " + s.description);
@@ -4467,6 +4494,62 @@ public final class ViewportPane extends StackPane {
     }
 
     /** The hotbar shows in Build mode. */
+    /** Mode colours: Build green, Brush blue, Eraser red; the other tools stay neutral (and get no frame). */
+    private static String modeColour(ToolKind t) {
+        return switch (t) {
+            case BUILD -> "#46C46E";
+            case BRUSH -> "#3E9BFF";
+            case ERASER -> "#E5484D";
+            default -> null;
+        };
+    }
+
+    /** The badge's text and colour, and the frame, for the current tool (and what it's set to). */
+    private void updateModeBadge() {
+        ToolKind t = ws.toolProperty().get();
+        String text = switch (t) {
+            case VIEW -> "View";
+            case SELECT -> "Select";
+            case BUILD -> {
+                StringBuilder b = new StringBuilder(fly ? "Creative flight" : "Build mode");
+                if (ws.replaceProperty().get()) b.append(" · Replace");
+                if (ws.shuffleProperty().get()) b.append(" · Shuffle");
+                if (shape() != io.blockdesigner.core.place.ShapeTool.Shape.SINGLE) b.append(" · ").append(shape().label);
+                yield b.toString();
+            }
+            case MOVE -> "Move";
+            case ROTATE -> "Rotate";
+            case BRUSH -> "Brush · " + BrushPopup.mode(ws.settings()).label;
+            case ERASER -> "Eraser";
+            case PLUGIN -> pluginTool == null ? "Plugin tool" : pluginTool.tool().tool().name();
+        };
+        if (fly && t != ToolKind.BUILD) text += " · Flying";
+        modeBadge.setText(text.toUpperCase(java.util.Locale.ROOT));
+        modeBadge.setGraphic(switch (t) {
+            case BUILD -> ToolIcons.build(14);
+            case BRUSH -> ToolIcons.brush(14);
+            case ERASER -> ToolIcons.eraser(14);
+            case VIEW -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.EYE);
+            case SELECT -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.MOUSE_POINTER);
+            case MOVE -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.MOVE);
+            case ROTATE -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.ROTATE_CW);
+            case PLUGIN -> new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.PACKAGE);
+        });
+        String c = modeColour(t);
+        modeBadge.getStyleClass().removeAll("mode-edit");
+        if (c != null) modeBadge.getStyleClass().add("mode-edit");
+        modeBadge.setStyle(c == null ? "" : "-bd-mode: " + c + ";");
+        modeFrame.setVisible(c != null);
+        // While the brush options show, their own mode pill stands in for the badge.
+        modeBadge.setVisible(!brushBar.isVisible());
+        modeFrame.setStyle(c == null ? "" : "-bd-mode: " + c + ";");
+        // The key hints sit above whatever is along the bottom (hotbar, plugin tool options).
+        double bottom = 14 + (hotbar.isVisible() ? 72 : 0) + (pluginToolBar.isVisible() ? 50 : 0);
+        StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, bottom, 0));
+        // Toasts move down out of the way of the brush options along the top.
+        StackPane.setMargin(toast, new javafx.geometry.Insets(brushBar.isVisible() ? 60 : 12, 0, 0, 0));
+    }
+
     private void updateHotbarVisibility() {
         ToolKind t = ws.toolProperty().get();
         hotbar.setVisible(t == ToolKind.BUILD || t == ToolKind.BRUSH || t == ToolKind.PLUGIN);
@@ -4476,6 +4559,7 @@ public final class ViewportPane extends StackPane {
         if (brush) brushBar.show(t == ToolKind.ERASER);
         brushPopup.setEraser(t == ToolKind.ERASER);
         if (!brush) endStroke();
+        updateModeBadge();
     }
 
     private Keybinds keys;

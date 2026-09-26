@@ -48,7 +48,7 @@ class KeybindsTest {
     void savedBindsEqualToTheDefaultsAreDropped() {
         Settings s = new Settings();
         s.keybinds.put("SHUFFLE", "Shift+Z|");
-        s.keybinds.put("TOOL_MOVE", "W|");
+        s.keybinds.put("TOOL_MOVE", "G|");
         s.keybinds.put("TOOL_VIEW", "F7|");
         s.keybinds.put("NO_SUCH_ACTION", "K|");
         new Keybinds(s);

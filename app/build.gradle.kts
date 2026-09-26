@@ -59,7 +59,9 @@ application {
 // ---- Windows packaging (jpackage) ------------------------------------------------------------------------------
 // ./gradlew :app:portable   -> dist/BlockDesigner/BlockDesigner.exe + dist/BlockDesigner-<v>-portable.zip (no install;
 //                              settings are kept in a "data" folder beside the exe)
-// ./gradlew :app:installer  -> dist/BlockDesigner-<v>.exe setup (Start menu + desktop shortcut, .bdproj association).
+// ./gradlew :app:installer  -> dist/BlockDesigner-<v>.msi (installs for all users in C:\Program Files\BlockDesigner, asks
+//                              for admin; Start menu + desktop shortcut, .bdproj association). Settings, plugins and
+//                              caches live in %APPDATA% / temp, never in the install folder, so updates keep them.
 //                              Needs the WiX Toolset: unzip WiX 3.14 binaries into tools/wix3, or have WiX on PATH.
 
 val jdkBin = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(26) }
@@ -249,25 +251,28 @@ val installerImage = tasks.register<Exec>("installerImage") {
 
 tasks.register<Exec>("installer") {
     group = "distribution"
-    description = "Builds the Windows setup .exe in dist/ (needs WiX)."
+    description = "Builds the Windows installer .msi in dist/ (needs WiX)."
     dependsOn(installerImage)
     workingDir = rootProject.projectDir
     // Use a local WiX 3 (tools/wix3, git-ignored) when present; otherwise WiX must be on PATH.
     val localWix = rootProject.file("tools/wix3")
     if (localWix.isDirectory) environment("PATH", localWix.absolutePath + File.pathSeparator + System.getenv("PATH"))
     commandLine(
-        jpackageExe.get(), "--type", "exe", "--dest", distDir.asFile.absolutePath,
+        // An .msi, not a setup .exe: updaters before 0.4.7 only look for an .exe, and would pass it their per-user
+        // AppData folder as the install location. With no .exe they send people to the download page instead.
+        jpackageExe.get(), "--type", "msi", "--dest", distDir.asFile.absolutePath,
         "--app-image", imagesDir.get().dir("BlockDesigner").asFile.absolutePath,
         "--name", "BlockDesigner", "--app-version", packageVersion, "--vendor", "BlockDesigner",
         "--icon", iconFile.absolutePath,
         "--file-associations", rootProject.file("packaging/windows/bdproj.properties").absolutePath,
         "--win-menu", "--win-menu-group", "BlockDesigner", "--win-shortcut", "--win-shortcut-prompt",
-        "--win-dir-chooser", "--win-per-user-install",
+        // Installed for all users in Program Files (no --win-per-user-install).
+        "--win-dir-chooser",
         // Fixed so newer installers upgrade older ones in place.
         "--win-upgrade-uuid", "3f0f6a4e-5b1c-4f3e-9d7a-2b8e6c1d4a90",
     )
-    // The app inside is signed by installerImage; this signs the setup itself (what SmartScreen checks first).
-    doLast { signFiles(listOf(distDir.file("BlockDesigner-$packageVersion.exe").asFile)) }
+    // The app inside is signed by installerImage; this signs the installer itself (what SmartScreen checks first).
+    doLast { signFiles(listOf(distDir.file("BlockDesigner-$packageVersion.msi").asFile)) }
 }
 
 // PluginManagerTest loads the example plugins' jars (hello-plugin for API 1, palette-tools for API 2).

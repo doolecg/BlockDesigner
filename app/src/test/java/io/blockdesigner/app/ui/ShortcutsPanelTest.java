@@ -31,14 +31,14 @@ class ShortcutsPanelTest {
         Settings s = new Settings();
         Keybinds k = new Keybinds(s);
         Keybinds.install(k);
-        assertThat(ShortcutsPanel.keys("{TOOL_MOVE} / {TOOL_ROTATE}")).isEqualTo("W / E");
+        assertThat(ShortcutsPanel.keys("{TOOL_MOVE} / {TOOL_ROTATE}")).isEqualTo("G / R");
         assertThat(Keybinds.named("Symmetry", Keybinds.Action.SYMMETRY)).isEqualTo("Symmetry (M)");
         assertThat(Keybinds.keysOf(Keybinds.Action.PERSPECTIVE, Keybinds.Action.ORTHOGRAPHIC)).isEqualTo("P / O");
 
         k.set(Keybinds.Action.SYMMETRY, 0, Keybinds.parse("F7"));
         k.set(Keybinds.Action.TOOL_ROTATE, 0, null);
         assertThat(Keybinds.named("Symmetry", Keybinds.Action.SYMMETRY)).isEqualTo("Symmetry (F7)");
-        assertThat(ShortcutsPanel.keys("{TOOL_MOVE} / {TOOL_ROTATE}")).isEqualTo("W / —");
+        assertThat(ShortcutsPanel.keys("{TOOL_MOVE} / {TOOL_ROTATE}")).isEqualTo("G / —");
         assertThat(Keybinds.named("Rotate", Keybinds.Action.TOOL_ROTATE)).isEqualTo("Rotate");
     }
 }

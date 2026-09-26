@@ -81,4 +81,36 @@ class UpdaterTest {
         org.junit.jupiter.api.Assumptions.assumeFalse(out.contains(" "), "8.3 short names are off on this volume");
         assertThat(java.nio.file.Files.isDirectory(Path.of(out))).isTrue();
     }
+
+    @Test
+    void theMsiWinsOverASetupExe() throws IOException {
+        var json = new ObjectMapper().readTree("""
+                {"tag_name":"0.4.7","assets":[
+                  {"name":"BlockDesigner-0.4.7.msi","size":30,"browser_download_url":"https://example.invalid/i.msi"},
+                  {"name":"BlockDesigner-0.4.7.exe","size":20,"browser_download_url":"https://example.invalid/s.exe"}]}
+                """);
+        assertThat(Updater.parseRelease(json).assetFor(Updater.Mode.INSTALLED).name()).isEqualTo("BlockDesigner-0.4.7.msi");
+    }
+
+    @Test
+    void msiInstallsKeepTheFolderQuotedForMsiexec() {
+        Path root = Path.of("C:\\Program Files\\BlockDesigner");
+        String script = Updater.installScript(Updater.Mode.INSTALLED, Path.of("C:\\Temp\\x\\BlockDesigner-9.9.9.msi"), root);
+        // msiexec is run directly, so a quoted value is fine: INSTALLDIR="C:\Program Files\BlockDesigner".
+        assertThat(script).contains("'msiexec.exe'")
+                .contains("/i \"C:\\Temp\\x\\BlockDesigner-9.9.9.msi\" /passive INSTALLDIR=\"C:\\Program Files\\BlockDesigner\"");
+        assertThat(script).contains("Start-Process -FilePath 'C:\\Program Files\\BlockDesigner\\BlockDesigner.exe'");
+    }
+
+    @Test
+    void onlyOtherBlockDesignerInstallsAreLeftovers(@TempDir Path dir) throws IOException {
+        Path current = Files.createDirectories(dir.resolve("Program Files/BlockDesigner"));
+        Path old = Files.createDirectories(dir.resolve("AppData/Local/BlockDesigner"));
+        String code = "{EBB9311C-BB0E-3248-AF88-50975699C073}";
+        assertThat(Updater.isLeftover(code, "BlockDesigner", old.toString(), current)).isTrue();
+        assertThat(Updater.isLeftover(code, "BlockDesigner", current.toString(), current)).as("ourselves").isFalse();
+        assertThat(Updater.isLeftover(code, "Something Else", old.toString(), current)).isFalse();
+        assertThat(Updater.isLeftover("NotAGuid", "BlockDesigner", old.toString(), current)).isFalse();
+        assertThat(Updater.isLeftover(code, "BlockDesigner", null, current)).isFalse();
+    }
 }

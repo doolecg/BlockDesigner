@@ -52,6 +52,14 @@ final class SettingsDialog extends Dialog<Void> {
     private final Keybinds keys;
     private final Runnable keysChanged;
 
+    /** Restarts BlockDesigner (after loading a backup or resetting, so everything picks the settings up). */
+    private Runnable restartApp = () -> {
+    };
+
+    void setRestart(Runnable restart) {
+        restartApp = restart;
+    }
+
     SettingsDialog(Window owner, Workspace ws, Keybinds keys, Runnable keysChanged, Runnable changeAssets, Runnable openPlugins, Runnable checkUpdates) {
         this.ws = ws;
         this.keys = keys;
@@ -304,6 +312,10 @@ final class SettingsDialog extends Dialog<Void> {
                 section("Updates"), autoUpdate, checkNow,
                 hint("You have BlockDesigner " + io.blockdesigner.app.update.Updater.currentVersion()
                         + ". New versions come from github.com/" + io.blockdesigner.app.update.Updater.REPO + "/releases."),
+                section("Your settings"), yourSettings(),
+                hint("Appearance, keybinds, the hotbar, viewport options and everything else here are kept in "
+                        + Settings.dir() + " and carry over every update. The first start of each new version also "
+                        + "copies them into " + Settings.backupDir() + " (the last ten are kept)."),
                 section("Files"), folder, hint(Settings.dir().toString()));
     }
 
@@ -464,5 +476,94 @@ final class SettingsDialog extends Dialog<Void> {
         });
         box.getChildren().add(clear);
         return box;
+    }
+
+    // ---- settings backups ----------------------------------------------------------------------------------------
+
+    /** Save a backup, load one, or reset: settings as a .json file you can keep or take to another PC. */
+    private Node yourSettings() {
+        Button save = new Button("Save a backup…", new FontIcon(Feather.SAVE));
+        save.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Save settings backup");
+            fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("BlockDesigner settings", "*.json"));
+            fc.setInitialFileName("BlockDesigner-settings-" + java.time.LocalDate.now() + ".json");
+            java.io.File f = fc.showSaveDialog(getDialogPane().getScene().getWindow());
+            if (f == null) return;
+            try {
+                ws.settings().saveTo(f.toPath());
+                info("Settings saved", "Saved to " + f + ".\nLoad it later (or on another PC) with Load a backup….");
+            } catch (java.io.IOException ex) {
+                error("Couldn't save the backup", ex.getMessage());
+            }
+        });
+        Button load = new Button("Load a backup…", new FontIcon(Feather.FOLDER));
+        load.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Load settings backup");
+            fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("BlockDesigner settings", "*.json"));
+            java.io.File f = fc.showOpenDialog(getDialogPane().getScene().getWindow());
+            if (f == null) return;
+            try {
+                Settings loaded = Settings.readFrom(f.toPath());
+                if (!confirm("Load these settings?", "Every setting is replaced by the backup's: appearance, keybinds, "
+                        + "the hotbar, viewport options, export and data pack choices. Your projects aren't touched.")) return;
+                ws.settings().copyFrom(loaded);
+                applied("Settings loaded");
+            } catch (java.io.IOException ex) {
+                error("Couldn't load that file", ex.getMessage());
+            }
+        });
+        Button reset = new Button("Reset to defaults…", new FontIcon(Feather.ROTATE_CCW));
+        reset.setOnAction(e -> {
+            if (!confirm("Reset every setting?", "Appearance, keybinds, the hotbar and every other setting go back to the "
+                    + "defaults. Your Minecraft version, mods and recent files are kept, and so are your projects. "
+                    + "Tip: Save a backup… first if you might want them back.")) return;
+            ws.settings().resetToDefaults();
+            applied("Settings reset");
+        });
+        FlowPane row = new FlowPane(8, 8, save, load, reset);
+        return row;
+    }
+
+    /** Saves the changed settings and offers the restart that applies everything (theme, layout, keys…). */
+    private void applied(String what) {
+        ws.settings().save();
+        keysChanged.run();
+        javafx.scene.control.ButtonType restart = new javafx.scene.control.ButtonType("Restart now", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+        javafx.scene.control.ButtonType later = new javafx.scene.control.ButtonType("Later", javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
+        javafx.scene.control.Alert a = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION,
+                "Some settings (the theme, window layout, panels) only take effect when BlockDesigner starts.", restart, later);
+        a.initOwner(getDialogPane().getScene().getWindow());
+        a.setTitle(what);
+        a.setHeaderText(what);
+        if (a.showAndWait().orElse(later) == restart) {
+            close();
+            restartApp.run();
+        }
+    }
+
+    private boolean confirm(String title, String text) {
+        javafx.scene.control.Alert a = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION, text);
+        a.initOwner(getDialogPane().getScene().getWindow());
+        a.setTitle(title);
+        a.setHeaderText(title);
+        return a.showAndWait().filter(b -> b == ButtonType.OK).isPresent();
+    }
+
+    private void info(String title, String text) {
+        javafx.scene.control.Alert a = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION, text);
+        a.initOwner(getDialogPane().getScene().getWindow());
+        a.setTitle(title);
+        a.setHeaderText(title);
+        a.showAndWait();
+    }
+
+    private void error(String title, String text) {
+        javafx.scene.control.Alert a = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR, text);
+        a.initOwner(getDialogPane().getScene().getWindow());
+        a.setTitle(title);
+        a.setHeaderText(title);
+        a.showAndWait();
     }
 }

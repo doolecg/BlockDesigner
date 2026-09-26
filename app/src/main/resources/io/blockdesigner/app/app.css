@@ -1171,3 +1171,58 @@
 .md-th .md-text {
     -fx-font-weight: bold;
 }
+
+/* ---------- mode badge and frame (top-left of the viewport) ---------- */
+.mode-badge {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 999;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 999;
+    -fx-padding: 4 12 4 9;
+    -fx-graphic-text-gap: 7;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+    -fx-effect: dropshadow(gaussian, -bd-shadow, 12, 0.15, 0, 2);
+}
+
+.mode-badge .ikonli-font-icon {
+    -fx-icon-size: 13;
+    -fx-icon-color: -color-fg-muted;
+}
+
+/* Build, Brush and Eraser: tinted in the mode's colour. */
+.mode-badge.mode-edit {
+    -fx-background-color: -bd-mode;
+    -fx-border-color: transparent;
+    -fx-text-fill: white;
+}
+
+.mode-badge.mode-edit .tool-glyph {
+    -fx-stroke: white;
+}
+
+.mode-frame {
+    -fx-border-color: -bd-mode;
+    -fx-border-width: 3;
+    -fx-opacity: 0.55;
+}
+
+/* ---------- brush options bar (top of the viewport) ---------- */
+.brush-options {
+    -fx-padding: 6 12 7 12;
+}
+
+.brush-group-label {
+    -fx-font-size: 9.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.brush-step {
+    -fx-padding: 0 6 0 6;
+}
+
+.brush-divider {
+    -fx-padding: 0 2 0 2;
+}

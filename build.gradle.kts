@@ -2,7 +2,7 @@ subprojects {
     apply(plugin = "java-library")
 
     group = "io.blockdesigner"
-    version = "0.4.6"
+    version = "0.4.7"
 
     repositories {
         mavenCentral()

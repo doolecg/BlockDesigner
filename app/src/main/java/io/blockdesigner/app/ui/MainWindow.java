@@ -282,6 +282,28 @@ public final class MainWindow {
         });
     }
 
+    /**
+     * Closes BlockDesigner and opens it again (an installed or portable copy starts its own exe); from the IDE it just
+     * says to restart by hand.
+     */
+    private void restartApp() {
+        java.nio.file.Path root = Updater.appRoot();
+        if (root == null) {
+            info("Restart BlockDesigner", "This copy wasn't started from an install; close it and run it again.");
+            return;
+        }
+        ws.settings().save();
+        try {
+            new ProcessBuilder(root.resolve("BlockDesigner.exe").toString()).start();
+        } catch (java.io.IOException e) {
+            error("Couldn't restart", e.getMessage());
+            return;
+        }
+        stage.close();
+        shutdown();
+        javafx.application.Platform.exit();
+    }
+
     /** Stops the viewport and plugins and saves settings; run as the app closes. */
     private void shutdown() {
         saveLayout();
@@ -678,6 +700,14 @@ public final class MainWindow {
         if (ws.settings().showStartScreen) startScreen.open();
         startAssetLoading(false);
         if (ws.settings().checkForUpdates) checkForUpdates(false);
+        // 0.4.7 moved the install to Program Files: remove the old per-user copy in AppData (settings are kept).
+        Thread.ofVirtual().name("tidy-old-install").start(() -> {
+            var old = Updater.leftoverPerUserInstalls();
+            if (old.isEmpty()) return;
+            int n = Updater.removeLeftovers(old);
+            if (n > 0) javafx.application.Platform.runLater(() ->
+                    ws.statusProperty().set("Removed the old copy of BlockDesigner from AppData · your settings are kept"));
+        });
     }
 
     // ---- updates ------------------------------------------------------------------------------------------------
@@ -783,9 +813,11 @@ public final class MainWindow {
 
     /** The Settings window (theme, mode, general options). */
     public void openSettings() {
-        new SettingsDialog(stage, ws, keys, this::applyAccelerators, () -> startAssetLoading(true),
+        SettingsDialog d = new SettingsDialog(stage, ws, keys, this::applyAccelerators, () -> startAssetLoading(true),
                 () -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait(),
-                () -> checkForUpdates(true)).showAndWait();
+                () -> checkForUpdates(true));
+        d.setRestart(this::restartApp);
+        d.showAndWait();
         ws.settings().save();
     }
 
@@ -1377,8 +1409,14 @@ public final class MainWindow {
         boolean placing = viewport.isPlacing();
         // Leave Ctrl+A etc. to a focused list (e.g. selecting every layer row).
         boolean listFocused = scene.getFocusOwner() instanceof javafx.scene.control.ListView<?>;
+        // The number keys: hotbar slots in Build mode (or over a palette block), tools everywhere else.
+        boolean hotbarFirst = tool == ToolKind.BUILD || palette.hoveredBlock() != null;
         for (Keybinds.Action a : Keybinds.Action.values()) {
             if (!keys.matches(a, e)) continue;
+            if (a.group == Keybinds.Group.TOOLS && hotbarFirst && keys.isHotbarKey(e)) continue;
+            if (a.group == Keybinds.Group.HOTBAR && !hotbarFirst && keys.isToolKey(e)) continue;
+            // R turns an import being placed (the viewport handles that) before it picks the Rotate tool.
+            if (a == Keybinds.Action.TOOL_ROTATE && placing && keys.matches(Keybinds.Action.ROTATE_PLACEMENT, e)) continue;
             Runnable r = switch (a) {
                 case TOOL_VIEW -> () -> ws.toolProperty().set(ToolKind.VIEW);
                 case TOOL_SELECT -> () -> ws.toolProperty().set(ToolKind.SELECT);

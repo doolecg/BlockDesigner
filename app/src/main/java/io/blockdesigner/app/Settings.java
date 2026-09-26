@@ -23,7 +23,7 @@ public final class Settings {
     public List<String> resourcePacks = new ArrayList<>();
     public boolean darkTheme = true;
     /** Colour theme (an AppTheme name: CLAUDE, BLUE, GREEN, RED, ORANGE, ZEN). */
-    public String theme = "BLUE";
+    public String theme = "CLAUDE";
     /** DARK, LIGHT or SYSTEM (follow Windows); null in settings saved before themes, where darkTheme decides. */
     public String themeMode;
     /** Show the start screen (recent projects, new, jar, download sites) when the app opens. */
@@ -118,6 +118,8 @@ public final class Settings {
     public boolean showKeyHints = true;
     /** Changed key binds by action name: "main|alternative" key combinations ("" for none); see Keybinds. */
     public java.util.Map<String, String> keybinds = new java.util.LinkedHashMap<>();
+    /** The version that last saved these settings (an automatic backup is made when it changes). */
+    public String lastVersion;
 
     /** Puts every viewport setting (view, overlays and controls) back to its default. */
     public void resetViewport() {
@@ -156,25 +158,117 @@ public final class Settings {
         return Path.of(appData != null ? appData : System.getProperty("user.home"), "BlockDesigner");
     }
 
+    /** Where automatic backups (one per version change) are kept. */
+    public static Path backupDir() {
+        return dir().resolve("backups");
+    }
+
+    /**
+     * The saved settings, or defaults. A file that can't be read is set aside (settings-broken-….json) rather than
+     * overwritten, and the first start of a new version copies the file into {@link #backupDir()} first.
+     */
     public static Settings load() {
         Path f = dir().resolve("settings.json");
         if (Files.isRegularFile(f)) {
             try {
-                return JSON.readValue(f.toFile(), Settings.class);
+                Settings s = JSON.readValue(f.toFile(), Settings.class);
+                String now = io.blockdesigner.app.update.Updater.currentVersion();
+                if (!now.equals(s.lastVersion)) {
+                    backupBeforeUpgrade(f, s.lastVersion == null ? "older" : s.lastVersion);
+                    s.lastVersion = now;
+                }
+                return s;
             } catch (IOException e) {
                 System.err.println("Could not read settings, using defaults: " + e.getMessage());
+                try {
+                    Files.move(f, dir().resolve("settings-broken-" + System.currentTimeMillis() + ".json"));
+                } catch (IOException ignored) {
+                    // leave it; it will be overwritten on the next save
+                }
             }
         }
-        return new Settings();
+        Settings s = new Settings();
+        s.lastVersion = io.blockdesigner.app.update.Updater.currentVersion();
+        return s;
+    }
+
+    private static void backupBeforeUpgrade(Path file, String from) {
+        try {
+            Files.createDirectories(backupDir());
+            Files.copy(file, backupDir().resolve("settings-" + from.replaceAll("[^0-9A-Za-z.-]", "_") + ".json"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            // Keep the ten newest.
+            try (var files = Files.list(backupDir())) {
+                var old = files.filter(p -> p.getFileName().toString().startsWith("settings-"))
+                        .sorted(java.util.Comparator.comparing((Path p) -> p.toFile().lastModified()).reversed()).skip(10).toList();
+                for (Path p : old) Files.deleteIfExists(p);
+            }
+        } catch (IOException e) {
+            System.err.println("Could not back up settings: " + e.getMessage());
+        }
     }
 
     public void save() {
         try {
             Files.createDirectories(dir());
-            JSON.writeValue(dir().resolve("settings.json").toFile(), this);
+            saveTo(dir().resolve("settings.json"));
         } catch (IOException e) {
             System.err.println("Could not save settings: " + e.getMessage());
         }
+    }
+
+    /** Writes the settings to {@code file} safely: to a temporary file first, then swapped in. */
+    public void saveTo(Path file) throws IOException {
+        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+        JSON.writeValue(tmp.toFile(), this);
+        try {
+            Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+            Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /** Reads a settings backup; fails (with Jackson's message) if it isn't one. */
+    public static Settings readFrom(Path file) throws IOException {
+        var tree = JSON.readTree(file.toFile());
+        if (tree == null || !tree.isObject() || !(tree.has("theme") || tree.has("keybinds") || tree.has("hotbar")))
+            throw new IOException("That file isn't a BlockDesigner settings backup.");
+        return JSON.treeToValue(tree, Settings.class);
+    }
+
+    /** Takes every setting from {@code other}, in place (the app holds on to this object). */
+    public void copyFrom(Settings other) {
+        try {
+            String keep = lastVersion;
+            JSON.readerForUpdating(this).readValue(JSON.writeValueAsBytes(other));
+            lastVersion = keep;
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Back to the defaults, keeping what the app needs to work and nothing personal to lose: the Minecraft jar,
+     * instance, mods and resource packs, and the recent files.
+     */
+    public void resetToDefaults() {
+        Settings d = new Settings();
+        d.gameJar = gameJar;
+        d.instanceName = instanceName;
+        d.extraMods = new ArrayList<>(extraMods);
+        d.resourcePacks = new ArrayList<>(resourcePacks);
+        d.recentFiles = new ArrayList<>(recentFiles);
+        // Maps and lists are replaced rather than merged when copying, so clear them first.
+        keybinds.clear();
+        hotbar.clear();
+        pluginOptions.clear();
+        pluginToolKeys.clear();
+        closedPluginPanels.clear();
+        disabledPlugins.clear();
+        exportFolders.clear();
+        worldgenPresets.clear();
+        lootTables.clear();
+        copyFrom(d);
     }
 
     public void addRecent(Path p) {

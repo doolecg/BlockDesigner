@@ -41,13 +41,15 @@ public final class Keybinds {
         SETTINGS(Group.FILE, "Settings", "Shortcut+Comma"),
         SEARCH_BLOCKS(Group.FILE, "Search blocks", "Shortcut+F"),
 
-        TOOL_VIEW(Group.TOOLS, "View mode", "V"),
-        TOOL_SELECT(Group.TOOLS, "Select mode", "Q"),
-        TOOL_BUILD(Group.TOOLS, "Build mode (toggle)", "G"),
-        TOOL_MOVE(Group.TOOLS, "Move", "W"),
-        TOOL_ROTATE(Group.TOOLS, "Rotate", "E"),
-        TOOL_BRUSH(Group.TOOLS, "Paint brush", "B"),
-        TOOL_ERASER(Group.TOOLS, "Eraser", "Y"),
+        // The toolbar's tools on the number keys in its order (Move and Rotate on letters). In Build mode the numbers
+        // pick hotbar slots instead, as in Minecraft.
+        TOOL_VIEW(Group.TOOLS, "View mode", "1"),
+        TOOL_SELECT(Group.TOOLS, "Select mode", "2"),
+        TOOL_BUILD(Group.TOOLS, "Build mode (toggle)", "3"),
+        TOOL_MOVE(Group.TOOLS, "Move", "G"),
+        TOOL_ROTATE(Group.TOOLS, "Rotate", "R"),
+        TOOL_BRUSH(Group.TOOLS, "Paint brush", "4"),
+        TOOL_ERASER(Group.TOOLS, "Eraser", "5"),
 
         SHUFFLE(Group.BUILD, "Shuffle hotbar blocks on / off", "Shift+Z"),
         REPLACE_MODE(Group.BUILD, "Replace mode on / off", "Shift+X"),
@@ -338,6 +340,32 @@ public final class Keybinds {
         return false;
     }
 
+    /**
+     * Pairs that share a key on purpose, each acting in its own situation: the hotbar slots and the tools (Build mode
+     * vs the others), and turning an import being placed vs the Rotate tool.
+     */
+    static boolean sharedByDesign(Action a, Action b) {
+        return hotbarVsTool(a, b) || hotbarVsTool(b, a)
+                || (a == Action.ROTATE_PLACEMENT && b == Action.TOOL_ROTATE) || (b == Action.ROTATE_PLACEMENT && a == Action.TOOL_ROTATE)
+                || (a == Action.PLACE && b.group == Group.TOOLS) || (b == Action.PLACE && a.group == Group.TOOLS);
+    }
+
+    private static boolean hotbarVsTool(Action a, Action b) {
+        return a.group == Group.HOTBAR && b.group == Group.TOOLS;
+    }
+
+    /** Whether the key event is one of the hotbar slot keys. */
+    public boolean isHotbarKey(KeyEvent e) {
+        for (Action a : Action.values()) if (a.group == Group.HOTBAR && matches(a, e)) return true;
+        return false;
+    }
+
+    /** Whether the key event is one of the tool keys. */
+    public boolean isToolKey(KeyEvent e) {
+        for (Action a : Action.values()) if (a.group == Group.TOOLS && matches(a, e)) return true;
+        return false;
+    }
+
     /** Keys only held while flying, which take their keys over from every other action then (and only then). */
     static boolean whileFlying(Action a) {
         return a != null && a.group == Group.FLYING && a.held;
@@ -353,6 +381,7 @@ public final class Keybinds {
         for (Action a : Action.values()) {
             if (a == except) continue;
             if (except != null && whileFlying(a) != whileFlying(except)) continue;
+            if (except != null && sharedByDesign(a, except)) continue;
             for (KeyCombination o : get(a)) if (o != null && o.equals(k)) out.add(a);
         }
         return out;

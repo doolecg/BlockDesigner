@@ -1,8 +1,10 @@
 # Plugin API 2
 
 Design notes for the second version of BlockDesigner's plugin API: what it adds, how it is built, the decisions
-behind it and what is still open. The user-facing guide is [PLUGINS.md](../PLUGINS.md); the reference plugin is
-[`examples/palette-tools`](../examples/palette-tools).
+behind it and what is still open. The user-facing guide is [PLUGINS.md](../PLUGINS.md), every public type is listed
+in [plugin-api-reference.md](plugin-api-reference.md), and the reference plugin is
+[`examples/palette-tools`](../examples/palette-tools). Where this record and PLUGINS.md differ, PLUGINS.md describes
+the current behaviour.
 
 ## Goals
 

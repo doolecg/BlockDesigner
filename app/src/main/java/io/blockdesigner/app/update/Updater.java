@@ -18,7 +18,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.DoubleConsumer;
@@ -140,7 +142,9 @@ public final class Updater {
                     digest.startsWith("sha256:") ? digest.substring(7) : null);
             String lower = name.toLowerCase(java.util.Locale.ROOT);
             if (lower.endsWith("-portable.zip")) portable = asset;
-            else if (lower.endsWith(".exe")) installer = asset;
+            // The .msi (0.4.7 on, installed for all users) wins over a setup .exe (earlier, per-user releases).
+            else if (lower.endsWith(".msi")) installer = asset;
+            else if (lower.endsWith(".exe") && (installer == null || !installer.name().toLowerCase(java.util.Locale.ROOT).endsWith(".msi"))) installer = asset;
         }
         return new Release(tag.replaceFirst("^[vV]", ""), n.path("name").asText(tag), n.path("body").asText(""),
                 URI.create(n.path("html_url").asText(RELEASES_PAGE)), installer, portable);
@@ -285,32 +289,7 @@ public final class Updater {
         vars.put("EXE", ps(root.resolve("BlockDesigner.exe").toString()));
         vars.put("WORK", ps(workDir().toString()));
         String script = switch (mode) {
-            case INSTALLED -> {
-                vars.put("SETUP", ps(downloaded.toString()));
-                vars.put("TIMEOUT", Integer.toString(SETUP_TIMEOUT_MS));
-                // The jpackage setup passes its arguments on to msiexec: /passive shows only a progress bar, and
-                // INSTALLDIR keeps the upgrade in the folder it was installed to. The setup re-quotes any argument
-                // with a space as a whole ("INSTALLDIR=C:\Users\A B\..."), which msiexec rejects (it then waits on
-                // its usage box), so the folder goes in as its 8.3 short path; without one it is left out and the
-                // upgrade goes to the default folder. The setup's window is shown on purpose: this script runs
-                // hidden, and anything it starts would otherwise inherit that and ask its questions invisibly. If
-                // the setup hangs anyway, it is stopped after a while so BlockDesigner still opens again.
-                yield """
-                        Wait-Process -Id {PID} -ErrorAction SilentlyContinue
-                        $setupArgs = '/passive'
-                        try {
-                            $short = (New-Object -ComObject Scripting.FileSystemObject).GetFolder({ROOT}).ShortPath
-                            if ($short -and $short -notmatch ' ') { $setupArgs += ' INSTALLDIR=' + $short }
-                        } catch { }
-                        $setup = Start-Process -FilePath {SETUP} -ArgumentList $setupArgs -WindowStyle Normal -PassThru
-                        if (-not $setup.WaitForExit({TIMEOUT})) {
-                            Get-CimInstance Win32_Process -Filter "ParentProcessId=$($setup.Id)" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-                            Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue
-                        }
-                        Start-Process -FilePath {EXE}
-                        Remove-Item -LiteralPath {WORK} -Recurse -Force -ErrorAction SilentlyContinue
-                        """;
-            }
+            case INSTALLED -> downloaded.toString().toLowerCase(java.util.Locale.ROOT).endsWith(".msi") ? msiScript(vars, downloaded, root) : exeScript(vars, downloaded);
             case PORTABLE -> {
                 vars.put("NEW", ps(downloaded.resolve("BlockDesigner").toString()));
                 vars.put("DATA", ps(io.blockdesigner.app.Settings.dir().toString()));
@@ -327,6 +306,114 @@ public final class Updater {
         };
         for (var e : vars.entrySet()) script = script.replace("{" + e.getKey() + "}", e.getValue());
         return script;
+    }
+
+    /**
+     * Installing an .msi (0.4.7 on: all users, Program Files). msiexec is called directly, so the quoting is ours:
+     * INSTALLDIR keeps the folder it was installed to. Windows asks for admin (UAC) for the all-users install; the
+     * window is shown for that, and a stuck install is stopped after a while so BlockDesigner still opens again.
+     */
+    private static String msiScript(Map<String, String> vars, Path msi, Path root) {
+        String local = System.getenv("LOCALAPPDATA");
+        // A per-user copy in AppData never passes its folder on: the all-users install goes to Program Files.
+        boolean keepFolder = local == null || !root.toAbsolutePath().startsWith(Path.of(local));
+        String args = "/i \"" + msi + "\" /passive" + (keepFolder ? " INSTALLDIR=\"" + root + "\"" : "");
+        vars.put("ARGS", ps(args));
+        vars.put("TIMEOUT", Integer.toString(SETUP_TIMEOUT_MS));
+        return """
+                Wait-Process -Id {PID} -ErrorAction SilentlyContinue
+                $setup = Start-Process -FilePath 'msiexec.exe' -ArgumentList {ARGS} -WindowStyle Normal -PassThru
+                if (-not $setup.WaitForExit({TIMEOUT})) { Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue }
+                Start-Process -FilePath {EXE}
+                Remove-Item -LiteralPath {WORK} -Recurse -Force -ErrorAction SilentlyContinue
+                """;
+    }
+
+    /** Running a setup .exe (the per-user installers before 0.4.7). */
+    private static String exeScript(Map<String, String> vars, Path downloaded) {
+        vars.put("SETUP", ps(downloaded.toString()));
+        vars.put("TIMEOUT", Integer.toString(SETUP_TIMEOUT_MS));
+        // The jpackage setup passes its arguments on to msiexec: /passive shows only a progress bar, and INSTALLDIR
+        // keeps the upgrade in the folder it was installed to. The setup re-quotes any argument with a space as a whole
+        // ("INSTALLDIR=C:\Users\A B\..."), which msiexec rejects (it then waits on its usage box), so the folder goes
+        // in as its 8.3 short path; without one it is left out and the upgrade goes to the default folder. The setup's
+        // window is shown on purpose: this script runs hidden, and anything it starts would otherwise inherit that and
+        // ask its questions invisibly. If the setup hangs anyway, it is stopped after a while so BlockDesigner still
+        // opens again.
+        return """
+                Wait-Process -Id {PID} -ErrorAction SilentlyContinue
+                $setupArgs = '/passive'
+                try {
+                    $short = (New-Object -ComObject Scripting.FileSystemObject).GetFolder({ROOT}).ShortPath
+                    if ($short -and $short -notmatch ' ') { $setupArgs += ' INSTALLDIR=' + $short }
+                } catch { }
+                $setup = Start-Process -FilePath {SETUP} -ArgumentList $setupArgs -WindowStyle Normal -PassThru
+                if (-not $setup.WaitForExit({TIMEOUT})) {
+                    Get-CimInstance Win32_Process -Filter "ParentProcessId=$($setup.Id)" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                    Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue
+                }
+                Start-Process -FilePath {EXE}
+                Remove-Item -LiteralPath {WORK} -Recurse -Force -ErrorAction SilentlyContinue
+                """;
+    }
+
+    // ---- the move to Program Files (0.4.7) ------------------------------------------------------------------------
+
+    private static final String UNINSTALL_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+
+    /**
+     * Per-user installs from before 0.4.7 (in AppData) that are still there now that this copy runs from another
+     * folder (Program Files): their Windows Installer product codes. Empty unless this is an installed copy.
+     */
+    public static List<String> leftoverPerUserInstalls() {
+        Path root = appRoot();
+        if (mode() != Mode.INSTALLED || root == null) return List.of();
+        List<String> out = new ArrayList<>();
+        try {
+            var hkcu = com.sun.jna.platform.win32.WinReg.HKEY_CURRENT_USER;
+            for (String sub : com.sun.jna.platform.win32.Advapi32Util.registryGetKeys(hkcu, UNINSTALL_KEY)) {
+                String k = UNINSTALL_KEY + "\\" + sub;
+                String name = value(hkcu, k, "DisplayName"), location = value(hkcu, k, "InstallLocation");
+                if (isLeftover(sub, name, location, root)) out.add(sub);
+            }
+        } catch (RuntimeException | LinkageError e) {
+            // no registry access: nothing to tidy
+        }
+        return out;
+    }
+
+    /** A BlockDesigner install (by Windows Installer product code) somewhere other than {@code root}. */
+    static boolean isLeftover(String productCode, String displayName, String location, Path root) {
+        if (!"BlockDesigner".equals(displayName) || location == null || location.isBlank()) return false;
+        if (!productCode.matches("\\{[0-9A-Fa-f-]{36}}")) return false;
+        try {
+            // Installers record 8.3 short paths (C:\Users\ABC~1\…); the real paths compare reliably.
+            Path loc = Path.of(location.strip());
+            if (Files.exists(loc) && Files.exists(root)) return !Files.isSameFile(loc, root);
+            return !loc.toAbsolutePath().normalize().equals(root.toAbsolutePath().normalize());
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    private static String value(com.sun.jna.platform.win32.WinReg.HKEY root, String key, String name) {
+        return com.sun.jna.platform.win32.Advapi32Util.registryValueExists(root, key, name)
+                ? com.sun.jna.platform.win32.Advapi32Util.registryGetStringValue(root, key, name) : null;
+    }
+
+    /** Quietly uninstalls those old per-user copies (no admin needed; settings in AppData\Roaming are untouched). */
+    public static int removeLeftovers(List<String> productCodes) {
+        int removed = 0;
+        for (String code : productCodes) {
+            try {
+                Process p = new ProcessBuilder("msiexec.exe", "/x", code, "/qn", "/norestart").redirectErrorStream(true).start();
+                p.getInputStream().readAllBytes();
+                if (p.waitFor() == 0) removed++;
+            } catch (IOException | InterruptedException e) {
+                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            }
+        }
+        return removed;
     }
 
     /** A PowerShell single-quoted string literal. */

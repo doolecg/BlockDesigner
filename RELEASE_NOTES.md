@@ -1,3 +1,52 @@
+# BlockDesigner 0.4.7
+
+BlockDesigner now installs into `C:\Program Files`. Your settings are backed up automatically and can be saved, loaded or reset. The tools are on the number keys. You can always see which mode you're in, and the brush has a proper options bar.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.7.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner`, and Windows asks for admin. |
+| **BlockDesigner-0.4.7-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+**Updating from 0.4.6 or earlier:** install this one by hand. Earlier versions installed per-user into AppData, and their updater can't make the move, so it points you to this page instead. Run the `.msi`. The first time 0.4.7 starts, it removes the old AppData copy, so you don't end up with two. Your settings are kept. From 0.4.7 on, updates install themselves again, with a Windows admin prompt.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting.
+
+## New
+- **Installs to Program Files:** the installer is now an `.msi` that installs for all users into `C:\Program Files\BlockDesigner`, and you can still pick another folder. Settings, plugins and caches stay in `%APPDATA%\BlockDesigner` and your temp folder, never in the install folder.
+- **Your settings, safe across updates:**
+  - The first start of each new version copies your settings into `%APPDATA%\BlockDesigner\backups`, keeping the last ten.
+  - Settings › General › Your settings has **Save a backup…**, **Load a backup…** (for example on another PC) and **Reset to defaults…**. A reset keeps your Minecraft version, mods and recent files.
+  - Settings are saved safely, so a crash mid-save can't corrupt them. A settings file that can't be read is set aside, not overwritten.
+- **Mode badge:** the top-left of the 3D view always shows the mode you're in, for example **BUILD MODE** (with Replace, Shuffle, the shape, or Creative flight), **BRUSH · Smooth**, ERASER, SELECT, MOVE or VIEW. The edit modes also get a thin coloured frame round the view: Build green, Brush blue, Eraser red.
+- **Brush options bar:** the paint brush and eraser have a bar along the top of the view, like a sculpting app's tool header. It has the tool's coloured pill, a Mode menu (with each mode's key), labelled Size and Strength sliders with their values, Sphere / Cube, and a button for every setting.
+
+## Changed
+- **New default tool keys:** the toolbar's tools are on the number keys, in toolbar order.
+
+  | Tool | Key |
+  |---|---|
+  | View | 1 |
+  | Select | 2 |
+  | Build | 3 |
+  | Move | G |
+  | Rotate | R |
+  | Brush | 4 |
+  | Eraser | 5 |
+
+  In Build mode, 1–9 still pick hotbar slots, as in Minecraft; leave Build mode with Esc. Over a block in the palette, 1–9 fill that hotbar slot in any mode. While you're placing an import, R still turns it. You can change any key in Settings › Keybinds.
+- **The default theme is Claude.** This only affects new installs and settings resets.
+- **Key hints no longer overlap the hotbar:** they sit above it.
+
+## Fixed
+- **The Build-mode tip** said to press the Build key to leave. That key now picks a hotbar slot in Build mode, so the tip says Esc.
+
+## Docs
+- A new README, a full plugin guide (`PLUGINS.md`) and an API reference (`docs/plugin-api-reference.md`).
+
+---
+
 # BlockDesigner 0.4.6
 
 Softer interface sounds: clicks, the hotbar, and picking up or putting down blocks now use the place and break sounds, played lower and quieter, so everything sounds like one set.
