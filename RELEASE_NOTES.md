@@ -1,3 +1,25 @@
+# BlockDesigner 0.4.14
+
+Every plugin gets its own tab on the right, so you can see it's running, change its settings and use what it adds.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.14.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.14.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.14-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **A tab for every plugin.** Each running plugin has its own tab on the right. It shows the plugin's version and a green **Running** badge (or why it failed), its settings, and everything it adds: buttons for its actions, tools, transforms and panels, and its commands, file formats and objects. It also has **Manage plugins…** and **Turn off** buttons. Close it like any other tab.
+- **Plugin settings (plugin API 4).** Plugins can put settings in their tab. BlockDesigner draws the controls, has a **Reset to defaults** button and keeps the values between runs. [Reference Planes 1.1.0](https://github.com/doolecg/BlockDesigner-ReferencePlanes) uses this for how new pictures start out.
+
+---
+
 # BlockDesigner 0.4.13
 
 A Reach slider for creative flight, a longer default reach, and links to the plugins in their new homes.

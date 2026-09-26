@@ -1267,3 +1267,69 @@
     -fx-font-weight: bold;
     -fx-text-fill: -color-fg-default;
 }
+
+/* ---------- a plugin's own tab (status, settings, what it adds) ---------- */
+.plugin-home-scroll, .plugin-home-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.plugin-home-name {
+    -fx-font-weight: bold;
+    -fx-font-size: 15px;
+}
+
+.plugin-home-description {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 12px;
+}
+
+.plugin-status {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 2 9 2 7;
+    -fx-background-radius: 999;
+    -fx-graphic-text-gap: 6;
+}
+
+.plugin-status-dot {
+    -fx-min-width: 7;
+    -fx-min-height: 7;
+    -fx-max-width: 7;
+    -fx-max-height: 7;
+    -fx-background-radius: 999;
+}
+
+.plugin-status-ok {
+    -fx-background-color: rgba(70, 196, 110, 0.16);
+    -fx-text-fill: #46C46E;
+}
+
+.plugin-status-ok .plugin-status-dot {
+    -fx-background-color: #46C46E;
+}
+
+.plugin-status-failed {
+    -fx-background-color: rgba(229, 72, 77, 0.16);
+    -fx-text-fill: #E5484D;
+}
+
+.plugin-status-failed .plugin-status-dot {
+    -fx-background-color: #E5484D;
+}
+
+.plugin-home-card {
+    -fx-padding: 10 12 12 12;
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 10;
+}
+
+.plugin-home-section {
+    -fx-font-size: 10.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.plugin-home-item {
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}

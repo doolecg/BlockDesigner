@@ -29,6 +29,12 @@ class ModeShotsIT {
         Path data = Files.createTempDirectory("bd-mode-shots");
         Path real = Path.of(System.getenv("APPDATA"), "BlockDesigner", "settings.json");
         if (Files.isRegularFile(real)) Files.copy(real, data.resolve("settings.json"));
+        // Plugin jars to show their tabs: MODE_SHOTS_PLUGINS lists jar paths separated by ';'.
+        String jars = System.getenv("MODE_SHOTS_PLUGINS");
+        if (jars != null && !jars.isBlank()) {
+            Files.createDirectories(data.resolve("plugins"));
+            for (String j : jars.split(";")) Files.copy(Path.of(j.strip()), data.resolve("plugins").resolve(Path.of(j.strip()).getFileName()));
+        }
         System.setProperty("blockdesigner.dataDir", data.toString());
         CompletableFuture<Void> started = new CompletableFuture<>();
         try {
@@ -96,6 +102,24 @@ class ModeShotsIT {
         for (int i = 0; i < 60 && fx(() -> window.viewport().meshesPending()); i++) Thread.sleep(500);
         Thread.sleep(3000);
         save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("mode-scale-dragged.png"));
+        // Each plugin's own tab, when plugins were given.
+        if (jars != null && !jars.isBlank()) {
+            var tabs = fx(() -> {
+                var f = MainWindow.class.getDeclaredField("sideTabs");
+                f.setAccessible(true);
+                return (javafx.scene.control.TabPane) f.get(window);
+            });
+            int n = fx(() -> tabs.getTabs().size());
+            for (int i = 0; i < n; i++) {
+                int k = i;
+                fx(() -> {
+                    tabs.getSelectionModel().select(k);
+                    return null;
+                });
+                Thread.sleep(800);
+                save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("plugin-tab-" + i + ".png"));
+            }
+        }
         fx(() -> {
             window.stage().close();
             return null;

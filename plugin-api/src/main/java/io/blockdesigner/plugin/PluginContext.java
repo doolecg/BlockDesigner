@@ -63,6 +63,17 @@ public interface PluginContext {
      */
     void registerObjectType(SceneObjectType type);
 
+    /**
+     * Adds settings to the plugin's own tab on the right. Every enabled plugin has that tab: it shows the plugin is
+     * running and lists what it adds; these settings go at the top of it. BlockDesigner draws a control per option,
+     * keeps the values between runs, and calls {@code onChange} on the JavaFX thread with the current values, once
+     * straight away and again after every change (including "Reset to defaults"). Call it once. Since API 4.
+     */
+    void registerSettings(Options options, Consumer<OptionValues> onChange);
+
+    /** The current values of the settings added with {@link #registerSettings}: defaults for none. Since API 4. */
+    OptionValues settings();
+
     // ---- events (API 2) --------------------------------------------------------------------------------------
 
     /**

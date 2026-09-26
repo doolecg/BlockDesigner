@@ -559,6 +559,8 @@ public final class MainWindow {
     }
 
     private final java.util.Map<String, PanelTab> pluginTabs = new java.util.LinkedHashMap<>();
+    /** Each running (or failed) plugin's own tab: status, settings and what it adds, by plugin id. */
+    private final java.util.Map<String, PluginHomeTab> homeTabs = new java.util.LinkedHashMap<>();
     /** Set while plugin tabs are added or removed with their plugins, so that isn't mistaken for the user closing them. */
     private boolean syncingPanels;
 
@@ -572,6 +574,7 @@ public final class MainWindow {
         for (var p : plugins.panels()) now.put(p.key(), p);
         syncingPanels = true;
         try {
+            syncHomeTabs();
             for (var it = pluginTabs.entrySet().iterator(); it.hasNext(); ) {
                 var e = it.next();
                 var current = now.get(e.getKey());
@@ -589,6 +592,73 @@ public final class MainWindow {
             syncingPanels = false;
         }
         sideTabsChanged();
+    }
+
+    /** One tab per running or failed plugin, rebuilt as plugins change; the user can close them like any other. */
+    private void syncHomeTabs() {
+        java.util.Map<String, io.blockdesigner.app.plugins.PluginManager.Plugin> now = new java.util.LinkedHashMap<>();
+        for (var p : plugins.plugins()) {
+            var st = p.state();
+            if (st == io.blockdesigner.app.plugins.PluginManager.State.ENABLED || st == io.blockdesigner.app.plugins.PluginManager.State.FAILED) {
+                now.put(p.info().id(), p);
+            }
+        }
+        for (var it = homeTabs.entrySet().iterator(); it.hasNext(); ) {
+            var e = it.next();
+            if (now.get(e.getKey()) == e.getValue().plugin) continue;
+            sideTabs.getTabs().remove(e.getValue().tab);
+            it.remove();
+        }
+        for (var e : now.entrySet()) {
+            PluginHomeTab home = homeTabs.get(e.getKey());
+            if (home != null) {
+                home.refresh();
+                continue;
+            }
+            home = new PluginHomeTab(e.getValue(), plugins, ws::blockToPlace, homeActions());
+            homeTabs.put(e.getKey(), home);
+            if (!ws.settings().closedPluginPanels.contains(homeKey(e.getKey()))) sideTabs.getTabs().add(home.tab);
+        }
+    }
+
+    private static String homeKey(String pluginId) {
+        return "plugin:" + pluginId;
+    }
+
+    private PluginHomeTab.Actions homeActions() {
+        return new PluginHomeTab.Actions() {
+            @Override
+            public void runAction(io.blockdesigner.app.plugins.PluginManager.Action a) {
+                plugins.run(a);
+            }
+
+            @Override
+            public void pickTool(io.blockdesigner.app.plugins.PluginManager.Tool t) {
+                pickPluginTool(t);
+            }
+
+            @Override
+            public void openTransform(io.blockdesigner.app.plugins.PluginManager.Transform t) {
+                MainWindow.this.openTransform(t);
+            }
+
+            @Override
+            public void openPanel(io.blockdesigner.app.plugins.PluginManager.Panel p) {
+                PanelTab pt = pluginTabs.get(p.key());
+                if (pt != null) reopenTab(pt.tab);
+            }
+
+            @Override
+            public void managePlugins() {
+                new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait();
+            }
+
+            @Override
+            public void disable(io.blockdesigner.app.plugins.PluginManager.Plugin p) {
+                plugins.setEnabled(p, false);
+                viewport.showToast(p.info().name() + " turned off · Manage plugins turns it back on");
+            }
+        };
     }
 
     /** Right-hand panel: the Resource Tracker tab. */
@@ -623,10 +693,21 @@ public final class MainWindow {
                 if (open) ws.settings().closedPluginPanels.remove(e.getKey());
                 else if (!ws.settings().closedPluginPanels.contains(e.getKey())) ws.settings().closedPluginPanels.add(e.getKey());
             }
+            for (var e : homeTabs.entrySet()) {
+                String key = homeKey(e.getKey());
+                boolean open = sideTabs.getTabs().contains(e.getValue().tab);
+                if (open) ws.settings().closedPluginPanels.remove(key);
+                else if (!ws.settings().closedPluginPanels.contains(key)) ws.settings().closedPluginPanels.add(key);
+            }
         }
 
         closedTabsBar.getChildren().clear();
         if (!resources) closedTabsBar.getChildren().add(closedTabButton(resourcesTab, resourcesTab.getText(), new FontIcon(Feather.PACKAGE)));
+        for (PluginHomeTab home : homeTabs.values()) {
+            if (!sideTabs.getTabs().contains(home.tab)) {
+                closedTabsBar.getChildren().add(closedTabButton(home.tab, home.plugin.info().name(), ToolIcons.plugin(home.icon(), 14)));
+            }
+        }
         for (PanelTab pt : pluginTabs.values()) {
             if (!sideTabs.getTabs().contains(pt.tab)) {
                 closedTabsBar.getChildren().add(closedTabButton(pt.tab, pt.panel.panel().title(), ToolIcons.plugin(pt.panel.panel().icon(), 14)));

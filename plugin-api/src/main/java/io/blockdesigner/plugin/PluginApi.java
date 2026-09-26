@@ -9,8 +9,10 @@ public final class PluginApi {
      * BlockDesigners refuse them with a clear message instead of failing half-way. API 1 plugins keep working.
      * <br>3: scene objects (images, guides and markers that aren't blocks, listed in the Layers panel, moved by the
      * Move / Rotate / Scale tools and saved with the project). API 1 and 2 plugins keep working.
+     * <br>4: settings in the plugin's own tab ({@link PluginContext#registerSettings}). Every plugin gets that tab,
+     * whatever API it declares; only plugins that register settings need {@code "api": 4}.
      */
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
 
     /** Name of the descriptor file at the root of a plugin jar. */
     public static final String DESCRIPTOR = "blockdesigner-plugin.json";

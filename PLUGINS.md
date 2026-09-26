@@ -25,10 +25,16 @@ This guide covers setting up a plugin project, the manifest, installing and test
 | `registerTool(PluginTool)` | 2 | A button in the tool dock over the viewport; mouse, wheel and keys go to your handler |
 | `registerImporter(PluginImporter)` | 2 | Import (file filter, drag and drop) for files that aren't schematics, such as images |
 | `registerObjectType(SceneObjectType)` | 3 | Things in the scene that aren't blocks (reference images, guides): rows in the Layers panel, drawn in the 3D view, moved by the Move / Rotate tools, a right-click menu, saved in the project |
+| `registerSettings(Options, onChange)` | 4 | Settings at the top of the plugin's own tab, kept between runs |
 
 API 2 also adds exporter options, summaries and progress; declarative `Options`; scene events (`ctx.on(...)`); the block catalog (`ctx.blocks()`); and asset access (`ctx.assets()`). API 3 adds scene objects (`ctx.objects()`).
 
 When a plugin is disabled, or fails while enabling, BlockDesigner removes everything it registered.
+
+**Every plugin gets its own tab** on the right, whatever API it declares, so users can see it's running. The tab
+shows its name, version and a Running (or Failed) status, its description, its settings (API 4), and everything it
+registered, each with a button to use it: actions, tools, transforms and panels, plus its commands, formats,
+importers, exporters and object types. A **Turn off** button disables it. Users can close the tab like any other.
 
 ## Getting started
 
@@ -650,6 +656,23 @@ final class ReferenceImage implements SceneObject {
 - **`ctx.objects()`** (`SceneObjects`): your objects (`list()`), `add(...)`, `selected()`, the current `view()`, and blobs. `storeBlob(bytes)` returns a key that is the same for the same bytes, and `blob(key)` reads it back. Only blobs that some object lists in `blobs()` are saved.
 - **Menus:** `menu(self)` returns JavaFX `MenuItem`s, as panels do. `CustomMenuItem` with `hideOnClick` false can hold fields and sliders. BlockDesigner adds Rename, Focus camera, Hide, Lock and Delete after them.
 - **Errors:** an exception from `draw`, `load` or `menu` is logged against your plugin, and the object is skipped for that frame.
+
+## API 4 extension points
+
+### Settings in the plugin's tab
+
+`ctx.registerSettings(options, onChange)` puts settings at the top of the plugin's tab. They use the same `Options`
+as transforms and tools, so BlockDesigner draws the controls (sliders, check boxes, choices, block pickers) and a
+**Reset to defaults** button, and keeps the values between runs. `onChange` runs on the JavaFX thread with the current
+values, once straight away and after every change; `ctx.settings()` reads them at any time. Register once, from
+`enable`. Plugins that use it declare `"api": 4`.
+
+```java
+ctx.registerSettings(Options.builder()
+        .decimal("height", "Height (blocks)", 16, 1, 512)
+        .toggle("snap", "Snap to blocks", true)
+        .build(), v -> height = v.decimal("height"));
+```
 
 ## Rules of the road
 

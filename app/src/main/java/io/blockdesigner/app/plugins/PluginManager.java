@@ -14,6 +14,8 @@ import io.blockdesigner.core.version.McVersion;
 import io.blockdesigner.core.worldedit.WorldEdit;
 import io.blockdesigner.plugin.BlockCatalog;
 import io.blockdesigner.plugin.BlockDesignerPlugin;
+import io.blockdesigner.plugin.OptionValues;
+import io.blockdesigner.plugin.Options;
 import io.blockdesigner.plugin.PluginAction;
 import io.blockdesigner.plugin.PluginApi;
 import io.blockdesigner.plugin.PluginCommand;
@@ -113,11 +115,16 @@ public final class PluginManager {
         private final List<PluginExporter> exporters = new ArrayList<>();
         private final List<PluginAction> actions = new ArrayList<>();
         private final List<String> commands = new ArrayList<>();
+        private final List<PluginCommand> commandInfo = new ArrayList<>();
         private final List<PluginTransform> transforms = new ArrayList<>();
         private final List<PluginPanel> panels = new ArrayList<>();
         private final List<PluginImporter> importers = new ArrayList<>();
         private final List<PluginTool> tools = new ArrayList<>();
         private final List<SceneObjectType> objectTypes = new ArrayList<>();
+        /** Settings shown in the plugin's tab (API 4): the options, the current values and who hears changes. */
+        private Options settingsOptions;
+        private OptionValues settingsValues;
+        private Consumer<OptionValues> settingsListener;
         private Context context;
         /** The last scene object failure shown as a toast (a failing draw repeats every frame). */
         private String lastObjectError;
@@ -161,6 +168,35 @@ public final class PluginManager {
             if (!panels.isEmpty()) parts.add(panels.size() + (panels.size() == 1 ? " panel" : " panels"));
             if (!objectTypes.isEmpty()) parts.add(objectTypes.size() + (objectTypes.size() == 1 ? " object type" : " object types"));
             return parts.isEmpty() ? "nothing registered" : String.join(" · ", parts);
+        }
+
+        public List<SchematicFormat> formats() {
+            return List.copyOf(formats);
+        }
+
+        public List<PluginExporter> exporters() {
+            return List.copyOf(exporters);
+        }
+
+        public List<PluginImporter> importers() {
+            return List.copyOf(importers);
+        }
+
+        public List<PluginCommand> commands() {
+            return List.copyOf(commandInfo);
+        }
+
+        public List<SceneObjectType> objectTypes() {
+            return List.copyOf(objectTypes);
+        }
+
+        /** The settings the plugin added for its tab, or null. */
+        public Options settingsOptions() {
+            return settingsOptions;
+        }
+
+        public OptionValues settingsValues() {
+            return settingsValues;
         }
 
         /** The context handed to the plugin while it is enabled (null otherwise). */
@@ -330,6 +366,27 @@ public final class PluginManager {
     }
 
     /** Runs a plugin's menu action; an exception is logged against the plugin and shown as a toast. */
+    /** New values for a plugin's settings (from its tab): kept, and passed to the plugin. */
+    public void setSettings(Plugin p, OptionValues values) {
+        if (p.settingsOptions == null || values.equals(p.settingsValues)) return;
+        p.settingsValues = values;
+        optionStore.save(settingsKey(p), values);
+        tellSettings(p);
+    }
+
+    private static String settingsKey(Plugin p) {
+        return OptionStore.key(p.info.id(), "settings", "tab");
+    }
+
+    private void tellSettings(Plugin p) {
+        if (p.settingsListener == null) return;
+        try {
+            p.settingsListener.accept(p.settingsValues);
+        } catch (Throwable t) {
+            report(p, "Settings", t);
+        }
+    }
+
     public void run(Action a) {
         try {
             a.action().action().run();
@@ -487,6 +544,10 @@ public final class PluginManager {
         p.formats.clear();
         p.commands.forEach(WorldEdit::unregister);
         p.commands.clear();
+        p.commandInfo.clear();
+        p.settingsOptions = null;
+        p.settingsValues = null;
+        p.settingsListener = null;
         p.exporters.clear();
         p.actions.clear();
         p.transforms.clear();
@@ -678,6 +739,22 @@ public final class PluginManager {
             WorldEdit.register(new WorldEdit.Command(command.name(), command.usage(), command.description() + " (" + p.info.name() + ")"),
                     (args, flags, c, region) -> runCommand(command, args, flags, c, region));
             p.commands.add(command.name());
+            p.commandInfo.add(command);
+        }
+
+        @Override
+        public void registerSettings(Options options, Consumer<OptionValues> onChange) {
+            java.util.Objects.requireNonNull(options, "options");
+            if (p.settingsOptions != null) throw new IllegalStateException("Settings are registered once");
+            p.settingsOptions = options;
+            p.settingsListener = onChange;
+            p.settingsValues = optionStore.load(settingsKey(p), options, catalog);
+            tellSettings(p);
+        }
+
+        @Override
+        public OptionValues settings() {
+            return p.settingsValues != null ? p.settingsValues : Options.none().defaults();
         }
 
         private WorldEdit.Result runCommand(PluginCommand command, List<String> args, List<String> flags, WorldEdit.Context c,
