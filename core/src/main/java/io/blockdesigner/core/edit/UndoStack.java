@@ -64,7 +64,15 @@ public final class UndoStack {
      * WorldEdit command). Groups nest; only the outermost one is recorded. Undo/redo are disabled while a group is open.
      */
     public void beginGroup(String label) {
-        if (groupDepth++ == 0) group = new Transaction(label);
+        beginGroup(label, null);
+    }
+
+    /**
+     * As {@link #beginGroup(String)}; groups with the same non-null {@code mergeKey} ending within the merge window
+     * become one undo step, like merged transactions (a held place / break burst that edits several layers).
+     */
+    public void beginGroup(String label, String mergeKey) {
+        if (groupDepth++ == 0) group = new Transaction(label, mergeKey);
     }
 
     public void endGroup() {
@@ -73,9 +81,16 @@ public final class UndoStack {
         Transaction g = group;
         group = null;
         if (g.isEmpty()) return;
-        undo.push(g);
-        topSealed = true;
-        trim();
+        Transaction top = undo.peek();
+        if (g.mergeKey() != null && !topSealed && top != null && Objects.equals(top.mergeKey(), g.mergeKey())
+                && System.currentTimeMillis() - top.lastTouched() <= mergeWindowMs) {
+            top.mergeFrom(g);
+        } else {
+            undo.push(g);
+            // A merging group stays open to the next one; any other group is a step of its own.
+            topSealed = g.mergeKey() == null;
+            trim();
+        }
         redo.clear();
         fire();
     }

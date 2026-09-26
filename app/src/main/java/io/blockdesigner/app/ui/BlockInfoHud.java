@@ -71,6 +71,25 @@ public final class BlockInfoHud extends HBox {
         setVisible(true);
     }
 
+    /** Shows an entity (world position): its egg icon, name, what it is and where. */
+    public void showEntity(io.blockdesigner.core.model.StructureEntity e, Layer layer) {
+        showEntity(null, e, layer);
+    }
+
+    public void showEntity(BlockAssets assets, io.blockdesigner.core.model.StructureEntity e, Layer layer) {
+        var kind = io.blockdesigner.core.model.EntityTypes.kind(e.id());
+        shownState = null;
+        name.setText(io.blockdesigner.core.model.EntityTypes.displayName(e));
+        String details = EntityIcons.describe(e);
+        props.setText(details);
+        props.setManaged(!details.isEmpty());
+        props.setVisible(!details.isEmpty());
+        where.setText(String.format(Locale.ROOT, "%.1f, %.1f, %.1f", e.x(), e.y(), e.z()) + (layer != null ? "   ·   " + layer.name() : ""));
+        mod.setText(modName(kind.id().substring(0, kind.id().indexOf(':'))) + " · entity");
+        icon.setImage(EntityIcons.icon(assets, kind.id()));
+        setVisible(true);
+    }
+
     static String modName(String namespace) {
         return switch (namespace) {
             case "minecraft" -> "Minecraft";

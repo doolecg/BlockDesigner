@@ -24,6 +24,8 @@ import java.util.Optional;
  */
 public final class TextureAtlas {
     public static final String MISSING = "blockdesigner:missing";
+    /** Plain white, for flat tinted shapes (placeholder boxes). */
+    public static final String WHITE = "blockdesigner:white";
     private static final int PAD = 4;
     private static final int MAX_SIZE = 16384;
 
@@ -105,9 +107,12 @@ public final class TextureAtlas {
         ObjectMapper json = new ObjectMapper();
         List<Loaded> loaded = new ArrayList<>();
         loaded.add(missingTexture());
+        int[] white = new int[16 * 16];
+        java.util.Arrays.fill(white, 0xFFFFFFFF);
+        loaded.add(new Loaded(WHITE, 16, 16, white, RenderLayer.SOLID, 0xFFFFFF, false));
         for (String rawId : new LinkedHashSet<>(textureIds)) {
             String id = normalizeId(rawId);
-            if (id.equals(MISSING)) continue;
+            if (id.equals(MISSING) || id.equals(WHITE)) continue;
             String path = texturePath(id);
             Optional<byte[]> bytes = assets.read(path);
             if (bytes.isEmpty()) continue;

@@ -6,6 +6,7 @@ import io.blockdesigner.core.model.Box;
 import io.blockdesigner.core.model.Layer;
 import io.blockdesigner.core.model.Scene;
 import io.blockdesigner.core.model.Structure;
+import io.blockdesigner.core.model.StructureEntity;
 import io.blockdesigner.core.nbt.CompoundTag;
 
 import java.util.List;
@@ -90,6 +91,37 @@ public final class SceneEditor {
             if (z > dMaxZ) dMaxZ = z;
         }
 
+        /** Sets a block with exactly this block entity data: null clears whatever was there. */
+        public void setExact(int x, int y, int z, BlockState state, CompoundTag blockEntity) {
+            checkOpen();
+            Structure s = layer.structure();
+            BlockPos p = new BlockPos(x, y, z);
+            if (blockEntity == null && s.blockEntity(p) != null) {
+                CompoundTag beforeNbt = s.blockEntity(p).copy();
+                BlockState before = s.get(x, y, z);
+                s.set(x, y, z, state);
+                s.setBlockEntity(p, null);
+                change.record(p, before, beforeNbt, state, null);
+                grow(x, y, z);
+                return;
+            }
+            set(x, y, z, state, blockEntity);
+        }
+
+        /** Block entity data at a layer-local position, or null. */
+        public CompoundTag blockEntity(int x, int y, int z) {
+            return layer.structure().blockEntity(new BlockPos(x, y, z));
+        }
+
+        private void grow(int x, int y, int z) {
+            if (x < dMinX) dMinX = x;
+            if (y < dMinY) dMinY = y;
+            if (z < dMinZ) dMinZ = z;
+            if (x > dMaxX) dMaxX = x;
+            if (y > dMaxY) dMaxY = y;
+            if (z > dMaxZ) dMaxZ = z;
+        }
+
         public void fill(Box box, BlockState state) {
             for (int y = box.minY(); y <= box.maxY(); y++)
                 for (int z = box.minZ(); z <= box.maxZ(); z++)
@@ -143,6 +175,22 @@ public final class SceneEditor {
 
     public BlockSession edit(Layer layer, String label, String mergeKey) {
         return new BlockSession(layer, label, mergeKey);
+    }
+
+    // ---- Entity editing ------------------------------------------------------------------------------------------
+
+    /**
+     * Edits a layer's entities (layer-local positions) as one undo step: {@code edit} changes the mutable list it is
+     * given. Calls sharing {@code mergeKey} within the merge window undo together (a burst of turns).
+     */
+    public void editEntities(Layer layer, String label, String mergeKey, Consumer<List<StructureEntity>> edit) {
+        List<StructureEntity> before = List.copyOf(layer.structure().entities());
+        List<StructureEntity> work = new java.util.ArrayList<>(before);
+        edit.accept(work);
+        if (work.equals(before)) return;
+        layer.structure().setEntities(work);
+        scene.fireEntitiesChanged(layer);
+        undo.push(new Transaction(label, mergeKey).add(new EntityChange(layer.id(), before, work)));
     }
 
     // ---- Layer editing -------------------------------------------------------------------------------------------
@@ -234,10 +282,26 @@ public final class SceneEditor {
         s.flush();
         s.closed = true;
         if (!s.change.isEmpty()) tx.add(s.change);
+        if (!flat.entities().isEmpty()) {
+            // The upper layer's entities move into the lower one, turned into its local frame.
+            List<StructureEntity> before = List.copyOf(lower.structure().entities());
+            List<StructureEntity> after = new java.util.ArrayList<>(before);
+            io.blockdesigner.core.transform.Transform inv = lower.transform().inverse();
+            for (StructureEntity e : flat.entities()) after.add(toLocal(lower, inv, e));
+            lower.structure().setEntities(after);
+            scene.fireEntitiesChanged(lower);
+            tx.add(new EntityChange(lower.id(), before, after));
+        }
         int idx = scene.indexOf(upper);
         scene.remove(upper);
         tx.add(new LayerChange.Remove(upper, idx));
         scene.setActive(lower);
         undo.push(tx);
+    }
+
+    /** A world-space entity in {@code layer}'s local frame ({@code inv} is the inverse of the layer's transform). */
+    public static StructureEntity toLocal(Layer layer, io.blockdesigner.core.transform.Transform inv, StructureEntity world) {
+        StructureEntity moved = world.translated(-layer.offset().x(), -layer.offset().y(), -layer.offset().z());
+        return io.blockdesigner.core.model.EntityTypes.transform(moved, inv, 0, 0, 0);
     }
 }

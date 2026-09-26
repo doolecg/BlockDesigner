@@ -37,6 +37,10 @@ public final class Scene {
         default void blocksChanged(Layer layer, Box localBox) {
         }
 
+        /** The layer's entities were added, removed, moved or turned. */
+        default void entitiesChanged(Layer layer) {
+        }
+
         default void activeLayerChanged(Layer layer) {
         }
     }
@@ -114,6 +118,10 @@ public final class Scene {
         listeners.forEach(l -> l.blocksChanged(layer, localBox));
     }
 
+    public void fireEntitiesChanged(Layer layer) {
+        listeners.forEach(l -> l.entitiesChanged(layer));
+    }
+
     /** Union of all visible layers' world bounds. */
     public Optional<Box> worldBounds() {
         Box b = null;
@@ -155,16 +163,8 @@ public final class Scene {
                 if (out.get(wp).name().equals(s.get(e.getKey()).name())) out.setBlockEntity(wp, nbt);
             }
             for (StructureEntity e : s.entities()) {
-                // Entities are positioned by continuous coordinates; transform around block origin consistently.
-                double[] p = t.apply(e.x(), e.y(), e.z());
-                CompoundTag nbt = e.nbt().copy();
-                var rot = nbt.getList("Rotation");
-                if (rot.size() == 2) {
-                    float yaw = (float) rot.getDouble(0);
-                    nbt.put("Rotation", io.blockdesigner.core.nbt.ListTag.of(
-                            new io.blockdesigner.core.nbt.FloatTag(t.applyYaw(yaw)), rot.get(1)));
-                }
-                out.entities().add(new StructureEntity(p[0] + layer.offset().x(), p[1] + layer.offset().y(), p[2] + layer.offset().z(), nbt));
+                // Positions, yaw, and a painting's wall all turn with the layer.
+                out.addEntity(EntityTypes.transform(e, t, layer.offset().x(), layer.offset().y(), layer.offset().z()));
             }
         }
         if (!toMerge.isEmpty()) out.metadata().dataVersion = toMerge.getFirst().structure().metadata().dataVersion;

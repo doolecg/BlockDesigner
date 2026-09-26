@@ -65,7 +65,7 @@ public final class VanillaStructureFormat implements SchematicFormat {
             if (pos.size() != 3) continue;
             // The relative "pos" is authoritative; the inner nbt's Pos is the absolute world position at save time.
             StructureEntity parsed = StructureEntity.fromFullNbt(e.getCompound("nbt"), 0, 0, 0);
-            s.entities().add(new StructureEntity(pos.getDouble(0), pos.getDouble(1), pos.getDouble(2), parsed.nbt()));
+            s.addEntity(new StructureEntity(pos.getDouble(0), pos.getDouble(1), pos.getDouble(2), parsed.nbt()));
         }
         String author = root.getString("author");
         s.metadata().author = author;

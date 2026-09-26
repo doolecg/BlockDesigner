@@ -27,6 +27,7 @@ final class FallbackModels {
                 "minecraft:block/oak_planks", "minecraft:block/structure_void", "minecraft:block/barrier"));
         for (String c : COLORS) out.add("minecraft:block/" + c + "_wool");
         out.addAll(EntityModels.textures());
+        out.addAll(MobModels.textures());
         return out;
     }
 

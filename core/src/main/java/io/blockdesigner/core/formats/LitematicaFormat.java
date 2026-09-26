@@ -87,7 +87,7 @@ public final class LitematicaFormat implements SchematicFormat {
                 s.setBlockEntity(p, FormatUtil.cleanBlockEntity(te, "id"));
             }
             for (CompoundTag e : r.getList("Entities").compounds()) {
-                s.entities().add(StructureEntity.fromFullNbt(e, 0, 0, 0));
+                s.addEntity(StructureEntity.fromFullNbt(e, 0, 0, 0));
             }
             regions.add(new SchematicFile.Region(regionName, s, min));
         }

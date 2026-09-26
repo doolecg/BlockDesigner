@@ -3,6 +3,8 @@ package io.blockdesigner.core.worldedit;
 import io.blockdesigner.core.model.BlockPos;
 import io.blockdesigner.core.model.BlockState;
 import io.blockdesigner.core.model.Box;
+import io.blockdesigner.core.model.StructureEntity;
+import io.blockdesigner.core.nbt.CompoundTag;
 import io.blockdesigner.core.place.BlockPlacement.Dir;
 import io.blockdesigner.core.transform.BlockTransformer;
 import io.blockdesigner.core.transform.Transform;
@@ -30,6 +32,30 @@ public final class WorldEdit {
         BlockState get(BlockPos p);
 
         void set(BlockPos p, BlockState s);
+
+        /** Block entity data at {@code p} (banner patterns, chest contents, sign text), or null. */
+        default CompoundTag blockEntity(BlockPos p) {
+            return null;
+        }
+
+        /** Sets a block together with its block entity data (null for none). */
+        default void set(BlockPos p, BlockState s, CompoundTag blockEntity) {
+            set(p, s);
+        }
+
+        /** Entities (world positions) standing in the box. */
+        default List<StructureEntity> entities(Box box) {
+            return List.of();
+        }
+
+        /** Adds an entity at its world position. */
+        default void addEntity(StructureEntity e) {
+        }
+
+        /** Removes the entities standing in the box; returns how many. */
+        default int removeEntities(Box box) {
+            return 0;
+        }
     }
 
     /**
@@ -77,11 +103,12 @@ public final class WorldEdit {
             new Command("walls", "/walls <pattern>", "The four side walls of the region"),
             new Command("faces", "/faces <pattern>", "All six faces of the region (alias /outline)"),
             new Command("overlay", "/overlay <pattern>", "A layer on top of the highest block of each column"),
-            new Command("move", "/move [n] [dir] [-a]", "Move the contents (-a: don't move air), the region follows"),
-            new Command("stack", "/stack [count] [dir] [-a]", "Repeat the contents next to itself"),
-            new Command("copy", "/copy", "Copy the region, relative to pos1"),
-            new Command("cut", "/cut", "Copy, then clear the region"),
+            new Command("move", "/move [n] [dir] [-a] [-e]", "Move the contents (-a: don't move air, -e: mobs too), the region follows"),
+            new Command("stack", "/stack [count] [dir] [-a] [-e]", "Repeat the contents next to itself (-e: mobs too)"),
+            new Command("copy", "/copy [-e]", "Copy the region, relative to pos1 (-e: mobs and other entities too)"),
+            new Command("cut", "/cut [-e]", "Copy, then clear the region (-e: take the entities too)"),
             new Command("paste", "/paste [-a] [-s]", "Paste at pos1 (-a: skip air, -s: select what was pasted)"),
+            new Command("fixshapes", "/fixshapes", "Rejoin fences, walls, panes, redstone, rails and stair corners in the region"),
             new Command("rotate", "/rotate <90|180|270>", "Turn the clipboard clockwise (seen from above)"),
             new Command("flip", "/flip [dir]", "Mirror the clipboard along a direction (default: where you look)"),
             new Command("expand", "/expand <n> [dir] | /expand vert", "Grow the region that way"),
@@ -147,6 +174,10 @@ public final class WorldEdit {
 
     private BlockPos pos1, pos2;
     private Map<BlockPos, BlockState> clipboard;
+    /** Block entity data of the clipboard's blocks (banners keep their patterns), by clipboard position. */
+    private Map<BlockPos, CompoundTag> clipboardNbt = Map.of();
+    /** Entities copied with -e, relative to pos1 like the blocks. */
+    private List<StructureEntity> clipboardEntities = List.of();
     private final Random random;
 
     public WorldEdit() {
@@ -222,8 +253,9 @@ public final class WorldEdit {
                 case "overlay" -> overlay(args, c);
                 case "move" -> move(args, flags, c);
                 case "stack" -> stack(args, flags, c);
-                case "copy" -> copy(c, false);
-                case "cut" -> copy(c, true);
+                case "copy" -> copy(flags, c, false);
+                case "cut" -> copy(flags, c, true);
+                case "fixshapes" -> fixShapes(c);
                 case "paste" -> paste(flags, c);
                 case "rotate" -> rotate(args);
                 case "flip" -> flip(args, c);
@@ -382,11 +414,17 @@ public final class WorldEdit {
         Dir d = direction(args.size() >= 2 ? args.get(1) : null, c);
         boolean skipAir = flags.contains("a");
         Map<BlockPos, BlockState> contents = read(b, c);
+        Map<BlockPos, CompoundTag> nbt = readNbt(b, c);
+        List<StructureEntity> mobs = flags.contains("e") ? c.world().entities(b) : List.of();
         int n = 0;
         for (BlockPos p : contents.keySet()) n += put(c, p, BlockState.AIR);
         for (var e : contents.entrySet()) {
             if (skipAir && e.getValue().isAir()) continue;
-            n += put(c, e.getKey().add(d.x * dist, d.y * dist, d.z * dist), e.getValue());
+            n += put(c, e.getKey().add(d.x * dist, d.y * dist, d.z * dist), e.getValue(), nbt.get(e.getKey()));
+        }
+        if (!mobs.isEmpty()) {
+            c.world().removeEntities(b);
+            for (StructureEntity e : mobs) c.world().addEntity(e.translated(d.x * dist, d.y * dist, d.z * dist));
         }
         pos1 = pos1.add(d.x * dist, d.y * dist, d.z * dist);
         pos2 = pos2.add(d.x * dist, d.y * dist, d.z * dist);
@@ -402,26 +440,42 @@ public final class WorldEdit {
         if ((long) count * b.volume() > MAX_VOLUME) throw new IllegalArgumentException("That stack is too big");
         boolean skipAir = flags.contains("a");
         Map<BlockPos, BlockState> contents = read(b, c);
+        Map<BlockPos, CompoundTag> nbt = readNbt(b, c);
+        List<StructureEntity> mobs = flags.contains("e") ? c.world().entities(b) : List.of();
         int n = 0;
         for (int i = 1; i <= count; i++) {
             int o = step * i;
             for (var e : contents.entrySet()) {
                 if (skipAir && e.getValue().isAir()) continue;
-                n += put(c, e.getKey().add(d.x * o, d.y * o, d.z * o), e.getValue());
+                n += put(c, e.getKey().add(d.x * o, d.y * o, d.z * o), e.getValue(), nbt.get(e.getKey()));
             }
+            for (StructureEntity e : mobs) c.world().addEntity(e.translated(d.x * o, d.y * o, d.z * o));
         }
         return done(n);
     }
 
-    private Result copy(Context c, boolean cut) {
+    private Result copy(List<String> flags, Context c, boolean cut) {
         Box b = needRegion();
         Map<BlockPos, BlockState> cb = new LinkedHashMap<>();
+        Map<BlockPos, CompoundTag> nbt = new HashMap<>();
         int n = 0;
-        for (BlockPos p : cells(b)) cb.put(p.subtract(pos1), c.world().get(p));
-        if (cut) for (BlockPos p : cells(b)) n += put(c, p, BlockState.AIR);
+        for (BlockPos p : cells(b)) {
+            cb.put(p.subtract(pos1), c.world().get(p));
+            CompoundTag be = c.world().blockEntity(p);
+            if (be != null) nbt.put(p.subtract(pos1), be.copy());
+        }
+        List<StructureEntity> mobs = new ArrayList<>();
+        if (flags.contains("e")) for (StructureEntity e : c.world().entities(b)) mobs.add(e.translated(-pos1.x(), -pos1.y(), -pos1.z()));
+        if (cut) {
+            for (BlockPos p : cells(b)) n += put(c, p, BlockState.AIR);
+            if (!mobs.isEmpty()) c.world().removeEntities(b);
+        }
         clipboard = cb;
-        return cut ? new Result(true, String.format("%,d blocks cut.", b.volume()), n, false, Special.NONE)
-                : Result.ok(String.format("%,d blocks copied (relative to pos1). Set pos1 somewhere and /paste.", b.volume()), 0);
+        clipboardNbt = nbt;
+        clipboardEntities = mobs;
+        String withMobs = mobs.isEmpty() ? "" : String.format(" and %,d entit%s", mobs.size(), mobs.size() == 1 ? "y" : "ies");
+        return cut ? new Result(true, String.format("%,d blocks%s cut.", b.volume(), withMobs), n + mobs.size(), false, Special.NONE)
+                : Result.ok(String.format("%,d blocks%s copied (relative to pos1). Set pos1 somewhere and /paste.", b.volume(), withMobs), 0);
     }
 
     private Result paste(List<String> flags, Context c) {
@@ -434,7 +488,11 @@ public final class WorldEdit {
             BlockPos p = at.add(e.getKey());
             pasted = pasted == null ? Box.of(p, p) : pasted.union(Box.of(p, p));
             if (skipAir && e.getValue().isAir()) continue;
-            n += put(c, p, e.getValue());
+            n += put(c, p, e.getValue(), clipboardNbt.get(e.getKey()));
+        }
+        for (StructureEntity e : clipboardEntities) {
+            c.world().addEntity(e.translated(at.x(), at.y(), at.z()));
+            n++;
         }
         boolean select = flags.contains("s") && pasted != null;
         if (select) {
@@ -457,6 +515,10 @@ public final class WorldEdit {
         if (clipboard == null) throw new IllegalArgumentException("The clipboard is empty: /copy first");
         Dir d = direction(args.isEmpty() ? null : args.getFirst(), c);
         if (d.y != 0) {
+            Map<BlockPos, CompoundTag> nbt = new HashMap<>();
+            clipboardNbt.forEach((p, t) -> nbt.put(new BlockPos(p.x(), -p.y(), p.z()), t));
+            clipboardNbt = nbt;
+            clipboardEntities = clipboardEntities.stream().map(e -> e.at(e.x(), 1 - e.y(), e.z())).toList();
             Map<BlockPos, BlockState> out = new LinkedHashMap<>();
             for (var e : clipboard.entrySet()) {
                 BlockState s = e.getValue();
@@ -477,6 +539,12 @@ public final class WorldEdit {
     }
 
     private Map<BlockPos, BlockState> transformed(Transform t) {
+        Map<BlockPos, CompoundTag> nbt = new HashMap<>();
+        clipboardNbt.forEach((p, tag) -> nbt.put(t.apply(p), tag));
+        clipboardNbt = nbt;
+        List<StructureEntity> mobs = new ArrayList<>();
+        for (StructureEntity e : clipboardEntities) mobs.add(io.blockdesigner.core.model.EntityTypes.transform(e, t, 0, 0, 0));
+        clipboardEntities = mobs;
         Map<BlockPos, BlockState> out = new LinkedHashMap<>();
         BlockTransformer bt = BlockTransformer.defaults();
         Map<BlockState, BlockState> cache = new HashMap<>();
@@ -749,6 +817,35 @@ public final class WorldEdit {
         if (c.world().get(p) == s) return 0;
         c.world().set(p, s);
         return 1;
+    }
+
+    /** As {@link #put(Context, BlockPos, BlockState)}, carrying block entity data along (null: none). */
+    private static int put(Context c, BlockPos p, BlockState s, CompoundTag nbt) {
+        CompoundTag old = c.world().blockEntity(p);
+        if (nbt == null && old == null) return put(c, p, s);
+        if (c.world().get(p) == s && java.util.Objects.equals(nbt, old)) return 0;
+        c.world().set(p, s, nbt == null ? null : nbt.copy());
+        return 1;
+    }
+
+    private static Map<BlockPos, CompoundTag> readNbt(Box b, Context c) {
+        Map<BlockPos, CompoundTag> out = new HashMap<>();
+        for (BlockPos p : cells(b)) {
+            CompoundTag be = c.world().blockEntity(p);
+            if (be != null) out.put(p, be.copy());
+        }
+        return out;
+    }
+
+    /** Recomputes the shapes of connecting blocks in the region, as Minecraft would after a block update. */
+    private Result fixShapes(Context c) {
+        Box b = needRegion();
+        List<BlockPos> cells = new ArrayList<>();
+        for (BlockPos p : cells(b)) if (io.blockdesigner.core.place.BlockPlacement.hasShape(c.world().get(p))) cells.add(p);
+        var updates = io.blockdesigner.core.place.BlockPlacement.refreshShapes(cells, c.world()::get);
+        int n = 0;
+        for (var e : updates.entrySet()) n += put(c, e.getKey(), e.getValue());
+        return Result.ok(n == 0 ? "Every shape was already right." : String.format("Fixed %,d block shape%s.", n, n == 1 ? "" : "s"), n);
     }
 
     private static Iterable<BlockPos> cells(Box b) {

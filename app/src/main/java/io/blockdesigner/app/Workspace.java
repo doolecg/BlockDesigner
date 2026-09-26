@@ -43,6 +43,19 @@ public final class Workspace {
     private final javafx.beans.property.IntegerProperty hotbarSlot = new javafx.beans.property.SimpleIntegerProperty(-1);
     /** Shuffle mode (Z): each placed block is a random pick from the filled hotbar slots. */
     private final BooleanProperty shuffle = new SimpleBooleanProperty();
+    /**
+     * The mob (or painting, armour stand…) held for placing, as its entity data with {@code id}; null when holding a
+     * block. Choosing a block lets go of it.
+     */
+    private final ObjectProperty<io.blockdesigner.core.nbt.CompoundTag> heldEntity = new SimpleObjectProperty<>();
+
+    {
+        // No hotbar slot is lit while a mob is in hand.
+        heldEntity.addListener((o, a, b) -> {
+            if (b != null) hotbarSlot.set(-1);
+            else if (selectedBlock.get() != null) hotbarSlot.set(hotbar.indexOf(selectedBlock.get()));
+        });
+    }
     private final BooleanProperty replace = new SimpleBooleanProperty();
     private final java.util.Random random = new java.util.Random();
     private ToolKind beforeBuild = ToolKind.SELECT;
@@ -132,7 +145,10 @@ public final class Workspace {
             hotbar.add(st);
         }
         // The highlighted slot follows the selected block wherever it was chosen.
-        selectedBlock.addListener((o, a, b) -> hotbarSlot.set(b == null ? -1 : hotbar.indexOf(b)));
+        selectedBlock.addListener((o, a, b) -> {
+            hotbarSlot.set(b == null ? -1 : hotbar.indexOf(b));
+            if (b != null) heldEntity.set(null);
+        });
         hotbar.addListener((javafx.collections.ListChangeListener<BlockState>) c -> {
             java.util.ArrayList<String> out = new java.util.ArrayList<>();
             for (BlockState st : hotbar) out.add(st == null ? "" : st.toString());
@@ -153,6 +169,23 @@ public final class Workspace {
         if (i < 0 || i >= HOTBAR_SIZE || hotbar.get(i) == null) return;
         selectedBlock.set(hotbar.get(i));
         hotbarSlot.set(i);
+        heldEntity.set(null);
+    }
+
+    /** See {@link #heldEntity}. */
+    public ObjectProperty<io.blockdesigner.core.nbt.CompoundTag> heldEntityProperty() {
+        return heldEntity;
+    }
+
+    /** Holds an entity type for placing in Build mode (right-click), with its default data. */
+    public void holdEntity(String id) {
+        heldEntity.set(io.blockdesigner.core.model.EntityTypes.create(id, 0, 0, 0, 0).nbt());
+    }
+
+    /** Lets go of a held mob so the selected block is in hand again (a block picked in the palette). */
+    public void holdBlock(BlockState state) {
+        heldEntity.set(null);
+        selectedBlock.set(state);
     }
 
     /**

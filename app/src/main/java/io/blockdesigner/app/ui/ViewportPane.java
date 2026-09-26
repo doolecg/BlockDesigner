@@ -138,6 +138,31 @@ public final class ViewportPane extends StackPane {
     private final int[] burstDelta = new int[3];
     private Picker.Hit hover;
     private BlockPos hoverGround;
+    /** The entity under the cursor when it is nearer than any block (a mob, painting, armour stand…). */
+    private EntityHit hoverEntity;
+    /** Selected entities per layer id (layer-local entities, compared by value). */
+    private final java.util.Map<String, java.util.Set<io.blockdesigner.core.model.StructureEntity>> entitySel = new java.util.LinkedHashMap<>();
+    /** True during the first action of a held place / break, so a held right-click places one mob, not a crowd. */
+    private boolean holdFirst;
+    /** Chests and shulker boxes opening or closing in View mode: key layerId|packed local position. */
+    private final java.util.Map<String, LidAnim> lids = new java.util.LinkedHashMap<>();
+
+    /** An entity hit by the aim ray: its layer, the entity (layer-local) and the distance along the ray. */
+    private record EntityHit(Layer layer, io.blockdesigner.core.model.StructureEntity entity, float distance) {
+    }
+
+    /** A container lid moving towards open (1) or shut (0). */
+    private static final class LidAnim {
+        final Layer layer;
+        final BlockPos local;
+        float amount;
+        boolean opening;
+
+        LidAnim(Layer layer, BlockPos local) {
+            this.layer = layer;
+            this.local = local;
+        }
+    }
     private double dragDistance;
     private static final double CLICK_SLOP = 5;
     /** Creative-mode block reach while flying, as in Minecraft (block_interaction_range 5; survival is 4.5). */
@@ -262,6 +287,12 @@ public final class ViewportPane extends StackPane {
         brushPopup = new BrushPopup(ws.settings(), () -> {
             brushBar.sync();
             requestRedraw();
+        }, m -> {
+            // The eraser only erases: choosing any other mode in its popup takes up the brush in that mode.
+            if (ws.toolProperty().get() == ToolKind.ERASER && m != io.blockdesigner.core.edit.Sculpt.Mode.ERASE) {
+                ws.toolProperty().set(ToolKind.BRUSH);
+                showToast("Brush: " + m.label + " · " + m.description);
+            }
         });
         brushBar = new BrushBar(ws.settings(), this::requestRedraw, () -> {
             javafx.geometry.Point2D p = brushBar.localToScreen(0, -8);
@@ -312,6 +343,12 @@ public final class ViewportPane extends StackPane {
         ws.themeProperty().addListener((o, a, b) -> requestRedraw());
         ws.activeLayerProperty().addListener((o, a, b) -> requestRedraw());
         ws.selectedLayers().addListener((javafx.collections.ListChangeListener<Layer>) c -> requestRedraw());
+        ws.heldEntityProperty().addListener((o, a, b) -> {
+            if (b != null && a == null) {
+                showToast("Holding " + io.blockdesigner.core.model.EntityTypes.kind(b.getString("id")).name()
+                        + " · right-click to place · Alt+scroll over it turns it · left-click removes");
+            }
+        });
         ws.toolProperty().addListener((o, a, b) -> {
             updateHotbarVisibility();
             requestRedraw();
@@ -339,6 +376,20 @@ public final class ViewportPane extends StackPane {
             @Override
             public void layerRemoved(Layer layer) {
                 blockSel.remove(layer.id());
+                entitySel.remove(layer.id());
+                lids.values().removeIf(a -> a.layer == layer);
+                requestRedraw();
+            }
+
+            @Override
+            public void entitiesChanged(Layer layer) {
+                // Selected entities that are gone (removed, or turned into a new value) drop out of the selection.
+                var sel = entitySel.get(layer.id());
+                if (sel != null) {
+                    sel.retainAll(layer.structure().entities());
+                    if (sel.isEmpty()) entitySel.remove(layer.id());
+                }
+                if (hoverEntity != null && hoverEntity.layer() == layer) updateHover(aimX(), aimY());
                 requestRedraw();
             }
 
@@ -409,6 +460,7 @@ public final class ViewportPane extends StackPane {
         }
         holdStep();
         strokeStep();
+        lidStep(dt);
         if (sceneRenderer != null) sceneRenderer.sync();
         double scale = getScene() != null && getScene().getWindow() != null ? getScene().getWindow().getOutputScaleX() : 1;
         int w = (int) Math.max(1, Math.round(getWidth() * scale)), h = (int) Math.max(1, Math.round(getHeight() * scale));
@@ -474,10 +526,13 @@ public final class ViewportPane extends StackPane {
             }
         }
         drawBlockSelection(lines);
+        drawEntitySelection(lines);
         drawRegion(lines);
         if (placing.isEmpty() && ws.toolProperty().get() != ToolKind.VIEW) {
             boolean build = ws.toolProperty().get() == ToolKind.BUILD;
-            if (hover != null) {
+            if (hoverEntity != null) {
+                entityOutline(lines, hoverEntity.layer(), hoverEntity.entity(), build ? 0xFFFFC85A : 0xE6FFFFFF);
+            } else if (hover != null) {
                 BlockPos p = hover.world();
                 drawShapeOutline(lines, hover, build && ws.replaceProperty().get() ? 0xFFFFC85A : 0xE6FFFFFF);
             } else if (hoverGround != null && build) {
@@ -803,12 +858,76 @@ public final class ViewportPane extends StackPane {
             lastY = y;
         }
         hover = pick(x, y).orElse(null);
-        hoverGround = hover == null ? pickGround(x, y, groundY()).orElse(null) : null;
+        hoverEntity = stroke == null ? pickEntity(x, y, hover == null ? Float.MAX_VALUE : hover.distance()) : null;
+        // An entity in front of the blocks is what you aim at.
+        if (hoverEntity != null) hover = null;
+        hoverGround = hover == null && hoverEntity == null ? pickGround(x, y, groundY()).orElse(null) : null;
         updateHud();
         requestRedraw();
     }
 
+    /** The world-space copy of a layer's entity (position, yaw and facing turned with the layer). */
+    private static io.blockdesigner.core.model.StructureEntity worldEntity(Layer l, io.blockdesigner.core.model.StructureEntity e) {
+        return io.blockdesigner.core.model.EntityTypes.transform(e, l.transform(), l.offset().x(), l.offset().y(), l.offset().z());
+    }
+
+    /** The nearest entity the ray hits before {@code before}, in visible, unlocked layers (within the slice view). */
+    private EntityHit pickEntity(double x, double y, float before) {
+        Vector3f[] r = ray(x, y);
+        Vector3f o = r[0], d = new Vector3f(r[1]).normalize();
+        float max = Math.min(before, fly ? CREATIVE_REACH : 10000);
+        int lo = sliceMin(), hi = sliceMax();
+        EntityHit best = null;
+        for (Layer l : ws.scene().layers()) {
+            if (!l.visible() || l.locked() || placing.contains(l) || l.structure().entities().isEmpty()) continue;
+            for (var e : l.structure().entities()) {
+                var w = worldEntity(l, e);
+                if (w.y() < lo || w.y() >= (long) hi + 1) continue;
+                double[] b = io.blockdesigner.core.model.EntityTypes.box(w);
+                float t = rayBox(o, d, b);
+                if (t >= 0 && t < max && (best == null || t < best.distance())) best = new EntityHit(l, e, t);
+            }
+        }
+        return best;
+    }
+
+    /** Distance along a normalised ray to a box {minX, minY, minZ, maxX, maxY, maxZ}, or -1 when it misses. */
+    private static float rayBox(Vector3f o, Vector3f d, double[] b) {
+        double t0 = 0, t1 = Double.MAX_VALUE;
+        double[] oo = {o.x, o.y, o.z}, dd = {d.x, d.y, d.z};
+        for (int a = 0; a < 3; a++) {
+            if (Math.abs(dd[a]) < 1e-9) {
+                if (oo[a] < b[a] || oo[a] > b[a + 3]) return -1;
+                continue;
+            }
+            double ta = (b[a] - oo[a]) / dd[a], tb = (b[a + 3] - oo[a]) / dd[a];
+            t0 = Math.max(t0, Math.min(ta, tb));
+            t1 = Math.min(t1, Math.max(ta, tb));
+            if (t0 > t1) return -1;
+        }
+        return (float) t0;
+    }
+
+    /** The outline of an entity's box. */
+    private static void entityOutline(List<FrameRequest.Line> lines, Layer l, io.blockdesigner.core.model.StructureEntity e, int color) {
+        double[] b = io.blockdesigner.core.model.EntityTypes.box(worldEntity(l, e));
+        float g = 0.02f;
+        Overlays.box(lines, (float) b[0] - g, (float) b[1] - g, (float) b[2] - g, (float) b[3] + g, (float) b[4] + g, (float) b[5] + g, color);
+    }
+
+    private void drawEntitySelection(List<FrameRequest.Line> lines) {
+        for (var en : entitySel.entrySet()) {
+            Layer l = ws.scene().find(en.getKey()).orElse(null);
+            if (l == null || !l.visible()) continue;
+            for (var e : en.getValue()) entityOutline(lines, l, e, 0xFFFF9F2E);
+        }
+    }
+
     private void updateHud() {
+        if (hoverEntity != null && ws.settings().showHud) {
+            hud.showEntity(ws.assets(), worldEntity(hoverEntity.layer(), hoverEntity.entity()), hoverEntity.layer());
+            return;
+        }
         if (hover == null || !ws.settings().showHud) {
             hud.show(null, null, null, null);
             return;
@@ -844,8 +963,7 @@ public final class ViewportPane extends StackPane {
         if (fly) {
             // Minecraft controls in Build mode: left break, right place, middle pick. Select mode selects the aimed block.
             if (mode == ToolKind.SELECT && e.getButton() == MouseButton.PRIMARY) {
-                if (e.isShiftDown() || e.isShortcutDown()) clickSelect(e.isShiftDown(), e.isShortcutDown());
-                else setCorner(true);
+                selectClick(e.isShiftDown(), e.isShortcutDown());
             } else if (mode == ToolKind.SELECT && e.getButton() == MouseButton.SECONDARY) {
                 setCorner(false);
             } else if ((mode == ToolKind.BRUSH || mode == ToolKind.ERASER)
@@ -908,7 +1026,8 @@ public final class ViewportPane extends StackPane {
         updateHover(e.getX(), e.getY());
         switch (mode) {
             case VIEW -> {
-                // Looking only: the camera is on the middle button (see onDrag).
+                // Looking only (the camera is on the middle button), but a chest or shulker box opens and shuts.
+                toggleLid();
             }
             case SELECT -> {
                 // Selection happens on release: a click selects one block, a drag draws a marquee.
@@ -1028,8 +1147,7 @@ public final class ViewportPane extends StackPane {
             } else if (click) {
                 // WorldEdit: a plain click sets pos1; Shift / Ctrl still add or toggle single blocks.
                 updateHover(e.getX(), e.getY());
-                if (e.isShiftDown() || e.isShortcutDown()) clickSelect(e.isShiftDown(), e.isShortcutDown());
-                else setCorner(true);
+                selectClick(e.isShiftDown(), e.isShortcutDown());
             }
         }
         marquee.setVisible(false);
@@ -1069,6 +1187,7 @@ public final class ViewportPane extends StackPane {
             nudge(r[0] * sign, 0, r[1] * sign);
         } else if (e.isAltDown()) {
             if (!placing.isEmpty()) rotatePlacement(sign);
+            else if (hoverEntity != null) turnEntity(hoverEntity, sign);
             else if (hover != null) turnLayer(hover.layer(), sign, hover.normal());
             else showToast("Hover over a layer to turn it");
         } else if (e.isShiftDown()) {
@@ -1144,7 +1263,7 @@ public final class ViewportPane extends StackPane {
                 else if (shortcutsShowing()) showShortcuts(false);
                 else if (fly) setFly(false);
                 else if (!placing.isEmpty()) cancelPlacement();
-                else if (!blockSel.isEmpty() || worldEdit.region() != null) clearRegionAndSelection();
+                else if (!blockSel.isEmpty() || !entitySel.isEmpty() || worldEdit.region() != null) clearRegionAndSelection();
                 else ws.toolProperty().set(ToolKind.SELECT);
             }
             case DELETE, BACK_SPACE -> {
@@ -1153,7 +1272,7 @@ public final class ViewportPane extends StackPane {
                     BlockState removed = ws.clearHeldSlot();
                     showToast(removed == null ? "That hotbar slot is already empty"
                             : "Removed " + BlockInfoHud.name(ws.assets(), removed) + " from the hotbar");
-                } else if (!blockSel.isEmpty()) {
+                } else if (!blockSel.isEmpty() || !entitySel.isEmpty()) {
                     deleteSelectedBlocks();
                 } else {
                     return;
@@ -1289,7 +1408,12 @@ public final class ViewportPane extends StackPane {
         holdAction = a;
         holdButton = dragButton;
         holdMergeKey = "hold-" + (++holdCounter);
-        doAction(a);
+        holdFirst = true;
+        try {
+            doAction(a);
+        } finally {
+            holdFirst = false;
+        }
         holdNext = System.nanoTime() + delayNanos(a);
     }
 
@@ -1320,6 +1444,10 @@ public final class ViewportPane extends StackPane {
         String key = holdMergeKey;
         switch (a) {
             case BREAK -> {
+                if (hoverEntity != null) {
+                    removeEntity(hoverEntity, key);
+                    break;
+                }
                 if (hover == null) return;
                 Layer l = hover.layer();
                 BlockState broken = l.structure().get(hover.local());
@@ -1342,21 +1470,17 @@ public final class ViewportPane extends StackPane {
                     particlesDrawn = true;
                 }
                 if (ws.settings().blockSounds) sounds.breakBlock(ws.settings().soundVolume);
-                try (SceneEditor.BlockSession s = ws.editor().edit(l, "Break block", key)) {
-                    s.set(hover.local().x(), hover.local().y(), hover.local().z(), BlockState.AIR);
-                    // Neighbouring fences, walls, panes and stairs let go of the broken block.
-                    Transform t = l.transform();
-                    var updates = BlockPlacement.reconnect(List.of(hover.world()), p -> {
-                        BlockPos lp = l.toLocal(p);
-                        return BlockTransformer.defaults().apply(s.get(lp.x(), lp.y(), lp.z()), t);
-                    });
-                    for (var en : updates.entrySet()) {
-                        BlockPos lp = l.toLocal(en.getKey());
-                        s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(en.getValue(), t.inverse()));
-                    }
-                }
+                editLayers("Break block", key, l, world -> {
+                    world.setIn(l, bw, BlockState.AIR);
+                    // Neighbouring fences, walls, panes and stairs let go of the broken block, in any layer.
+                    world.reconnect();
+                });
             }
             case PLACE -> {
+                if (ws.heldEntityProperty().get() != null) {
+                    placeEntity(key);
+                    break;
+                }
                 BlockState held = ws.blockToPlace();
                 if (held == null) {
                     showToast("Empty hand · pick a block (middle-click), choose a hotbar slot or click one in the palette");
@@ -1377,31 +1501,36 @@ public final class ViewportPane extends StackPane {
                     showToast("Active layer is locked");
                     return;
                 }
-                java.util.Map<BlockPos, BlockState> edits = placementFor(l, world, held);
-                if (edits.isEmpty()) return;
-                io.blockdesigner.core.place.Symmetry sym = symmetry();
-                if (sym.active()) {
-                    // Mirror images of what's placed; copies only fill empty cells of the layer.
-                    java.util.Map<BlockPos, BlockState> all = new java.util.LinkedHashMap<>(edits);
-                    for (var en : edits.entrySet()) {
-                        for (var c : sym.apply(en.getKey(), en.getValue()).entrySet()) {
-                            if (all.containsKey(c.getKey())) continue;
-                            if (!l.structure().get(l.toLocal(c.getKey())).isAir()) continue;
-                            if (fly && insideCamera(c.getKey())) continue;
-                            all.put(c.getKey(), c.getValue());
+                Layer target = l;
+                editLayers("Place block", key, l, le -> {
+                    // Placement sees every visible layer: a cell taken in any of them is taken, and fences, stairs and
+                    // redstone join what's in the other layers.
+                    java.util.Map<BlockPos, BlockState> edits = placementFor(le, world, held);
+                    if (edits.isEmpty()) return;
+                    io.blockdesigner.core.place.Symmetry sym = symmetry();
+                    if (sym.active()) {
+                        // Mirror images of what's placed; copies only fill empty cells.
+                        java.util.Map<BlockPos, BlockState> all = new java.util.LinkedHashMap<>(edits);
+                        for (var en : edits.entrySet()) {
+                            for (var c : sym.apply(en.getKey(), en.getValue()).entrySet()) {
+                                if (all.containsKey(c.getKey())) continue;
+                                if (!le.get(c.getKey()).isAir()) continue;
+                                if (fly && insideCamera(c.getKey())) continue;
+                                all.put(c.getKey(), c.getValue());
+                            }
                         }
+                        edits = all;
                     }
-                    edits = all;
-                }
-                if (fly && edits.keySet().stream().anyMatch(this::insideCamera)) return;
-                // Sound first: the edit's updates (meshes, panels) must not delay it.
-                if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
-                try (SceneEditor.BlockSession s = ws.editor().edit(l, "Place block", key)) {
+                    if (fly && edits.keySet().stream().anyMatch(this::insideCamera)) return;
+                    // Sound first: the edit's updates (meshes, panels) must not delay it.
+                    if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
                     for (var en : edits.entrySet()) {
-                        BlockPos local = l.toLocal(en.getKey());
-                        s.set(local.x(), local.y(), local.z(), BlockTransformer.defaults().apply(en.getValue(), l.transform().inverse()));
+                        // New blocks go in the active layer; neighbours that change shape stay in their own.
+                        if (le.get(en.getKey()).isAir()) le.setIn(target, en.getKey(), en.getValue());
+                        else le.set(en.getKey(), en.getValue());
                     }
-                }
+                    le.reconnect();
+                });
             }
         }
         updateHover(aimX(), aimY());
@@ -1418,41 +1547,62 @@ public final class ViewportPane extends StackPane {
         BlockAssets assets = ws.assets();
         BlockPlacement.Blocks blocks = assets == null ? BlockPlacement.Blocks.NONE
                 : id -> assets.registry().get(id).map(i -> new BlockPlacement.Info(i.defaultState(), i.properties())).orElse(null);
-        Transform t = l.transform();
-        var edits = BlockPlacement.replace(held, hover.world(),
-                p -> BlockTransformer.defaults().apply(l.structure().get(l.toLocal(p)), t), blocks);
-        if (edits.isEmpty()) return;
-        if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
-        try (SceneEditor.BlockSession s = ws.editor().edit(l, "Replace block", key)) {
-            for (var en : edits.entrySet()) {
-                BlockPos local = l.toLocal(en.getKey());
-                s.set(local.x(), local.y(), local.z(), BlockTransformer.defaults().apply(en.getValue(), t.inverse()));
-            }
-        }
+        BlockPos at = hover.world();
+        editLayers("Replace block", key, l, le -> {
+            var edits = BlockPlacement.replace(held, at, le::get, blocks);
+            if (edits.isEmpty()) return;
+            if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
+            edits.forEach(le::set);
+            le.reconnect();
+        });
     }
 
     /**
      * The world blocks to set for placing the held block at {@code world} in layer {@code l}, oriented the way
      * Minecraft would from the aimed face, the point on it and the look direction (see {@link BlockPlacement}).
      */
-    private java.util.Map<BlockPos, BlockState> placementFor(Layer l, BlockPos world, BlockState held) {
+    private java.util.Map<BlockPos, BlockState> placementFor(LayeredEdit le, BlockPos world, BlockState held) {
         Vector3f[] r = ray(aimX(), aimY());
         Vector3f dir = new Vector3f(r[1]).normalize();
         BlockPlacement.Context ctx;
         if (hover != null) {
             Vector3f hit = new Vector3f(dir).mul(hover.distance()).add(r[0]);
-            // Only a block of the same layer can be clicked into (a slab doubling up).
-            BlockPos clicked = hover.layer() == l ? hover.world() : null;
-            ctx = new BlockPlacement.Context(world, clicked, BlockPlacement.Dir.of(hover.normal()), hit.x, hit.y, hit.z, dir.x, dir.y, dir.z);
+            ctx = new BlockPlacement.Context(world, hover.world(), BlockPlacement.Dir.of(hover.normal()), hit.x, hit.y, hit.z, dir.x, dir.y, dir.z);
         } else {
             ctx = new BlockPlacement.Context(world, null, BlockPlacement.Dir.UP, world.x() + 0.5, world.y(), world.z() + 0.5, dir.x, dir.y, dir.z);
         }
         BlockAssets assets = ws.assets();
         BlockPlacement.Blocks blocks = assets == null ? BlockPlacement.Blocks.NONE
                 : id -> assets.registry().get(id).map(i -> new BlockPlacement.Info(i.defaultState(), i.properties())).orElse(null);
-        Transform t = l.transform();
-        return BlockPlacement.place(held, ctx,
-                p -> BlockTransformer.defaults().apply(l.structure().get(l.toLocal(p)), t), blocks);
+        return BlockPlacement.place(held, ctx, le::get, blocks);
+    }
+
+    /** Visible layers (not the ones being placed), bottom first: what edits read, as the view shows them. */
+    private List<Layer> worldLayers() {
+        return ws.scene().layers().stream().filter(l -> l.visible() && !placing.contains(l)).toList();
+    }
+
+    private Layer newLayer() {
+        Layer l = new Layer("Layer " + (ws.scene().layers().size() + 1), new io.blockdesigner.core.model.Structure());
+        ws.editor().addLayer(l);
+        return l;
+    }
+
+    /**
+     * Runs a world-space edit across the layers (see {@link LayeredEdit}) as one undo step; edits sharing {@code mergeKey}
+     * within the merge window join the same step (a held place or break).
+     */
+    private void editLayers(String label, String mergeKey, Layer target, java.util.function.Consumer<LayeredEdit> edit) {
+        var undo = ws.editor().undoStack();
+        undo.beginGroup(label, mergeKey);
+        LayeredEdit le = new LayeredEdit(ws, worldLayers(), target, this::newLayer, label, null);
+        try {
+            edit.accept(le);
+        } finally {
+            le.close();
+            undo.endGroup();
+        }
+        requestRedraw();
     }
 
     /**
@@ -1473,6 +1623,14 @@ public final class ViewportPane extends StackPane {
 
     /** Minecraft's pick-block: select the highlighted block (with its properties) for placing. */
     private boolean pickBlock() {
+        if (hoverEntity != null) {
+            // Picking a mob holds one like it (its colour, profession, pose…), ready to place.
+            var nbt = hoverEntity.entity().nbt().copy();
+            ws.heldEntityProperty().set(nbt);
+            if (ws.toolProperty().get() != ToolKind.BUILD) ws.toolProperty().set(ToolKind.BUILD);
+            showToast("Picked " + io.blockdesigner.core.model.EntityTypes.displayName(hoverEntity.entity()) + " · right-click to place");
+            return true;
+        }
         if (hover == null) return false;
         BlockState s = BlockTransformer.defaults().apply(hover.layer().structure().get(hover.local()), hover.layer().transform());
         ws.recordInHotbar(s);
@@ -1494,6 +1652,10 @@ public final class ViewportPane extends StackPane {
                 ws.scene().firePropertiesChanged(l);
             }
             showToast("Δ " + fmt(placementNudge.x()) + ", " + fmt(placementNudge.y()) + ", " + fmt(placementNudge.z()));
+            return;
+        }
+        if (!entitySel.isEmpty()) {
+            moveSelectedEntities(dx, dy, dz);
             return;
         }
         List<Layer> targets = ws.nudgeTargets().stream().filter(l -> !l.locked()).toList();
@@ -1573,6 +1735,19 @@ public final class ViewportPane extends StackPane {
                 BlockPos p = to.get(i);
                 s.set(p.x(), p.y(), p.z(), states.get(i), entities.get(from.get(i)));
             }
+        }
+        if (!l.structure().entities().isEmpty()) {
+            // Entities keep their facing but move with the blocks round the pivot's centre.
+            double px = pivot.x() + 0.5, py = pivot.y() + 0.5, pz = pivot.z() + 0.5;
+            ws.editor().editEntities(l, "Tip " + l.name(), "tip-" + l.id(), list -> list.replaceAll(en -> {
+                BlockPos ax = axis;
+                int q = sign * handed;
+                double vx = en.x() - px, vy = en.y() - py, vz = en.z() - pz;
+                double dot = ax.x() * vx + ax.y() * vy + ax.z() * vz;
+                double nx = dot * ax.x() + q * (ax.y() * vz - ax.z() * vy), ny = dot * ax.y() + q * (ax.z() * vx - ax.x() * vz),
+                        nz = dot * ax.z() + q * (ax.x() * vy - ax.y() * vx);
+                return en.at(nx + px, ny + py, nz + pz);
+            }));
         }
         showToast("Flipped " + l.name() + (sign > 0 ? " up" : " down"));
     }
@@ -1680,6 +1855,18 @@ public final class ViewportPane extends StackPane {
                     item("Clear region", "Esc", this::clearRegionAndSelection),
                     new javafx.scene.control.SeparatorMenuItem());
         }
+        if (hoverEntity != null) {
+            EntityHit eh = hoverEntity;
+            String name = io.blockdesigner.core.model.EntityTypes.displayName(eh.entity());
+            contextMenu.getItems().addAll(
+                    item("Hold " + name + " to place more", "Middle-click", this::pickBlock),
+                    item("Remove " + name, null, () -> removeEntity(eh, null)),
+                    new javafx.scene.control.SeparatorMenuItem());
+        }
+        if (!entitySel.isEmpty()) {
+            int ne = entitySel.values().stream().mapToInt(java.util.Set::size).sum();
+            contextMenu.getItems().add(item(String.format("Remove %d selected entit%s", ne, ne == 1 ? "y" : "ies"), "Del", this::deleteSelectedBlocks));
+        }
         if (hover != null) {
             contextMenu.getItems().add(item("Pick block to hotbar", "Middle-click", this::pickBlock));
             Layer hl = hover.layer();
@@ -1698,6 +1885,7 @@ public final class ViewportPane extends StackPane {
             contextMenu.getItems().addAll(
                     item(String.format("Delete %,d block%s", n, n == 1 ? "" : "s"), "Del", this::deleteSelectedBlocks),
                     item("Replace with " + (held == null ? "held block" : BlockInfoHud.name(ws.assets(), held)), null, this::replaceSelection),
+                    item("Fix fence, wall, redstone and stair shapes", null, this::fixSelectionShapes),
                     item("Copy to new layer", null, this::copySelectionToLayer),
                     item("Clear selection", "Esc", this::clearBlockSelection));
         }
@@ -1707,6 +1895,7 @@ public final class ViewportPane extends StackPane {
                     item("Select all in " + layer.name(), null, () -> selectAllIn(layer)),
                     item("Select by type…", "Alt+T", () -> openSelectByType(null)),
                     item("Frame " + layer.name(), "F", () -> frameLayer(layer)),
+                    item("Fix block shapes in " + layer.name(), null, () -> fixLayerShapes(layer)),
                     item("Hide " + layer.name(), null, () -> ws.editor().modifyLayer(layer, "Hide " + layer.name(), null, x -> x.setVisible(false))),
                     item(layer.locked() ? "Unlock " + layer.name() : "Lock " + layer.name(), null,
                             () -> ws.editor().modifyLayer(layer, (layer.locked() ? "Unlock " : "Lock ") + layer.name(), null, x -> x.setLocked(!x.locked()))));
@@ -1783,20 +1972,54 @@ public final class ViewportPane extends StackPane {
     private void replaceSelection() {
         BlockState held = ws.selectedBlockProperty().get();
         if (held == null || held.isAir()) return;
-        String key = "replace-selection-" + (++holdCounter);
-        for (var e : blockSel.entrySet()) {
-            Layer l = ws.scene().find(e.getKey()).orElse(null);
-            if (l == null || l.locked()) continue;
-            BlockState st = BlockTransformer.defaults().apply(held, l.transform().inverse());
-            try (SceneEditor.BlockSession s = ws.editor().edit(l, "Replace selection", key)) {
+        editLayers("Replace selection", null, null, le -> {
+            for (var e : blockSel.entrySet()) {
+                Layer l = ws.scene().find(e.getKey()).orElse(null);
+                if (l == null || l.locked()) continue;
                 for (long packed : e.getValue()) {
                     BlockPos p = BlockPos.unpack(packed);
-                    if (!s.get(p.x(), p.y(), p.z()).isAir()) s.set(p.x(), p.y(), p.z(), st);
+                    if (!l.structure().get(p).isAir()) le.setIn(l, l.toWorld(p), held);
                 }
             }
-        }
-        ws.editor().undoStack().sealTop();
+            // The new blocks and their neighbours (in any layer) join up.
+            le.reconnect();
+        });
         showToast("Replaced with " + BlockInfoHud.name(ws.assets(), held));
+    }
+
+    /** Recomputes connecting shapes (fences, walls, panes, dust, rails, stairs) of the selected blocks. */
+    private void fixSelectionShapes() {
+        List<BlockPos> cells = new ArrayList<>();
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l == null) continue;
+            for (long packed : e.getValue()) cells.add(l.toWorld(BlockPos.unpack(packed)));
+        }
+        fixShapes(cells, "Fix block shapes");
+    }
+
+    /** Recomputes the connecting shapes of every block in a layer, e.g. after importing a schematic saved without them. */
+    public void fixLayerShapes(Layer l) {
+        if (l.locked()) {
+            showToast("Layer is locked");
+            return;
+        }
+        List<BlockPos> cells = new ArrayList<>();
+        l.structure().forEachBlock((x, y, z, st) -> {
+            if (BlockPlacement.hasShape(st)) cells.add(l.toWorld(x, y, z));
+        });
+        fixShapes(cells, "Fix block shapes in " + l.name());
+    }
+
+    private void fixShapes(List<BlockPos> cells, String label) {
+        int[] n = {0};
+        editLayers(label, null, null, le -> {
+            List<BlockPos> shaped = cells.stream().filter(p -> BlockPlacement.hasShape(le.get(p))).toList();
+            var updates = BlockPlacement.refreshShapes(shaped, le::get);
+            updates.forEach(le::set);
+            n[0] = updates.size();
+        });
+        showToast(n[0] == 0 ? "Every shape was already right" : String.format("Fixed %,d block shape%s", n[0], n[0] == 1 ? "" : "s"));
     }
 
     /** Copies the selected blocks of each layer into a new layer at the same place. */
@@ -2354,27 +2577,26 @@ public final class ViewportPane extends StackPane {
                 || mode == io.blockdesigner.core.edit.Sculpt.Mode.ERODE || mode == io.blockdesigner.core.edit.Sculpt.Mode.PINCH;
         java.util.function.Supplier<BlockState> material = natural ? null : ws::blockToPlace;
         int lo = sliceMin(), hi = sliceMax();
-        List<BlockPos> changed;
-        try (SceneEditor.BlockSession s = ws.editor().edit(l, mode.label, null)) {
+        int[] changed = {0};
+        // The brush works on the terrain as shown, across every visible layer; new ground goes in the aimed layer.
+        editLayers(mode.label, null, l, le -> {
             io.blockdesigner.core.edit.Sculpt.World w = new io.blockdesigner.core.edit.Sculpt.World() {
                 @Override
                 public BlockState get(BlockPos p) {
-                    BlockPos lp = l.toLocal(p);
-                    return BlockTransformer.defaults().apply(s.get(lp.x(), lp.y(), lp.z()), t);
+                    return le.get(p);
                 }
 
                 @Override
                 public void set(BlockPos p, BlockState st) {
                     if (!st.isAir() && nearCamera(p)) return;
-                    BlockPos lp = l.toLocal(p);
-                    s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(st, t.inverse()));
+                    le.set(p, st);
                 }
             };
-            changed = io.blockdesigner.core.edit.Sculpt.apply(mode, stroke.invert, brush(), c, stroke.normal, w, material, stroke.start,
-                    y -> y >= lo && y <= hi);
-            reconnectIn(s, l, changed);
-        }
-        return changed.size();
+            changed[0] = io.blockdesigner.core.edit.Sculpt.apply(mode, stroke.invert, brush(), c, stroke.normal, w, material, stroke.start,
+                    y -> y >= lo && y <= hi).size();
+            if (le.written().size() <= 4096) le.reconnect();
+        });
+        return changed[0];
     }
 
     /** Fills the empty cells with the held block (a random hotbar pick per block in shuffle mode), in the active layer. */
@@ -2389,65 +2611,48 @@ public final class ViewportPane extends StackPane {
             return 0;
         }
         Layer target = l;
-        Transform t = l.transform();
-        List<BlockPos> set = new ArrayList<>();
-        try (SceneEditor.BlockSession s = ws.editor().edit(l, "Paint", null)) {
+        int[] n = {0};
+        editLayers("Paint", null, l, le -> {
             for (BlockPos w : cells) {
                 if (nearCamera(w)) continue;
-                BlockPos lp = l.toLocal(w);
-                if (!s.get(lp.x(), lp.y(), lp.z()).isAir()) continue;
+                // Only empty cells, in every visible layer: the brush doesn't paint inside other layers' blocks.
+                if (!le.get(w).isAir()) continue;
                 BlockState st = ws.blockToPlace();
                 if (st == null || st.isAir()) continue;
-                s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(st, t.inverse()));
-                set.add(w);
+                le.setIn(target, w, st);
                 stroke.touched.add(w);
+                n[0]++;
             }
-            reconnectIn(s, target, set);
-        }
-        return set.size();
+            if (le.written().size() <= 4096) le.reconnect();
+        });
+        return n[0];
     }
 
     /** Removes every block in the cells from the visible, unlocked layers. */
     private int eraseCells(BlockPos center, List<BlockPos> cells) {
-        int n = 0;
-        BlockState burst = null;
-        for (Layer l : ws.scene().layers()) {
-            if (!l.visible() || l.locked() || placing.contains(l)) continue;
-            List<BlockPos> removed = new ArrayList<>();
-            try (SceneEditor.BlockSession s = ws.editor().edit(l, "Erase", null)) {
-                for (BlockPos w : cells) {
-                    BlockPos lp = l.toLocal(w);
-                    BlockState st = s.get(lp.x(), lp.y(), lp.z());
-                    if (st.isAir()) continue;
-                    if (burst == null) burst = BlockTransformer.defaults().apply(st, l.transform());
-                    s.set(lp.x(), lp.y(), lp.z(), BlockState.AIR);
-                    removed.add(w);
-                    stroke.touched.add(w);
+        int[] n = {0};
+        BlockState[] first = {null};
+        editLayers("Erase", null, null, le -> {
+            for (BlockPos w : cells) {
+                // Clear the cell in every visible, unlocked layer (a locked layer's block stays).
+                for (int guard = 0; guard < 64; guard++) {
+                    Layer holder = le.holder(w);
+                    if (holder == null || holder.locked()) break;
+                    if (first[0] == null) first[0] = le.get(w);
+                    le.setIn(holder, w, BlockState.AIR);
+                    n[0]++;
                 }
-                reconnectIn(s, l, removed);
+                stroke.touched.add(w);
             }
-            n += removed.size();
-        }
+            if (le.written().size() <= 4096) le.reconnect();
+        });
+        BlockState burst = first[0];
         if (burst != null && ws.settings().breakParticles) {
             BlockAssets assets = ws.assets();
             particles.burst(center.x(), center.y(), center.z(), assets == null ? null : BlockIcons.icon(assets, burst));
             particlesDrawn = true;
         }
-        return n;
-    }
-
-    /** Fences, walls, redstone, rails and stairs around the changed cells update, as when placing by hand. */
-    private void reconnectIn(SceneEditor.BlockSession s, Layer l, List<BlockPos> changed) {
-        if (changed.isEmpty() || changed.size() > 4096) return;
-        Transform t = l.transform();
-        var updates = BlockPlacement.reconnect(changed, p -> {
-            BlockPos lp = l.toLocal(p);
-            return BlockTransformer.defaults().apply(s.get(lp.x(), lp.y(), lp.z()), t);
-        });
-        for (var en : updates.entrySet()) {
-            BlockPos lp = l.toLocal(en.getKey());
-            s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(en.getValue(), t.inverse()));
-        }
+        return n[0];
     }
 
     /** The brush outline under the cursor: green to paint, red to erase; spheres get three rings. */
@@ -2610,6 +2815,321 @@ public final class ViewportPane extends StackPane {
 
     // ---- selection ------------------------------------------------------------------------------------------
 
+    /**
+     * A click in Select mode: on an entity it selects the entity (Shift adds, Ctrl toggles); otherwise Shift / Ctrl add or
+     * toggle single blocks and a plain click sets WorldEdit's pos1.
+     */
+    private void selectClick(boolean add, boolean toggle) {
+        if (hoverEntity != null) {
+            Layer l = hoverEntity.layer();
+            var e = hoverEntity.entity();
+            if (!add && !toggle) {
+                entitySel.clear();
+                blockSel.clear();
+            }
+            var set = entitySel.computeIfAbsent(l.id(), k -> new java.util.LinkedHashSet<>());
+            if (toggle && set.contains(e)) set.remove(e);
+            else set.add(e);
+            if (set.isEmpty()) entitySel.remove(l.id());
+            if (!ws.selectedLayers().contains(l)) {
+                if (add || toggle) ws.selectedLayers().add(l);
+                else ws.selectedLayers().setAll(l);
+            }
+            ws.scene().setActive(l);
+            selectionChanged();
+            return;
+        }
+        if (add || toggle) clickSelect(add, toggle);
+        else {
+            if (!entitySel.isEmpty()) {
+                entitySel.clear();
+                requestRedraw();
+            }
+            setCorner(true);
+        }
+    }
+
+    // ---- entities -------------------------------------------------------------------------------------------
+
+    /**
+     * Right-click in Build mode while holding a mob: it stands on the aimed block's top (at the exact height, so slabs and
+     * carpets work), or in the cell in front of a side, facing you. Frames and paintings hang on the aimed wall.
+     */
+    private void placeEntity(String key) {
+        if (!holdFirst) return;
+        io.blockdesigner.core.nbt.CompoundTag tpl = ws.heldEntityProperty().get();
+        String id = tpl.getString("id");
+        var kind = io.blockdesigner.core.model.EntityTypes.kind(id);
+        boolean hangs = io.blockdesigner.core.model.EntityTypes.hanging(kind.id());
+        Vector3f[] r = ray(aimX(), aimY());
+        Vector3f dir = new Vector3f(r[1]).normalize();
+        double x, y, z;
+        io.blockdesigner.core.nbt.CompoundTag nbt = tpl.copy();
+        nbt.remove("Pos");
+        if (hover != null) {
+            BlockPos n = hover.normal(), cell = hover.adjacentWorld();
+            if (hangs) {
+                if (kind.id().endsWith(":painting") && n.y() != 0) {
+                    showToast("Paintings hang on walls: aim at the side of a block");
+                    return;
+                }
+                int facing = io.blockdesigner.core.model.EntityTypes.facingOf(n.x(), n.y(), n.z());
+                nbt.putString("id", kind.id());
+                io.blockdesigner.core.model.EntityTypes.setFacing(nbt, facing);
+                nbt.putInt("TileX", cell.x()).putInt("TileY", cell.y()).putInt("TileZ", cell.z());
+                double[] c = io.blockdesigner.core.model.EntityTypes.hangingPosition(cell.x(), cell.y(), cell.z(), facing, nbt);
+                x = c[0];
+                y = c[1];
+                z = c[2];
+            } else if (n.y() > 0) {
+                Vector3f hit = new Vector3f(dir).mul(hover.distance()).add(r[0]);
+                x = cell.x() + 0.5;
+                y = hit.y;
+                z = cell.z() + 0.5;
+            } else {
+                x = cell.x() + 0.5;
+                y = cell.y();
+                z = cell.z() + 0.5;
+            }
+        } else if (hoverGround != null && !hangs) {
+            x = hoverGround.x() + 0.5;
+            y = hoverGround.y();
+            z = hoverGround.z() + 0.5;
+        } else {
+            showToast(hangs ? "Aim at the side of a block to hang it" : "Aim at a block or the ground to place it");
+            return;
+        }
+        if (!hangs) {
+            // Face the camera, snapped to 22.5° like a standing sign.
+            float yaw = (float) Math.toDegrees(Math.atan2(dir.x, -dir.z));
+            yaw = Math.round(yaw / 22.5f) * 22.5f;
+            nbt.put("Rotation", io.blockdesigner.core.nbt.ListTag.of(new io.blockdesigner.core.nbt.FloatTag(Math.floorMod((int) yaw, 360)),
+                    new io.blockdesigner.core.nbt.FloatTag(0)));
+        }
+        Layer l = ws.activeLayerProperty().get();
+        if (l == null) l = newLayer();
+        if (l.locked()) {
+            showToast("Active layer is locked");
+            return;
+        }
+        var local = io.blockdesigner.core.edit.SceneEditor.toLocal(l, l.transform().inverse(), new io.blockdesigner.core.model.StructureEntity(x, y, z, nbt));
+        if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume);
+        ws.editor().editEntities(l, "Place " + kind.name(), key, list -> list.add(local));
+    }
+
+    /** Left-click in Build mode (or the menu): removes the entity. */
+    private void removeEntity(EntityHit h, String key) {
+        Layer l = h.layer();
+        if (l.locked()) {
+            showToast("Layer is locked");
+            return;
+        }
+        var w = worldEntity(l, h.entity());
+        if (ws.settings().blockSounds) sounds.breakBlock(ws.settings().soundVolume);
+        if (ws.settings().breakParticles) {
+            particles.burst((int) Math.floor(w.x()), (int) Math.floor(w.y()), (int) Math.floor(w.z()), null);
+            particlesDrawn = true;
+        }
+        ws.editor().editEntities(l, "Remove " + io.blockdesigner.core.model.EntityTypes.displayName(h.entity()), key, list -> list.remove(h.entity()));
+        updateHover(aimX(), aimY());
+    }
+
+    /**
+     * Alt+scroll over an entity: a mob or armour stand turns 22.5° (clockwise from above when scrolling up); a painting
+     * shows the next picture that fits the same wall.
+     */
+    private void turnEntity(EntityHit h, int sign) {
+        Layer l = h.layer();
+        if (l.locked()) {
+            showToast("Layer is locked");
+            return;
+        }
+        var e = h.entity();
+        String id = io.blockdesigner.core.model.EntityTypes.kind(e.id()).id();
+        io.blockdesigner.core.model.StructureEntity turned;
+        String what;
+        if (id.endsWith(":painting")) {
+            List<String> variants = io.blockdesigner.core.model.EntityTypes.paintingVariants();
+            int i = variants.indexOf(io.blockdesigner.core.model.EntityTypes.paintingVariant(e.nbt()));
+            String next = variants.get(Math.floorMod(i + sign, variants.size()));
+            var nbt = e.nbt().copy();
+            nbt.putString("variant", "minecraft:" + next);
+            nbt.remove("Motive");
+            int facing = io.blockdesigner.core.model.EntityTypes.facing(nbt);
+            double[] c = nbt.contains("TileX")
+                    ? io.blockdesigner.core.model.EntityTypes.hangingPosition(nbt.getInt("TileX"), nbt.getInt("TileY"), nbt.getInt("TileZ"), facing, nbt)
+                    : new double[]{e.x(), e.y(), e.z()};
+            turned = new io.blockdesigner.core.model.StructureEntity(c[0], c[1], c[2], nbt);
+            int[] size = io.blockdesigner.core.model.EntityTypes.paintingSize(nbt);
+            what = "Painting: " + BlockInfoHud.pretty(next) + " (" + size[0] + "×" + size[1] + ")";
+        } else if (io.blockdesigner.core.model.EntityTypes.hanging(id)) {
+            showToast("Item frames face their wall · aim at another wall to hang one there");
+            return;
+        } else {
+            boolean mirrored = l.transform().mirror() != Transform.Mirror.NONE;
+            float yaw = e.yaw() + 22.5f * sign * (mirrored ? -1 : 1);
+            yaw = ((yaw % 360) + 360) % 360;
+            turned = e.withYaw(yaw);
+            what = io.blockdesigner.core.model.EntityTypes.displayName(e) + " faces " + Math.round(worldEntity(l, turned).yaw()) + "°";
+        }
+        var target = turned;
+        ws.editor().editEntities(l, "Turn " + io.blockdesigner.core.model.EntityTypes.displayName(e), "turn-entity-" + l.id(), list -> {
+            int i = list.indexOf(e);
+            if (i >= 0) list.set(i, target);
+        });
+        var sel = entitySel.get(l.id());
+        if (sel != null && sel.remove(e)) sel.add(target);
+        nudgeSeal.playFromStart();
+        showToast(what);
+        updateHover(aimX(), aimY());
+    }
+
+    /** Arrow keys and Ctrl+scroll with entities selected: moves them (half a block with Shift held on the keys). */
+    private void moveSelectedEntities(int dx, int dy, int dz) {
+        int n = 0;
+        for (var en : List.copyOf(entitySel.entrySet())) {
+            Layer l = ws.scene().find(en.getKey()).orElse(null);
+            if (l == null || l.locked()) continue;
+            // World deltas into the layer's frame.
+            BlockPos d = l.transform().inverse().apply(dx, dy, dz);
+            var moved = new java.util.LinkedHashSet<io.blockdesigner.core.model.StructureEntity>();
+            var old = java.util.Set.copyOf(en.getValue());
+            ws.editor().editEntities(l, "Move entities", "move-entities", list -> list.replaceAll(e -> {
+                if (!old.contains(e)) return e;
+                var m = e.translated(d.x(), d.y(), d.z());
+                moved.add(m);
+                return m;
+            }));
+            en.getValue().clear();
+            en.getValue().addAll(moved);
+            n += moved.size();
+        }
+        burstDelta[0] += dx;
+        burstDelta[1] += dy;
+        burstDelta[2] += dz;
+        nudgeSeal.playFromStart();
+        showToast(n == 0 ? "The selected entities are in a locked layer"
+                : "Δ " + fmt(burstDelta[0]) + ", " + fmt(burstDelta[1]) + ", " + fmt(burstDelta[2]));
+        requestRedraw();
+    }
+
+    // ---- chests and shulker boxes opening (View mode) ----------------------------------------------------------
+
+    /** A click in View mode on a chest or shulker box opens it, or shuts it again, with the game's lid animation. */
+    private void toggleLid() {
+        if (hover == null || sceneRenderer == null) return;
+        Layer l = hover.layer();
+        BlockState st = l.structure().get(hover.local());
+        if (!BlockAssets.opens(st)) return;
+        java.util.List<BlockPos> cells = new java.util.ArrayList<>(List.of(hover.local()));
+        // A double chest opens both halves together.
+        String type = st.get("type");
+        if (("left".equals(type) || "right".equals(type)) && st.get("facing") != null) {
+            BlockPlacement.Dir f = BlockPlacement.Dir.parse(st.get("facing"));
+            if (f != null) {
+                BlockPos other = ("left".equals(type) ? f.clockWise() : f.counterClockWise()).offset(hover.local());
+                if (l.structure().get(other).name().equals(st.name())) cells.add(other);
+            }
+        }
+        boolean open = sceneRenderer.openAmount(l, hover.local()) < 0.5f && !isOpening(l, hover.local());
+        for (BlockPos c : cells) {
+            LidAnim a = lids.computeIfAbsent(l.id() + "|" + c.pack(), k -> new LidAnim(l, c));
+            a.amount = sceneRenderer.openAmount(l, c);
+            a.opening = open;
+        }
+        if (ws.settings().blockSounds) sounds.place(ws.settings().soundVolume * 0.6);
+    }
+
+    private boolean isOpening(Layer l, BlockPos local) {
+        LidAnim a = lids.get(l.id() + "|" + local.pack());
+        return a != null && a.opening;
+    }
+
+    /** Moves opening and closing lids along (half a second end to end, like Minecraft's). */
+    private void lidStep(double dt) {
+        if (lids.isEmpty() || sceneRenderer == null) return;
+        for (var it = lids.values().iterator(); it.hasNext(); ) {
+            LidAnim a = it.next();
+            a.amount = (float) Math.clamp(a.amount + (a.opening ? dt : -dt) * 2, 0, 1);
+            sceneRenderer.setOpen(a.layer, a.local, a.amount);
+            if (a.opening ? a.amount >= 1 : a.amount <= 0) it.remove();
+        }
+        requestRedraw();
+    }
+
+    // ---- saving the selection with the project --------------------------------------------------------------------
+
+    /** Project file entry holding the block selection, the selected entities and WorldEdit's region. */
+    public static final String SELECTION_ENTRY = "selection.json";
+
+    /** The selection and region as a project extra (see {@link io.blockdesigner.core.project.ProjectFile}). */
+    public java.util.Map<String, byte[]> selectionExtras() {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var root = json.createObjectNode();
+        root.put("format", 1);
+        if (worldEdit.pos1() != null) root.putArray("pos1").add(worldEdit.pos1().x()).add(worldEdit.pos1().y()).add(worldEdit.pos1().z());
+        if (worldEdit.pos2() != null) root.putArray("pos2").add(worldEdit.pos2().x()).add(worldEdit.pos2().y()).add(worldEdit.pos2().z());
+        var blocks = root.putObject("blocks");
+        blockSel.forEach((id, set) -> {
+            var arr = blocks.putArray(id);
+            for (long packed : set) arr.add(packed);
+        });
+        var ents = root.putObject("entities");
+        entitySel.forEach((id, set) -> ws.scene().find(id).ifPresent(l -> {
+            var arr = ents.putArray(id);
+            var list = l.structure().entities();
+            for (var e : set) {
+                int i = list.indexOf(e);
+                if (i >= 0) arr.add(i);
+            }
+        }));
+        if (worldEdit.pos1() == null && worldEdit.pos2() == null && blockSel.isEmpty() && entitySel.isEmpty()) return java.util.Map.of();
+        try {
+            return java.util.Map.of(SELECTION_ENTRY, json.writeValueAsBytes(root));
+        } catch (java.io.IOException e) {
+            return java.util.Map.of();
+        }
+    }
+
+    /** Restores what {@link #selectionExtras()} saved (after the project's layers are in the scene). */
+    public void loadSelectionExtras(java.util.Map<String, byte[]> extras) {
+        blockSel.clear();
+        entitySel.clear();
+        worldEdit.clear();
+        byte[] data = extras.get(SELECTION_ENTRY);
+        if (data == null) {
+            requestRedraw();
+            return;
+        }
+        try {
+            var root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(data);
+            var p1 = root.path("pos1");
+            if (p1.size() == 3) worldEdit.setPos1(new BlockPos(p1.get(0).asInt(), p1.get(1).asInt(), p1.get(2).asInt()));
+            var p2 = root.path("pos2");
+            if (p2.size() == 3) worldEdit.setPos2(new BlockPos(p2.get(0).asInt(), p2.get(1).asInt(), p2.get(2).asInt()));
+            root.path("blocks").properties().forEach(en -> ws.scene().find(en.getKey()).ifPresent(l -> {
+                java.util.Set<Long> set = new java.util.HashSet<>();
+                for (var v : en.getValue()) {
+                    long packed = v.asLong();
+                    if (!l.structure().get(BlockPos.unpack(packed)).isAir()) set.add(packed);
+                }
+                if (!set.isEmpty()) blockSel.put(l.id(), set);
+            }));
+            root.path("entities").properties().forEach(en -> ws.scene().find(en.getKey()).ifPresent(l -> {
+                var list = l.structure().entities();
+                var set = new java.util.LinkedHashSet<io.blockdesigner.core.model.StructureEntity>();
+                for (var v : en.getValue()) {
+                    int i = v.asInt(-1);
+                    if (i >= 0 && i < list.size()) set.add(list.get(i));
+                }
+                if (!set.isEmpty()) entitySel.put(l.id(), set);
+            }));
+        } catch (java.io.IOException | RuntimeException e) {
+            // An unreadable selection just isn't restored.
+        }
+        requestRedraw();
+    }
+
     /** Click in Select mode: plain replaces the block selection, Shift adds, Ctrl toggles. Empty space clears. */
     private void clickSelect(boolean add, boolean toggle) {
         if (hover == null) {
@@ -2666,7 +3186,11 @@ public final class ViewportPane extends StackPane {
      * blocks behind others count too). Shift adds, Ctrl removes; blocks hidden by the slice view are skipped.
      */
     private void marqueeSelect(double x0, double y0, double x1, double y1, boolean add, boolean subtract) {
-        if (!add && !subtract) blockSel.clear();
+        if (!add && !subtract) {
+            blockSel.clear();
+            entitySel.clear();
+        }
+        marqueeEntities(x0, y0, x1, y1, subtract);
         float w = (float) getWidth(), h = (float) getHeight();
         org.joml.Matrix4f vp = camera.viewProjection(w / h);
         // Screen rectangle in normalised device coordinates (y up).
@@ -2706,6 +3230,30 @@ public final class ViewportPane extends StackPane {
         }
         regionFromSelection();
         selectionChanged();
+    }
+
+    /** Entities whose middle falls inside the screen rectangle join the selection (or leave it, with {@code subtract}). */
+    private void marqueeEntities(double x0, double y0, double x1, double y1, boolean subtract) {
+        float w = (float) getWidth(), h = (float) getHeight();
+        org.joml.Matrix4f vp = camera.viewProjection(w / h);
+        int lo = sliceMin(), hi = sliceMax();
+        org.joml.Vector4f v = new org.joml.Vector4f();
+        for (Layer l : ws.scene().layers()) {
+            if (!l.visible() || l.locked() || placing.contains(l) || l.structure().entities().isEmpty()) continue;
+            var set = entitySel.computeIfAbsent(l.id(), k -> new java.util.LinkedHashSet<>());
+            for (var e : l.structure().entities()) {
+                var we = worldEntity(l, e);
+                if (we.y() < lo || we.y() >= (long) hi + 1) continue;
+                double[] b = io.blockdesigner.core.model.EntityTypes.box(we);
+                v.set((float) (b[0] + b[3]) / 2, (float) (b[1] + b[4]) / 2, (float) (b[2] + b[5]) / 2, 1).mul(vp);
+                if (v.w <= 0) continue;
+                double sx = (v.x / v.w + 1) / 2 * w, sy = (1 - v.y / v.w) / 2 * h;
+                if (sx < x0 || sx > x1 || sy < y0 || sy > y1) continue;
+                if (subtract) set.remove(e);
+                else set.add(e);
+            }
+            if (set.isEmpty()) entitySel.remove(l.id());
+        }
     }
 
     // ---- WorldEdit region and commands ---------------------------------------------------------------------------
@@ -2754,6 +3302,7 @@ public final class ViewportPane extends StackPane {
     private void clearRegionAndSelection() {
         worldEdit.clear();
         blockSel.clear();
+        entitySel.clear();
         showToast("Selection cleared");
         requestRedraw();
     }
@@ -2830,84 +3379,11 @@ public final class ViewportPane extends StackPane {
             showToast("✖ The active layer is locked");
             return false;
         }
-        List<Layer> layers = ws.scene().layers().stream().filter(l -> l.visible() && !l.locked() && !placing.contains(l)).toList();
-        Layer[] target = {active};
-        java.util.Map<Layer, SceneEditor.BlockSession> sessions = new java.util.LinkedHashMap<>();
-        List<BlockPos> written = new ArrayList<>();
-        // World bounds of each layer, grown as we write: reads outside them are air without any lookup. Big fills over
-        // many layers mostly miss most layers, so this skips most of the per-layer transform work.
-        java.util.Map<Layer, int[]> reach = new java.util.HashMap<>();
-        List<Layer> readable = new ArrayList<>(layers);
-        if (active != null && !layers.contains(active)) readable.add(active);
-        for (Layer l : readable) l.worldBounds().ifPresent(b -> reach.put(l, new int[]{b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()}));
-        java.util.function.BiFunction<Layer, BlockPos, BlockState> read = (l, p) -> {
-            int[] b = reach.get(l);
-            if (b == null || p.x() < b[0] || p.y() < b[1] || p.z() < b[2] || p.x() > b[3] || p.y() > b[4] || p.z() > b[5]) return BlockState.AIR;
-            BlockPos lp = l.toLocal(p);
-            SceneEditor.BlockSession s = sessions.get(l);
-            BlockState st = s != null ? s.get(lp.x(), lp.y(), lp.z()) : l.structure().get(lp);
-            return BlockTransformer.defaults().apply(st, l.transform());
-        };
-        java.util.function.BiConsumer<Layer, java.util.Map.Entry<BlockPos, BlockState>> write = (l, e) -> {
-            SceneEditor.BlockSession s = sessions.computeIfAbsent(l, x -> ws.editor().edit(x, label, null));
-            BlockPos p = e.getKey(), lp = l.toLocal(p);
-            s.set(lp.x(), lp.y(), lp.z(), BlockTransformer.defaults().apply(e.getValue(), l.transform().inverse()));
-            int[] b = reach.computeIfAbsent(l, k -> new int[]{p.x(), p.y(), p.z(), p.x(), p.y(), p.z()});
-            b[0] = Math.min(b[0], p.x());
-            b[1] = Math.min(b[1], p.y());
-            b[2] = Math.min(b[2], p.z());
-            b[3] = Math.max(b[3], p.x());
-            b[4] = Math.max(b[4], p.y());
-            b[5] = Math.max(b[5], p.z());
-        };
-        io.blockdesigner.core.worldedit.WorldEdit.World world = new io.blockdesigner.core.worldedit.WorldEdit.World() {
-            @Override
-            public BlockState get(BlockPos p) {
-                // The top-most layer with a block here wins, as it does on screen.
-                for (int i = layers.size() - 1; i >= 0; i--) {
-                    BlockState st = read.apply(layers.get(i), p);
-                    if (!st.isAir()) return st;
-                }
-                return target[0] != null && !layers.contains(target[0]) ? read.apply(target[0], p) : BlockState.AIR;
-            }
-
-            @Override
-            public void set(BlockPos p, BlockState st) {
-                boolean placed = false;
-                for (int i = layers.size() - 1; i >= 0; i--) {
-                    Layer l = layers.get(i);
-                    if (read.apply(l, p).isAir()) continue;
-                    // Replace in the top-most layer holding a block here; clear the cell in any layer under it.
-                    write.accept(l, java.util.Map.entry(p, placed ? BlockState.AIR : st));
-                    placed = true;
-                }
-                if (!placed && !st.isAir()) {
-                    if (target[0] == null) {
-                        Layer l = new Layer("Layer " + (ws.scene().layers().size() + 1), new io.blockdesigner.core.model.Structure());
-                        ws.editor().addLayer(l);
-                        target[0] = l;
-                    }
-                    write.accept(target[0], java.util.Map.entry(p, st));
-                }
-                written.add(p);
-            }
-        };
-        var undo = ws.editor().undoStack();
-        undo.beginGroup(label);
-        try {
-            edit.accept(world);
+        editLayers(label, null, active, le -> {
+            edit.accept(le);
             // Fences, walls, panes, redstone, rails and stairs join up with what was built, as when placing by hand.
-            if (!written.isEmpty() && written.size() <= 200_000) {
-                var updates = BlockPlacement.reconnect(written, world::get);
-                int n = written.size();
-                updates.forEach(world::set);
-                written.subList(n, written.size()).clear();
-            }
-        } finally {
-            sessions.values().forEach(SceneEditor.BlockSession::close);
-            undo.endGroup();
-        }
-        requestRedraw();
+            le.reconnect();
+        });
         return true;
     }
 
@@ -3057,7 +3533,8 @@ public final class ViewportPane extends StackPane {
     /** Starts a shape at the aimed cell; returns false when no shape is chosen (single placing) or nothing is aimed at. */
     private boolean beginShape() {
         var s = shape();
-        if (s == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE || !placing.isEmpty()) return false;
+        // Shapes are for blocks: holding a mob places just the one.
+        if (s == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE || !placing.isEmpty() || ws.heldEntityProperty().get() != null) return false;
         if (ws.blockToPlace() == null) {
             showToast("Empty hand · pick a block (middle-click), choose a hotbar slot or click one in the palette");
             return true;
@@ -3228,8 +3705,9 @@ public final class ViewportPane extends StackPane {
     }
 
     private void clearBlockSelection() {
-        if (blockSel.isEmpty()) return;
+        if (blockSel.isEmpty() && entitySel.isEmpty()) return;
         blockSel.clear();
+        entitySel.clear();
         selectionChanged();
     }
 
@@ -3240,33 +3718,47 @@ public final class ViewportPane extends StackPane {
     }
 
     private void selectionChanged() {
-        int n = selectedBlockCount();
+        int n = selectedBlockCount(), ne = entitySel.values().stream().mapToInt(java.util.Set::size).sum();
         Box r = worldEdit.region();
         String box = r == null ? "" : String.format(" · pos1 %s, pos2 %s (%d×%d×%d)", worldEdit.pos1(), worldEdit.pos2(), r.sizeX(), r.sizeY(), r.sizeZ());
-        showToast(n == 0 ? "Selection cleared" : String.format("%,d block%s selected%s · T for commands · Esc clears", n, n == 1 ? "" : "s", box));
+        String mobs = ne == 0 ? "" : String.format("%d entit%s", ne, ne == 1 ? "y" : "ies");
+        String blocks = n == 0 ? "" : String.format("%,d block%s", n, n == 1 ? "" : "s");
+        String what = blocks.isEmpty() ? mobs : mobs.isEmpty() ? blocks : blocks + " and " + mobs;
+        showToast(what.isEmpty() ? "Selection cleared"
+                : what + " selected" + box + (ne > 0 ? " · arrows move · Alt+scroll turns · Del removes" : " · T for commands") + " · Esc clears");
         requestRedraw();
     }
 
     /** Deletes the selected blocks as one undo step. */
     private void deleteSelectedBlocks() {
-        String key = "delete-selection-" + (++holdCounter);
-        int n = 0;
-        for (var e : blockSel.entrySet()) {
-            Layer l = ws.scene().find(e.getKey()).orElse(null);
-            if (l == null || l.locked()) continue;
-            try (SceneEditor.BlockSession s = ws.editor().edit(l, "Delete selection", key)) {
+        int[] n = {0, 0};
+        editLayers("Delete selection", null, null, le -> {
+            for (var e : blockSel.entrySet()) {
+                Layer l = ws.scene().find(e.getKey()).orElse(null);
+                if (l == null || l.locked()) continue;
                 for (long packed : e.getValue()) {
                     BlockPos p = BlockPos.unpack(packed);
-                    if (!s.get(p.x(), p.y(), p.z()).isAir()) {
-                        s.set(p.x(), p.y(), p.z(), BlockState.AIR);
-                        n++;
+                    if (!l.structure().get(p).isAir()) {
+                        le.setIn(l, l.toWorld(p), BlockState.AIR);
+                        n[0]++;
                     }
                 }
             }
-        }
-        ws.editor().undoStack().sealTop();
+            // Fences, walls, panes, redstone and stairs next to the hole let go of it, in every layer.
+            le.reconnect();
+            for (var e : List.copyOf(entitySel.entrySet())) {
+                Layer l = ws.scene().find(e.getKey()).orElse(null);
+                if (l == null || l.locked()) continue;
+                var gone = java.util.Set.copyOf(e.getValue());
+                n[1] += gone.size();
+                ws.editor().editEntities(l, "Delete selection", null, list -> list.removeAll(gone));
+            }
+        });
         blockSel.clear();
-        showToast(String.format("Deleted %,d blocks", n));
+        entitySel.clear();
+        showToast(n[1] == 0 ? String.format("Deleted %,d blocks", n[0])
+                : n[0] == 0 ? String.format("Removed %d entit%s", n[1], n[1] == 1 ? "y" : "ies")
+                : String.format("Deleted %,d blocks and %d entit%s", n[0], n[1], n[1] == 1 ? "y" : "ies"));
         requestRedraw();
     }
 
@@ -3410,6 +3902,7 @@ public final class ViewportPane extends StackPane {
         boolean brush = t == ToolKind.BRUSH || t == ToolKind.ERASER;
         brushBar.setVisible(brush);
         if (brush) brushBar.show(t == ToolKind.ERASER);
+        brushPopup.setEraser(t == ToolKind.ERASER);
         if (!brush) endStroke();
     }
 

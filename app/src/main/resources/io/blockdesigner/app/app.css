@@ -273,6 +273,15 @@
     -fx-icon-color: white;
 }
 
+/* Brush and eraser glyphs (ToolIcons), stroked to match the Feather icons. */
+.tool-glyph {
+    -fx-stroke: -color-fg-default;
+}
+
+.tool-button:selected .tool-glyph {
+    -fx-stroke: white;
+}
+
 .viewport-toast {
     -fx-background-color: -bd-glass;
     -fx-background-radius: 999;

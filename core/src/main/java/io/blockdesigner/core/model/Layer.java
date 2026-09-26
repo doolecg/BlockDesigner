@@ -117,9 +117,17 @@ public final class Layer {
         return transform.inverse().apply(world.subtract(offset));
     }
 
-    /** World-space bounds of this layer's blocks, if it has any. */
+    /** World-space bounds of this layer's blocks and the cells its entities stand in, if it has any. */
     public java.util.Optional<Box> worldBounds() {
-        return structure.bounds().map(b -> Box.of(toWorld(b.min()), toWorld(b.max())));
+        java.util.Optional<Box> blocks = structure.bounds().map(b -> Box.of(toWorld(b.min()), toWorld(b.max())));
+        if (structure.entities().isEmpty()) return blocks;
+        Box out = blocks.orElse(null);
+        for (StructureEntity e : structure.entities()) {
+            BlockPos p = toWorld((int) Math.floor(e.x()), (int) Math.floor(e.y()), (int) Math.floor(e.z()));
+            Box cell = Box.of(p, p);
+            out = out == null ? cell : out.union(cell);
+        }
+        return java.util.Optional.of(out);
     }
 
     /** Deep copy with a fresh id. */

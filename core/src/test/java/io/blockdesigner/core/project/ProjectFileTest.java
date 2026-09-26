@@ -56,4 +56,28 @@ class ProjectFileTest {
         assertThat(lb.structure().blockCount()).isZero();
         assertThat(new String(c.extras().get("chat.json"))).isEqualTo("[]");
     }
+
+    @Test
+    void entitiesComeBackWhereTheyWere() throws Exception {
+        Structure s = new Structure();
+        s.set(-3, 2, 5, BlockState.of("stone"));
+        s.set(4, 7, -1, BlockState.of("stone"));
+        var pig = io.blockdesigner.core.model.EntityTypes.create("pig", -1.5, 3, 2.25, 90);
+        s.addEntity(pig);
+        Structure onlyMobs = new Structure();
+        var cow = io.blockdesigner.core.model.EntityTypes.create("cow", 10.5, 64, -7.5, 180);
+        onlyMobs.addEntity(cow);
+        Layer a = new Layer("Farm", s), b = new Layer("Herd", onlyMobs);
+        Path file = tmp.resolve("mobs.bdproj");
+        ProjectFile.save(new ProjectFile.Contents("Mobs", McVersion.byId("1.21.1").orElseThrow(), List.of(a, b), a.id(), Map.of()), file);
+        ProjectFile.Contents c = ProjectFile.load(file);
+        var e = c.layers().getFirst().structure().entities();
+        assertThat(e).singleElement().satisfies(x -> {
+            assertThat(List.of(x.x(), x.y(), x.z())).containsExactly(-1.5, 3.0, 2.25);
+            assertThat(x.id()).isEqualTo("minecraft:pig");
+            assertThat(x.yaw()).isEqualTo(90);
+        });
+        assertThat(c.layers().get(1).structure().entities()).singleElement()
+                .satisfies(x -> assertThat(List.of(x.x(), x.y(), x.z())).containsExactly(10.5, 64.0, -7.5));
+    }
 }

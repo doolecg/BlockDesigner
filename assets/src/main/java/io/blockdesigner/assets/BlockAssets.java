@@ -113,6 +113,13 @@ public final class BlockAssets implements Closeable {
         for (String path : stack.list("assets/")) {
             Matcher m = BANNER_PATTERN.matcher(path);
             if (m.matches()) textures.add(m.group(1) + ":entity/banner/" + m.group(2));
+            // Paintings (each variant's picture), and modded signs' board textures.
+            Matcher pm = PAINTING.matcher(path);
+            if (pm.matches()) textures.add(pm.group(1) + ":painting/" + pm.group(2));
+            Matcher sm = SIGN_TEXTURE.matcher(path);
+            if (sm.matches()) textures.add(sm.group(1) + ":entity/signs/" + sm.group(2));
+            Matcher dm = POT_TEXTURE.matcher(path);
+            if (dm.matches()) textures.add(dm.group(1) + ":entity/decorated_pot/" + dm.group(2));
         }
         for (BlockStateDefinition d : defs.values()) {
             for (String model : d.allModels()) {
@@ -197,9 +204,47 @@ public final class BlockAssets implements Closeable {
         return stack;
     }
 
-    /** Baked model for a state; never null (falls back to approximations or a missing-texture cube). */
     private static final Pattern BANNER_PATTERN = Pattern.compile("assets/([^/]+)/textures/entity/banner/([^/]+)\\.png");
+    private static final Pattern PAINTING = Pattern.compile("assets/([^/]+)/textures/painting/([^/]+)\\.png");
+    private static final Pattern POT_TEXTURE = Pattern.compile("assets/([^/]+)/textures/entity/decorated_pot/([^/]+)\\.png");
+    private static final Pattern SIGN_TEXTURE = Pattern.compile("assets/([^/]+)/textures/entity/signs/((?:hanging/)?[^/]+)\\.png");
     private final Map<String, BakedModel> bannerCache = new ConcurrentHashMap<>();
+
+    /** Whether a block's look depends on its block entity data (banner patterns, pot sherds), which meshing then keeps. */
+    public static boolean usesBlockEntity(BlockState state) {
+        String p = state.path();
+        return p.endsWith("banner") || p.equals("decorated_pot");
+    }
+
+    /** Whether a block can be shown open (chests, trapped and ender chests, shulker boxes). */
+    public static boolean opens(BlockState state) {
+        String p = state.path();
+        return p.equals("chest") || p.equals("trapped_chest") || p.equals("ender_chest") || p.endsWith("shulker_box");
+    }
+
+    /**
+     * The model for a block drawn from its block entity data and, for chests and shulker boxes, how far open it is
+     * (0..1). Falls back to the plain model when neither applies.
+     */
+    public BakedModel blockEntityModel(BlockState state, io.blockdesigner.core.nbt.CompoundTag blockEntity, float open) {
+        if (open > 0 && opens(state)) {
+            // A few steps are enough for the animation; they're cached like any other model.
+            float step = Math.round(Math.min(1, open) * 20) / 20f;
+            String key = state + "|open=" + step;
+            BakedModel m = bannerCache.get(key);
+            if (m != null) return m;
+            return bannerCache.computeIfAbsent(key, k -> EntityModels.bake(state, atlas, step).map(b -> withShape(state, b)).orElseGet(() -> model(state)));
+        }
+        if (state.path().equals("decorated_pot")) {
+            List<String> sherds = EntityModels.sherds(blockEntity);
+            if (sherds.isEmpty()) return model(state);
+            String key = state + "|" + sherds;
+            BakedModel m = bannerCache.get(key);
+            if (m != null) return m;
+            return bannerCache.computeIfAbsent(key, k -> EntityModels.decoratedPot(state, sherds, atlas).map(b -> withShape(state, b)).orElseGet(() -> model(state)));
+        }
+        return bannerModel(state, blockEntity);
+    }
 
     /**
      * A banner with its patterns (from its block entity data); the plain model when it has none. Patterned banners are
@@ -215,6 +260,15 @@ public final class BlockAssets implements Closeable {
                 .map(b -> withShape(state, b)).orElseGet(() -> model(state)));
     }
 
+    /**
+     * An entity's quads in its own frame (the origin is where it stands): Minecraft's model for common mobs, a painting
+     * or frame, or a box the size of its hitbox for everything else.
+     */
+    public List<io.blockdesigner.assets.model.BakedQuad> entityQuads(io.blockdesigner.core.model.StructureEntity entity) {
+        return MobModels.bake(entity, atlas);
+    }
+
+    /** Baked model for a state; never null (falls back to approximations or a missing-texture cube). */
     public BakedModel model(BlockState state) {
         if (state.isAir()) return BakedModel.EMPTY;
         BakedModel m = cache.get(state);

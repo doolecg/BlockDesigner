@@ -13,8 +13,33 @@ public record StructureEntity(double x, double y, double z, CompoundTag nbt) {
         return nbt.getString("id");
     }
 
+    /** Minecraft yaw in degrees (0 faces south, 90 west), from {@code Rotation}; 0 when unset. */
+    public float yaw() {
+        ListTag rot = nbt.getList("Rotation");
+        return rot.size() == 2 ? (float) rot.getDouble(0) : 0f;
+    }
+
+    /** A copy turned to {@code yaw} degrees (pitch kept). */
+    public StructureEntity withYaw(float yaw) {
+        CompoundTag c = nbt.copy();
+        ListTag rot = nbt.getList("Rotation");
+        float pitch = rot.size() == 2 ? (float) rot.getDouble(1) : 0f;
+        c.put("Rotation", ListTag.of(new io.blockdesigner.core.nbt.FloatTag(yaw), new io.blockdesigner.core.nbt.FloatTag(pitch)));
+        return new StructureEntity(x, y, z, c);
+    }
+
+    public StructureEntity at(double nx, double ny, double nz) {
+        return new StructureEntity(nx, ny, nz, nbt.copy());
+    }
+
+    /** Moved by a delta; a hanging entity's block ({@code TileX/Y/Z}) moves with it. */
     public StructureEntity translated(double dx, double dy, double dz) {
-        return new StructureEntity(x + dx, y + dy, z + dz, nbt.copy());
+        CompoundTag c = nbt.copy();
+        if (c.contains("TileX")) {
+            c.putInt("TileX", c.getInt("TileX") + (int) Math.round(dx)).putInt("TileY", c.getInt("TileY") + (int) Math.round(dy))
+                    .putInt("TileZ", c.getInt("TileZ") + (int) Math.round(dz));
+        }
+        return new StructureEntity(x + dx, y + dy, z + dz, c);
     }
 
     public StructureEntity copy() {

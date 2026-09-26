@@ -1,3 +1,53 @@
+# BlockDesigner 0.4.0
+
+This release adds mobs: place pigs, villagers, iron golems, armour stands, paintings and more as stand-ins in your builds, drawn with Minecraft's own models and saved and exported with the schematic, as Litematica does. It also clears most of 0.3.0's known issues.
+
+## New
+
+### Mobs and other entities
+- **A Mobs tab in the palette:** farm animals, villagers and golems, wild animals, water mobs, monsters, and decoration and vehicles. Each tile shows the mob's face from the game's textures.
+  - Click one to hold it, then **right-click in Build mode** to place it on the aimed block, facing you. It stands at the exact height, so slabs and carpets work.
+  - Before placing, set what makes it yours under the grid: wool colour, a villager's job and home biome, baby, a painting's picture, and an armour stand's arms, size and base plate.
+  - Type any id into the search (`alexsmobs:grizzly_bear`) to place a modded mob. It is drawn as a box the size of the mob.
+- **Minecraft's models** for pigs, cows, mooshrooms, sheep (with dyed wool), chickens, wolves, villagers (with biome clothes and job outfits), wandering traders, iron golems, zombies, husks, drowned, skeletons, strays, wither skeletons, creepers and armour stands. Paintings show their picture and item frames hang on their wall. Other mobs are boxes the size of their hitbox in their spawn egg's colour.
+- **Editing:**
+  - **Left-click** removes a mob in Build mode.
+  - **Middle-click** holds one just like it.
+  - **Alt+scroll** over a mob turns it 22.5°. Over a painting it steps through the pictures that fit.
+  - In **Select mode**, click (Shift adds, Ctrl toggles) or drag a box to select mobs. **Arrow keys** move them and **Delete** removes them. Everything undoes.
+- **Hovering** a mob shows its name, job, colour and facing in the info box.
+- **Everywhere else:** mobs move and turn with their layer, show through ghosts and the slice view, are kept in projects, and are exported to Litematica, WorldEdit and structure files (and worldgen data packs). Paintings and frames keep facing their wall when a layer is turned. Mobs get `PersistenceRequired` so they don't despawn once pasted in.
+- **WorldEdit:** `/copy -e`, `/cut -e`, `/move -e` and `/stack -e` take mobs and other entities along.
+
+### Blocks
+- **Fix block shapes** rejoins fences, walls, panes, iron bars, redstone dust, rails and stair corners from their neighbours. Use it on schematics saved by tools that leave fences unjoined or dust as dots. It is in the layer list's menu, in Select mode's Shift+right-click menu (for the selected blocks) and as `/fixshapes` (for the region). Rail junctions only change when that joins them to more rails.
+- **Decorated pots** have their real model, with the patterns of the sherds they were made with.
+- **Modded signs** show their board texture when the mod has one.
+- **Chests and shulker boxes open:** click one in View mode (V) to open or shut it with the game's lid animation. Double chests open both halves.
+
+### Tools
+- **New brush and eraser icons** in the tool dock: a paint brush and an eraser.
+- **New project button** at the top left, next to Open and Save (same as Ctrl+N).
+
+## Fixes
+- **Across layers:** placing, breaking, Replace, the brushes, the eraser and WorldEdit now see every visible layer. Fences, walls, panes, redstone, rails and stair corners join blocks in other layers, and the sculpt brushes shape terrain spread over several layers. A cell taken in any layer counts as taken. Locked layers are read (things join them) but never changed.
+- **Deleting or replacing a selection** updates the fences, walls, redstone and stairs next to it, in every layer.
+- **Eraser:** choosing a mode in the brush popup while erasing now switches to the Brush in that mode. The popup shows Erase lit while the Eraser is in hand.
+- **Saved with the project:** the block selection, selected mobs and the WorldEdit region.
+- **Banner patterns** (and any other block data, such as chest contents and sign text) survive `/copy` and `/paste`, `/rotate`, `/flip`, `/move` and `/stack`.
+- **Merge down** keeps the upper layer's mobs.
+
+## Known issues
+- **Security warning:** the installer and exe still aren't code-signed, so Windows SmartScreen may warn on first run. Click **More info → Run anyway**.
+- **Mob models:** horses, cats, llamas, foxes and the other mobs without a model are drawn as coloured boxes. Babies are the grown-up model at half size. Villager job levels and armour or held items aren't shown.
+- **Block shapes:** imported schematics keep their fence, wall, redstone and rail shapes as saved until you place or break next to them, or use **Fix block shapes**.
+- **Loot tables** only apply to worldgen data packs. Schematic exports keep containers exactly as built.
+
+## Coming soon
+- **Resource Tracker:** the materials a build needs, what you've gathered and what's left.
+
+---
+
 # BlockDesigner 0.3.0
 
 This release adds sculpting brushes (smooth, erode, raise, flatten and more), the Eraser, build shapes and symmetry. WorldEdit now works like Minecraft's chat: press T, type `/set stone`, and it replaces what's already there across all your layers.

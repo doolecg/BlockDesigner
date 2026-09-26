@@ -228,6 +228,69 @@ class UiSnapshotsIT {
             rows.getChildren().add(row);
         }
         save(snapshotNode(rows), dir.resolve("icons" + suffix + ".png"));
+
+        // The palette's Mobs tab, holding a pink sheep, and the HUD over a villager (faces from the game when installed).
+        var jars = new io.blockdesigner.assets.McInstallLocator().scan().jars();
+        if (!jars.isEmpty() && ws.assets() == null) {
+            var jar = jars.stream().filter(j -> j.version().id().startsWith("1.21.1")).findFirst().orElse(jars.getFirst());
+            ws.assetsProperty().set(io.blockdesigner.assets.BlockAssets.open(jar.jar(), List.of(), List.of(), null));
+        }
+        BlockPalette palette = new BlockPalette(ws);
+        javafx.scene.layout.StackPane pbox = new javafx.scene.layout.StackPane(palette);
+        pbox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        pbox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+        pbox.setPrefSize(330, 620);
+        new javafx.scene.Scene(pbox);
+        pbox.applyCss();
+        pbox.lookupAll(".palette-tab").stream()
+                .filter(n -> n instanceof javafx.scene.control.ToggleButton tb && "Mobs".equals(tb.getText()))
+                .findFirst().ifPresent(n -> ((javafx.scene.control.ToggleButton) n).fire());
+        ws.holdEntity("sheep");
+        var sheep = ws.heldEntityProperty().get().copy();
+        sheep.putByte("Color", 6);
+        ws.heldEntityProperty().set(sheep);
+        pbox.applyCss();
+        pbox.layout();
+        save(pbox.snapshot(null, null), dir.resolve("palette-mobs" + suffix + ".png"));
+
+        // The tool dock with the brush selected, then the eraser.
+        for (var tool : new Workspace.ToolKind[]{Workspace.ToolKind.BRUSH, Workspace.ToolKind.ERASER}) {
+            javafx.scene.layout.HBox strip = new javafx.scene.layout.HBox(8);
+            strip.setStyle("-fx-padding: 10;");
+            javafx.scene.layout.StackPane dbox = new javafx.scene.layout.StackPane(strip);
+            dbox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+            dbox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+            new javafx.scene.Scene(dbox);
+            ws.toolProperty().set(tool);
+            javafx.scene.control.ToggleButton on = new javafx.scene.control.ToggleButton(null, tool == Workspace.ToolKind.BRUSH ? ToolIcons.brush(17) : ToolIcons.eraser(17));
+            on.getStyleClass().addAll("flat", "tool-button");
+            javafx.scene.control.ToggleButton off = new javafx.scene.control.ToggleButton(null, tool == Workspace.ToolKind.BRUSH ? ToolIcons.brush(17) : ToolIcons.eraser(17));
+            off.getStyleClass().addAll("flat", "tool-button");
+            on.setSelected(true);
+            javafx.scene.control.ToggleButton big = new javafx.scene.control.ToggleButton(null, tool == Workspace.ToolKind.BRUSH ? ToolIcons.brush(64) : ToolIcons.eraser(64));
+            big.getStyleClass().addAll("flat");
+            javafx.scene.control.ToggleButton ref = new javafx.scene.control.ToggleButton(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.MOVE));
+            ref.getStyleClass().addAll("flat", "tool-button");
+            // A Feather icon beside them, to compare sizes.
+            strip.getChildren().addAll(on, off, ref, big);
+            dbox.applyCss();
+            dbox.layout();
+            save(dbox.snapshot(null, null), dir.resolve("tool-" + tool.name().toLowerCase() + suffix + ".png"));
+        }
+
+        BlockInfoHud hud = new BlockInfoHud();
+        javafx.scene.layout.StackPane hbox = new javafx.scene.layout.StackPane(hud);
+        hbox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        hbox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+        hbox.setStyle("-fx-background-color: #2a3348; -fx-padding: 12;");
+        new javafx.scene.Scene(hbox);
+        var villager = io.blockdesigner.core.model.EntityTypes.create("villager", 3.5, 64, -2.5, 180);
+        villager.nbt().put("VillagerData", new io.blockdesigner.core.nbt.CompoundTag().putString("type", "minecraft:desert")
+                .putString("profession", "minecraft:farmer").putInt("level", 1));
+        hud.showEntity(ws.assets(), villager, a);
+        hbox.applyCss();
+        hbox.layout();
+        save(hbox.snapshot(null, null), dir.resolve("hud-entity" + suffix + ".png"));
     }
 
     private static void snapshotDialog(Dialog<?> d, Path out) throws Exception {

@@ -107,7 +107,7 @@ public final class SpongeSchematicFormat implements SchematicFormat {
             String id = e.getString("Id");
             if (!id.isEmpty()) full.putString("id", id);
             full.remove("Id");
-            st.entities().add(StructureEntity.fromFullNbt(full, -ox, -oy, -oz));
+            st.addEntity(StructureEntity.fromFullNbt(full, -ox, -oy, -oz));
         }
         CompoundTag meta = s.getCompound("Metadata");
         return new SchematicFile(meta.getString("Name"), meta.getString("Author"), "", st.metadata().dataVersion,

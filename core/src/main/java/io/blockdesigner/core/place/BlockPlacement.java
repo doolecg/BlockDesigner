@@ -261,6 +261,55 @@ public final class BlockPlacement {
         return out;
     }
 
+    /** Whether the block's shape depends on its neighbours (fences, walls, panes, bars, redstone dust, rails, stairs). */
+    public static boolean hasShape(BlockState s) {
+        return !s.isAir() && (isWire(s) || isRail(s) || connector(s) != null || isStairs(s));
+    }
+
+    /**
+     * Recomputes the shapes of the given blocks from their neighbours, as a block update in Minecraft would: for
+     * schematics saved by tools that leave fences unjoined, stairs straight and dust as dots. Unlike {@link #reconnect},
+     * only the listed cells change, and a rail only changes when that joins it to more rails than it joins now (so
+     * junctions built on purpose stay as they are). Returns the states that differ.
+     */
+    public static Map<BlockPos, BlockState> refreshShapes(java.util.Collection<BlockPos> cells, World w) {
+        Map<BlockPos, BlockState> out = new LinkedHashMap<>();
+        World now = p -> out.containsKey(p) ? out.get(p) : w.get(p);
+        for (BlockPos p : cells) {
+            BlockState s = now.get(p);
+            if (isStairs(s)) continue;
+            BlockState c = connect(s, p, now);
+            if (c != s && isRail(s) && railEnds(c, p, now) <= railEnds(s, p, now)) continue;
+            if (c != s) out.put(p, c);
+        }
+        for (BlockPos p : cells) {
+            BlockState s = now.get(p);
+            if (!isStairs(s)) continue;
+            String shape = stairsShape(s, p, now);
+            if (!shape.equals(s.get("shape"))) out.put(p, s.with("shape", shape));
+        }
+        return out;
+    }
+
+    /** How many of a rail's two ends meet another rail (level, one up or one down). */
+    private static int railEnds(BlockState s, BlockPos pos, World w) {
+        String shape = String.valueOf(s.get("shape"));
+        String[] ends = shape.startsWith("ascending_") ? new String[]{shape.substring(10), opposite(shape.substring(10))} : shape.split("_");
+        int n = 0;
+        for (String end : ends) {
+            Dir d = Dir.parse(end);
+            if (d == null) continue;
+            BlockPos np = d.offset(pos);
+            if (isRail(w.get(np)) || isRail(w.get(np.add(0, 1, 0))) || isRail(w.get(np.add(0, -1, 0)))) n++;
+        }
+        return n;
+    }
+
+    private static String opposite(String dir) {
+        Dir d = Dir.parse(dir);
+        return d == null ? dir : d.opposite().id();
+    }
+
     private enum Connector { FENCE, WALL, PANE }
 
     private static Connector connector(BlockState s) {

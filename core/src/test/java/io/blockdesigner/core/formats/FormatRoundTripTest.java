@@ -40,7 +40,7 @@ class FormatRoundTripTest {
         s.set(4, 11, 4, BlockState.parse("chest[facing=north,type=single,waterlogged=false]"));
         s.setBlockEntity(new BlockPos(4, 11, 4), new CompoundTag().putString("id", "minecraft:chest")
                 .put("Items", ListTag.of(new CompoundTag().putByte("Slot", 0).putString("id", "minecraft:diamond").putInt("count", 5))));
-        s.entities().add(new StructureEntity(2.5, 12.0, 3.5, new CompoundTag().putString("id", "minecraft:armor_stand").putBoolean("Invisible", false)));
+        s.addEntity(new StructureEntity(2.5, 12.0, 3.5, new CompoundTag().putString("id", "minecraft:armor_stand").putBoolean("Invisible", false)));
         return s;
     }
 

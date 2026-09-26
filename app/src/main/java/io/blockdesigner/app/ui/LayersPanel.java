@@ -42,7 +42,8 @@ public final class LayersPanel extends VBox {
     private boolean syncing;
 
     /** Callbacks the panel needs from the main window. */
-    public record Actions(Runnable importSchematic, Consumer<Layer> exportLayer, Consumer<Layer> focusLayer) {
+    /** @param fixShapes rejoins the layer's fences, walls, panes, redstone, rails and stair corners */
+    public record Actions(Runnable importSchematic, Consumer<Layer> exportLayer, Consumer<Layer> focusLayer, Consumer<Layer> fixShapes) {
     }
 
     public LayersPanel(Workspace ws, Actions actions) {
@@ -269,11 +270,13 @@ public final class LayersPanel extends VBox {
             });
             MenuItem mergeSel = new MenuItem("Merge selected", new FontIcon(Feather.GIT_MERGE));
             mergeSel.setOnAction(e -> mergeSelected());
+            MenuItem fix = new MenuItem("Fix block shapes", new FontIcon(Feather.LINK));
+            fix.setOnAction(e -> actions.fixShapes().accept(getItem()));
             MenuItem export = new MenuItem("Export this layer…", new FontIcon(Feather.SHARE));
             export.setOnAction(e -> actions.exportLayer().accept(getItem()));
             MenuItem delete = new MenuItem("Delete", new FontIcon(Feather.TRASH_2));
             delete.setOnAction(e -> ws.editor().removeLayer(getItem()));
-            ContextMenu menu = new ContextMenu(rename, focus, dup, new SeparatorMenuItem(), mergeDown, mergeSel,
+            ContextMenu menu = new ContextMenu(rename, focus, dup, new SeparatorMenuItem(), mergeDown, mergeSel, fix,
                     new SeparatorMenuItem(), export, new SeparatorMenuItem(), delete);
             menu.setOnShowing(e -> {
                 int idx = getItem() == null ? -1 : ws.scene().indexOf(getItem());

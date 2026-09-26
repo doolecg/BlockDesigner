@@ -70,6 +70,8 @@ public final class ViewportRenderer implements AutoCloseable {
     private static final class GpuSection {
         final int[] vao = new int[3], vbo = new int[3], quads = new int[3];
         float cx, cy, cz;
+        /** Half size of the box culled against the view (8 for a 16³ section). */
+        float hx = 8, hy = 8, hz = 8;
         float sortKey;
     }
 
@@ -108,7 +110,12 @@ public final class ViewportRenderer implements AutoCloseable {
     }
 
     public void uploadSection(String layerId, long sectionKey, MeshData data, float cx, float cy, float cz) {
-        tasks.offer(() -> upload(layerId, sectionKey, data, cx, cy, cz));
+        tasks.offer(() -> upload(layerId, sectionKey, data, cx, cy, cz, 8, 8, 8));
+    }
+
+    /** Uploads a mesh whose contents fit a box of half size {@code hx, hy, hz} around the centre (entity meshes). */
+    public void uploadMesh(String layerId, long key, MeshData data, float cx, float cy, float cz, float hx, float hy, float hz) {
+        tasks.offer(() -> upload(layerId, key, data, cx, cy, cz, hx, hy, hz));
     }
 
     public void removeSection(String layerId, long sectionKey) {
@@ -264,7 +271,7 @@ public final class ViewportRenderer implements AutoCloseable {
         glBindVertexArray(0);
     }
 
-    private void upload(String layerId, long key, MeshData data, float cx, float cy, float cz) {
+    private void upload(String layerId, long key, MeshData data, float cx, float cy, float cz, float hx, float hy, float hz) {
         Map<Long, GpuSection> m = meshes.computeIfAbsent(layerId, k -> new HashMap<>());
         delete(m.remove(key));
         if (data.isEmpty()) return;
@@ -272,6 +279,9 @@ public final class ViewportRenderer implements AutoCloseable {
         s.cx = cx;
         s.cy = cy;
         s.cz = cz;
+        s.hx = hx;
+        s.hy = hy;
+        s.hz = hz;
         for (RenderLayer rl : RenderLayer.values()) {
             int quads = data.quadCount(rl);
             if (quads == 0) continue;
@@ -509,7 +519,7 @@ public final class ViewportRenderer implements AutoCloseable {
         frustum.set(cullMvp, false);
         List<GpuSection> out = new ArrayList<>(m.size());
         for (GpuSection s : m.values()) {
-            if (frustum.testAab(s.cx - 8, s.cy - 8, s.cz - 8, s.cx + 8, s.cy + 8, s.cz + 8)) out.add(s);
+            if (frustum.testAab(s.cx - s.hx, s.cy - s.hy, s.cz - s.hz, s.cx + s.hx, s.cy + s.hy, s.cz + s.hz)) out.add(s);
         }
         sectionsTotal += m.size();
         sectionsDrawn += out.size();

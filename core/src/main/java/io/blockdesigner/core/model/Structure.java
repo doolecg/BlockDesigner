@@ -367,8 +367,33 @@ public final class Structure {
         changed();
     }
 
+    /** The entities (mobs, armour stands, item frames…), read-only: change them with the methods below. */
     public List<StructureEntity> entities() {
-        return entities;
+        return Collections.unmodifiableList(entities);
+    }
+
+    public void addEntity(StructureEntity e) {
+        entities.add(java.util.Objects.requireNonNull(e));
+        changed();
+    }
+
+    /** Removes the entity at {@code index}; returns it. */
+    public StructureEntity removeEntity(int index) {
+        StructureEntity e = entities.remove(index);
+        changed();
+        return e;
+    }
+
+    public void setEntity(int index, StructureEntity e) {
+        entities.set(index, java.util.Objects.requireNonNull(e));
+        changed();
+    }
+
+    /** Replaces every entity (undo and redo restore whole lists). */
+    public void setEntities(List<StructureEntity> list) {
+        entities.clear();
+        entities.addAll(list);
+        changed();
     }
 
     public Metadata metadata() {
@@ -417,6 +442,7 @@ public final class Structure {
         src.forEachBlock((x, y, z, s) -> set(x + dx, y + dy, z + dz, s));
         src.blockEntities.forEach((p, nbt) -> setBlockEntity(p.add(dx, dy, dz), nbt.copy()));
         for (StructureEntity e : src.entities) entities.add(e.translated(dx, dy, dz));
+        if (!src.entities.isEmpty()) changed();
     }
 
     /** Moves all content so the minimum corner of its bounds sits at the origin; returns the applied shift. */

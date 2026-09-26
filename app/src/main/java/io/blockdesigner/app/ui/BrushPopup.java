@@ -28,15 +28,18 @@ import java.util.Map;
 final class BrushPopup extends Popup {
     private final Settings settings;
     private final Runnable changed;
+    /** Told when the user picks a mode (not when keys or other code change it). */
+    private final java.util.function.Consumer<Sculpt.Mode> picked;
     private final Map<Sculpt.Mode, ToggleButton> modes = new EnumMap<>(Sculpt.Mode.class);
     private final Slider size = new Slider(1, BrushBar.MAX_SIZE, 1), strength = new Slider(1, 5, 2);
     private final Label sizeValue = new Label(), strengthValue = new Label();
     private final ToggleButton sphere = new ToggleButton("Sphere"), cube = new ToggleButton("Cube");
     private boolean syncing;
 
-    BrushPopup(Settings settings, Runnable changed) {
+    BrushPopup(Settings settings, Runnable changed, java.util.function.Consumer<Sculpt.Mode> picked) {
         this.settings = settings;
         this.changed = changed;
+        this.picked = picked;
         setAutoHide(true);
         setHideOnEscape(true);
 
@@ -157,8 +160,18 @@ final class BrushPopup extends Popup {
     }
 
     private void select(Sculpt.Mode m) {
-        settings.brushMode = m.name();
+        // Picking Erase leaves the brush's own mode alone, so the eraser doesn't change what the brush does.
+        if (m != Sculpt.Mode.ERASE || !eraser) settings.brushMode = m.name();
         update();
+        picked.accept(m);
+    }
+
+    /** Whether the popup is showing for the eraser (its Erase mode lit, whatever the brush's mode is). */
+    private boolean eraser;
+
+    void setEraser(boolean eraser) {
+        this.eraser = eraser;
+        sync();
     }
 
     void step(int dSize, int dStrength) {
@@ -175,7 +188,7 @@ final class BrushPopup extends Popup {
     /** Shows the current settings. */
     void sync() {
         syncing = true;
-        Sculpt.Mode mode = mode(settings);
+        Sculpt.Mode mode = eraser ? Sculpt.Mode.ERASE : mode(settings);
         modes.forEach((m, b) -> b.setSelected(m == mode));
         size.setValue(settings.brushSize);
         strength.setValue(settings.brushStrength);

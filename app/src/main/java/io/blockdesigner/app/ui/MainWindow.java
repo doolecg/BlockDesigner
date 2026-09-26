@@ -106,7 +106,8 @@ public final class MainWindow {
         });
 
         // Left: layers over palette
-        layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> exportDialog(null, List.of(l)), viewport::frameLayer));
+        layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> exportDialog(null, List.of(l)), viewport::frameLayer,
+                viewport::fixLayerShapes));
         palette = new BlockPalette(ws);
         SplitPane left = new SplitPane(layers, palette);
         left.setOrientation(javafx.geometry.Orientation.VERTICAL);
@@ -420,6 +421,7 @@ public final class MainWindow {
         name.textProperty().bindBidirectional(ws.projectNameProperty());
         name.setPrefColumnCount(14);
 
+        Button newDoc = LayersPanel.iconButton(Feather.FILE_PLUS, "New project (Ctrl+N)", this::newProject);
         Button open = LayersPanel.iconButton(Feather.FOLDER, "Open project or schematic (Ctrl+O)", this::openDialog);
         Button save = LayersPanel.iconButton(Feather.SAVE, "Save project (Ctrl+S)", () -> save(false));
         Button imp = new Button("Import", new FontIcon(Feather.DOWNLOAD));
@@ -457,7 +459,7 @@ public final class MainWindow {
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(8, logo, name, open, save, spacer, undo, redo, theme, assetBadge, assets, pluginMenu, imp, export);
+        HBox bar = new HBox(8, logo, name, newDoc, open, save, spacer, undo, redo, theme, assetBadge, assets, pluginMenu, imp, export);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("top-bar");
         return bar;
@@ -714,7 +716,15 @@ public final class MainWindow {
     }
 
     private void projectExtrasLoaded(Map<String, byte[]> extras) {
+        // The block selection, selected entities and WorldEdit region come back as they were saved.
+        viewport.loadSelectionExtras(extras);
         extrasLoader.accept(extras);
+    }
+
+    private Map<String, byte[]> projectExtras() {
+        Map<String, byte[]> out = new java.util.LinkedHashMap<>(viewport.selectionExtras());
+        out.putAll(extrasSaver.get());
+        return out;
     }
 
     public void save(boolean saveAs) {
@@ -731,7 +741,7 @@ public final class MainWindow {
         Path target = file;
         var contents = new ProjectFile.Contents(ws.projectNameProperty().get(), ws.targetVersionProperty().get(),
                 List.copyOf(ws.scene().layers().stream().filter(l -> !(viewport.isPlacing() && l.ghost())).toList()),
-                ws.activeLayerProperty().get() == null ? null : ws.activeLayerProperty().get().id(), extrasSaver.get());
+                ws.activeLayerProperty().get() == null ? null : ws.activeLayerProperty().get().id(), projectExtras());
         try {
             ProjectFile.save(contents, target);
             ws.projectFileProperty().set(target);

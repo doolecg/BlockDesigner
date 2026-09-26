@@ -32,8 +32,8 @@ public final class ToolDock extends VBox {
         add(ws, group, ToolKind.BUILD, Feather.TOOL, "Build mode (B toggles, also while flying): left break, right place, middle pick");
         add(ws, group, ToolKind.MOVE, Feather.MOVE, "Move (G): drag an arrow, a plane square or the centre to move the selected layers");
         add(ws, group, ToolKind.ROTATE, Feather.ROTATE_CW, "Rotate (E): drag a ring to turn the selected layers in 90° steps");
-        add(ws, group, ToolKind.BRUSH, Feather.EDIT_3, "Paint brush (U): drag to add blocks with the held block (right-drag erases); - / = size");
-        add(ws, group, ToolKind.ERASER, Feather.DELETE, "Eraser (X): drag to remove blocks; - / = size");
+        add(ws, group, ToolKind.BRUSH, ToolIcons.brush(17), "Paint brush (U): drag to add blocks with the held block (right-drag erases); - / = size");
+        add(ws, group, ToolKind.ERASER, ToolIcons.eraser(17), "Eraser (X): drag to remove blocks; - / = size");
         getChildren().add(new Separator());
         flyToggle.getStyleClass().addAll("flat", "tool-button");
         flyToggle.setTooltip(new Tooltip("Creative flight (C): WASD, Space/Shift, mouse look"));
@@ -45,7 +45,11 @@ public final class ToolDock extends VBox {
     }
 
     private void add(Workspace ws, ToggleGroup g, ToolKind kind, Feather icon, String tip) {
-        ToggleButton b = new ToggleButton(null, new FontIcon(icon));
+        add(ws, g, kind, new FontIcon(icon), tip);
+    }
+
+    private void add(Workspace ws, ToggleGroup g, ToolKind kind, javafx.scene.Node icon, String tip) {
+        ToggleButton b = new ToggleButton(null, icon);
         b.getStyleClass().addAll("flat", "tool-button");
         b.setToggleGroup(g);
         b.setTooltip(new Tooltip(tip));

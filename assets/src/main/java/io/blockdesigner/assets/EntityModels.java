@@ -70,7 +70,16 @@ final class EntityModels {
     }
 
     static Optional<BakedModel> bake(BlockState state, TextureAtlas atlas) {
+        return bake(state, atlas, 0);
+    }
+
+    /**
+     * @param open how far a chest's lid or a shulker box's shell is open, 0 (shut) to 1, as the game animates it when
+     *             a player uses one
+     */
+    static Optional<BakedModel> bake(BlockState state, TextureAtlas atlas, float open) {
         String p = state.path();
+        String ns = state.name().substring(0, state.name().indexOf(':'));
         Mat root;
         List<Part> parts;
         String tex;
@@ -81,6 +90,11 @@ final class EntityModels {
             boolean left = type.equals("left") && !base.equals("ender"), right = type.equals("right") && !base.equals("ender");
             tex = "minecraft:entity/chest/" + base + (left ? "_left" : right ? "_right" : "");
             parts = chest(left, right);
+            if (open > 0) {
+                // ChestRenderer: the lid and lock swing up about the back edge, eased like the game's lid.
+                float a = -(1 - (1 - open) * (1 - open) * (1 - open)) * (float) Math.PI / 2;
+                parts = List.of(parts.get(0), parts.get(1).rotated(a, 0, 0), parts.get(2).rotated(a, 0, 0));
+            }
             root = Mat.identity().translate(0.5, 0.5, 0.5).rotateY(Math.toRadians(-yRot(state.get("facing")))).translate(-0.5, -0.5, -0.5);
         } else if (p.endsWith("_bed")) {
             String color = p.substring(0, p.length() - 4);
@@ -92,8 +106,8 @@ final class EntityModels {
         } else if (p.endsWith("_hanging_sign")) {
             boolean wall = p.endsWith("_wall_hanging_sign");
             String wood = p.substring(0, p.length() - (wall ? "_wall_hanging_sign" : "_hanging_sign").length());
-            if (!WOODS.contains(wood)) return Optional.empty();
-            tex = "minecraft:entity/signs/hanging/" + wood;
+            // Modded woods keep their board texture in their own namespace (biomesoplenty:entity/signs/hanging/fir).
+            tex = ns + ":entity/signs/hanging/" + wood;
             th = 32;
             boolean attached = "true".equals(state.get("attached"));
             parts = hangingSign(wall, !wall && attached);
@@ -102,8 +116,7 @@ final class EntityModels {
         } else if (p.endsWith("_sign")) {
             boolean wall = p.endsWith("_wall_sign");
             String wood = p.substring(0, p.length() - (wall ? "_wall_sign" : "_sign").length());
-            if (!WOODS.contains(wood)) return Optional.empty();
-            tex = "minecraft:entity/signs/" + wood;
+            tex = ns + ":entity/signs/" + wood;
             th = 32;
             parts = sign(!wall);
             double yRot = wall ? -yRot(state.get("facing")) : -rotation(state) * 22.5;
@@ -117,6 +130,10 @@ final class EntityModels {
             tex = "minecraft:entity/shulker/shulker" + (color == null ? "" : "_" + color);
             // ShulkerModel's base and lid (closed), ShulkerBoxRenderer's transform: turned to face the box's facing.
             parts = List.of(Part.of(Cube.of(0, 28, -8, -8, -8, 16, 8, 16)).at(0, 24, 0), Part.of(Cube.of(0, 0, -8, -16, -8, 16, 12, 16)).at(0, 24, 0));
+            if (open > 0) {
+                // ShulkerModel's lid rises half a block and turns three quarters of a circle as it opens.
+                parts = List.of(parts.get(0), parts.get(1).at(0, 24 - open * 8, 0).rotated(0, (float) Math.toRadians(270 * open), 0));
+            }
             root = Mat.identity().translate(0.5, 0.5, 0.5).scale(0.9995, 0.9995, 0.9995);
             root = switch (String.valueOf(state.get("facing"))) {
                 case "down" -> root.rotateX(Math.PI);
@@ -168,6 +185,8 @@ final class EntityModels {
                     return Optional.empty();
                 }
             }
+        } else if (p.equals("decorated_pot")) {
+            return decoratedPot(state, List.of(), atlas);
         } else {
             return Optional.empty();
         }
@@ -351,9 +370,65 @@ final class EntityModels {
                 Cube.of(0, 0, 3, -12, 12 + f, 2, 4, 6), Cube.of(112, 0, 3, -3, -6 + f, 2, 2, 4)).with(jaw);
     }
 
+    /** Pottery sherd item ids of a decorated pot (back, left, right, front), from its block entity; empty when plain. */
+    static List<String> sherds(io.blockdesigner.core.nbt.CompoundTag nbt) {
+        List<String> out = new ArrayList<>();
+        if (nbt == null) return out;
+        for (io.blockdesigner.core.nbt.Tag t : nbt.getList("sherds")) {
+            if (t instanceof io.blockdesigner.core.nbt.StringTag st) out.add(st.value());
+        }
+        return out;
+    }
+
+    /**
+     * DecoratedPotRenderer: the neck, top and bottom from decorated_pot_base, and four sides, each the plain side or a
+     * sherd's pattern. {@code sherds} is back, left, right, front (bricks and missing entries are plain).
+     */
+    static Optional<BakedModel> decoratedPot(BlockState state, List<String> sherds, TextureAtlas atlas) {
+        TextureAtlas.Sprite base = atlas.sprite("minecraft:entity/decorated_pot/decorated_pot_base");
+        TextureAtlas.Sprite plain = atlas.sprite("minecraft:entity/decorated_pot/decorated_pot_side");
+        if (base.missing() || plain.missing()) return Optional.empty();
+        Mat root = Mat.identity().translate(0.5, 0, 0.5).rotateY(Math.toRadians(180 - yRot(state.get("facing")))).translate(-0.5, 0, -0.5);
+        List<BakedQuad> quads = new ArrayList<>();
+        float pi = (float) Math.PI;
+        emit(Part.of(new Cube(0, 0, 4, 17, 4, 8, 3, 8, 0.2f, false), new Cube(0, 5, 5, 20, 5, 6, 1, 6, -0.1f, false)).at(0, 37, 16).rotated(pi, 0, 0),
+                root, 32, 32, base, quads);
+        emit(Part.of(Cube.of(-14, 13, 0, 0, 0, 14, 0, 14)).at(1, 16, 1), root, 32, 32, base, quads);
+        emit(Part.of(Cube.of(-14, 13, 0, 0, 0, 14, 0, 14)).at(1, 0, 1), root, 32, 32, base, quads);
+        Part[] sides = {Part.of(Cube.of(1, 0, 0, 0, 0, 14, 16, 0)).at(15, 16, 1).rotated(0, 0, pi),
+                Part.of(Cube.of(1, 0, 0, 0, 0, 14, 16, 0)).at(1, 16, 1).rotated(0, -pi / 2, pi),
+                Part.of(Cube.of(1, 0, 0, 0, 0, 14, 16, 0)).at(15, 16, 15).rotated(0, pi / 2, pi),
+                Part.of(Cube.of(1, 0, 0, 0, 0, 14, 16, 0)).at(1, 16, 15).rotated(pi, 0, 0)};
+        for (int i = 0; i < 4; i++) {
+            TextureAtlas.Sprite side = plain;
+            String sherd = i < sherds.size() ? sherds.get(i) : "";
+            if (sherd.endsWith("_pottery_sherd")) {
+                int c = sherd.indexOf(':');
+                String sns = c < 0 ? "minecraft" : sherd.substring(0, c), name = sherd.substring(c + 1, sherd.length() - "_sherd".length());
+                TextureAtlas.Sprite pattern = atlas.sprite(sns + ":entity/decorated_pot/" + name + "_pattern");
+                if (!pattern.missing()) side = pattern;
+            }
+            northFace(sides[i], root, 16, 16, side, quads);
+        }
+        return Optional.of(new BakedModel(List.copyOf(quads), new boolean[6], false, false));
+    }
+
+    /** As {@link #emit}, drawing only each cube's north face (a ModelPart built with {@code EnumSet.of(NORTH)}). */
+    private static void northFace(Part part, Mat parent, int tw, int th, TextureAtlas.Sprite sprite, List<BakedQuad> out) {
+        Mat m = parent.translate(part.px / 16, part.py / 16, part.pz / 16);
+        if (part.xRot != 0 || part.yRot != 0 || part.zRot != 0) m = m.rotateZ(part.zRot).rotateY(part.yRot).rotateX(part.xRot);
+        for (Cube c : part.cubes) {
+            float x0 = c.x, y0 = c.y, z0 = c.z, x1 = c.x + c.w, y1 = c.y + c.h;
+            float[] v7 = {x0, y0, z0}, v = {x1, y0, z0}, v1 = {x1, y1, z0}, v2 = {x0, y1, z0};
+            float u5 = c.u + c.d, u6 = c.u + c.d + c.w, v11 = c.v + c.d, v12 = c.v + c.d + c.h;
+            // The side is a flat plate: without a thickness to tell inside from out, the game's winding is kept.
+            face(out, m, sprite, tw, th, false, new float[]{(x0 + x1) / 2, (y0 + y1) / 2, z0}, new float[][]{v, v7, v2, v1}, u5, v11, u6, v12, c.w * c.h);
+        }
+    }
+
     // ---- building quads ------------------------------------------------------------------------------------------
 
-    private static void emit(Part part, Mat parent, int tw, int th, TextureAtlas.Sprite sprite, List<BakedQuad> out) {
+    static void emit(Part part, Mat parent, int tw, int th, TextureAtlas.Sprite sprite, List<BakedQuad> out) {
         Mat m = parent.translate(part.px / 16, part.py / 16, part.pz / 16);
         if (part.xRot != 0 || part.yRot != 0 || part.zRot != 0) m = m.rotateZ(part.zRot).rotateY(part.yRot).rotateX(part.xRot);
         for (Cube c : part.cubes) cube(c, m, tw, th, sprite, out);

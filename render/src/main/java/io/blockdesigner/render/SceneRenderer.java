@@ -41,6 +41,8 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
     private int sliceMin = Integer.MIN_VALUE, sliceMax = Integer.MAX_VALUE;
 
     private final Map<String, Group> groupsByKey = new HashMap<>();
+    /** Containers shown open, per layer id: packed layer-local position → how far (0..1]. */
+    private final Map<String, Map<Long, Float>> opened = new HashMap<>();
     private final Map<String, Group> groupOf = new HashMap<>();
     private int nextMesh;
 
@@ -57,6 +59,9 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
         final AtomicInteger pending = new AtomicInteger();
         final Map<Long, Integer> versions = new HashMap<>();
         volatile boolean dead;
+        /** The entities need meshing again; {@link #entityVersion} drops stale results. */
+        boolean entitiesDirty = true;
+        final AtomicInteger entityVersion = new AtomicInteger();
 
         Group(String meshId, String key) {
             this.meshId = meshId;
@@ -108,7 +113,13 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
 
     private String key(Layer l) {
         Integer base = clipBase(l);
-        return l.structure().contentId() + "|" + (base == null ? "*" : base.toString());
+        // A layer with open containers draws differently from its copies, so it gets a mesh of its own.
+        String open = opened.containsKey(l.id()) ? "|open:" + l.id() : "";
+        return l.structure().contentId() + "|" + (base == null ? "*" : base.toString()) + open;
+    }
+
+    private static String entityMesh(String meshId) {
+        return meshId + "/entities";
     }
 
     private static int clipLocal(int worldY, int base) {
@@ -155,6 +166,7 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
             g.dead = true;
             g.dirty.clear();
             gpu.removeLayer(g.meshId);
+            gpu.removeLayer(entityMesh(g.meshId));
         }
     }
 
@@ -164,6 +176,7 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
         int lo = base == null ? Integer.MIN_VALUE : clipLocal(sliceMin, base);
         int hi = base == null ? Integer.MAX_VALUE : clipLocal(sliceMax, base);
         if (lo == g.clipLo && hi == g.clipHi) return;
+        if (!owner.structure().entities().isEmpty()) g.entitiesDirty = true;
         for (long key : owner.structure().sectionKeyArray()) {
             // Local span of the section plus the one-block border its culling reads.
             int y0 = BlockPos.unpack(key).y() * S - 1, y1 = y0 + S + 1;
@@ -207,6 +220,7 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
     public void layerRemoved(Layer layer) {
         Group g = groupOf.get(layer.id());
         if (g != null) leave(layer, g);
+        opened.remove(layer.id());
     }
 
     @Override
@@ -217,6 +231,37 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
             for (int sz = Math.floorDiv(b.minZ() - 1, S); sz <= Math.floorDiv(b.maxZ() + 1, S); sz++)
                 for (int sx = Math.floorDiv(b.minX() - 1, S); sx <= Math.floorDiv(b.maxX() + 1, S); sx++)
                     g.dirty.add(Structure.sectionKey(sx, sy, sz));
+    }
+
+    @Override
+    public void entitiesChanged(Layer layer) {
+        regroup(layer).entitiesDirty = true;
+    }
+
+    /**
+     * Shows the chest or shulker box at a layer-local position open by {@code amount} (0 shut … 1 open), re-meshing
+     * its section. Called every frame while one animates.
+     */
+    public void setOpen(Layer layer, BlockPos local, float amount) {
+        Map<Long, Float> m = opened.get(layer.id());
+        long k = local.pack();
+        Float before = m == null ? null : m.get(k);
+        if (amount <= 0) {
+            if (m == null || m.remove(k) == null) return;
+            if (m.isEmpty()) opened.remove(layer.id());
+        } else {
+            if (before != null && before == amount) return;
+            opened.computeIfAbsent(layer.id(), x -> new HashMap<>()).put(k, amount);
+        }
+        Group g = regroup(layer);
+        g.dirty.add(Structure.sectionKey(local.x() >> 4, local.y() >> 4, local.z() >> 4));
+    }
+
+    /** How far a container is shown open (0 when shut). */
+    public float openAmount(Layer layer, BlockPos local) {
+        Map<Long, Float> m = opened.get(layer.id());
+        Float f = m == null ? null : m.get(local.pack());
+        return f == null ? 0 : f;
     }
 
     public void markAll(Layer layer) {
@@ -243,6 +288,8 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
     public void rebuildAll() {
         for (Group g : groupsByKey.values()) {
             gpu.removeLayer(g.meshId);
+            gpu.removeLayer(entityMesh(g.meshId));
+            g.entitiesDirty = true;
             Layer owner = owner(g);
             if (owner != null) for (long s : owner.structure().sectionKeyArray()) g.dirty.add(s);
         }
@@ -251,18 +298,18 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
     /** Snapshots dirty sections and hands them to the meshing pool. Call on the scene's owning thread. */
     public void sync() {
         for (Group g : groupsByKey.values()) {
+            if (g.entitiesDirty) syncEntities(g);
             if (g.dirty.isEmpty()) continue;
             Layer layer = owner(g);
             if (layer == null) {
                 g.dirty.clear();
                 continue;
             }
-            boolean clipped = g.clipLo != Integer.MIN_VALUE || g.clipHi != Integer.MAX_VALUE;
+            Map<Long, Float> open = opened.get(layer.id());
+            SectionSnapshot.Openness openness = open == null ? null : (x, y, z) -> open.getOrDefault(BlockPos.pack(x, y, z), 0f);
             for (long key : g.dirty) {
                 BlockPos sp = BlockPos.unpack(key);
-                SectionSnapshot snap = clipped
-                        ? SectionSnapshot.capture(layer.structure(), sp.x(), sp.y(), sp.z(), g.clipLo, g.clipHi)
-                        : SectionSnapshot.capture(layer.structure(), sp.x(), sp.y(), sp.z());
+                SectionSnapshot snap = SectionSnapshot.capture(layer.structure(), sp.x(), sp.y(), sp.z(), g.clipLo, g.clipHi, openness);
                 int v;
                 synchronized (g.versions) {
                     v = g.versions.merge(key, 1, Integer::sum);
@@ -284,6 +331,46 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
             }
             g.dirty.clear();
         }
+    }
+
+    /** Meshes a group's entities (copied now, meshed on the pool) into its entity mesh. */
+    private void syncEntities(Group g) {
+        g.entitiesDirty = false;
+        Layer layer = owner(g);
+        if (layer == null) return;
+        List<io.blockdesigner.core.model.StructureEntity> list = layer.structure().entities().stream()
+                .map(io.blockdesigner.core.model.StructureEntity::copy).toList();
+        int v = g.entityVersion.incrementAndGet();
+        String mesh = entityMesh(g.meshId);
+        if (list.isEmpty()) {
+            gpu.removeLayer(mesh);
+            return;
+        }
+        double[] b = {Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
+        for (var e : list) {
+            b[0] = Math.min(b[0], e.x());
+            b[1] = Math.min(b[1], e.y());
+            b[2] = Math.min(b[2], e.z());
+            b[3] = Math.max(b[3], e.x());
+            b[4] = Math.max(b[4], e.y());
+            b[5] = Math.max(b[5], e.z());
+        }
+        // Margin for the models around their feet (paintings reach two blocks, golems stand under three).
+        float cx = (float) (b[0] + b[3]) / 2, cy = (float) (b[1] + b[4]) / 2 + 1, cz = (float) (b[2] + b[5]) / 2;
+        float hx = (float) (b[3] - b[0]) / 2 + 3, hy = (float) (b[4] - b[1]) / 2 + 3, hz = (float) (b[5] - b[2]) / 2 + 3;
+        int lo = g.clipLo, hi = g.clipHi;
+        inFlight.incrementAndGet();
+        g.pending.incrementAndGet();
+        pool.submit(() -> {
+            try {
+                MeshData md = mesher.meshEntities(list, lo, hi);
+                if (!g.dead && g.entityVersion.get() == v) gpu.uploadMesh(mesh, 0L, md, cx, cy, cz, hx, hy, hz);
+            } finally {
+                g.pending.decrementAndGet();
+                inFlight.decrementAndGet();
+                onMeshReady.run();
+            }
+        });
     }
 
     private static boolean isCurrent(Group g, long key, int v) {
@@ -314,8 +401,13 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
             if (!l.visible()) continue;
             String mesh = meshFor(l);
             if (mesh == null) continue;
-            out.add(new FrameRequest.LayerDraw(mesh, modelMatrix(l.offset(), l.transform()), l.transform().mirror() != Transform.Mirror.NONE,
-                    l.ghost() ? 0.45f : 1f, l.ghost() ? 0x9FC2FF : 0xFFFFFF, l.ghost() ? 0.25f : 0f));
+            float[] model = modelMatrix(l.offset(), l.transform());
+            boolean mirrored = l.transform().mirror() != Transform.Mirror.NONE;
+            out.add(new FrameRequest.LayerDraw(mesh, model, mirrored, l.ghost() ? 0.45f : 1f, l.ghost() ? 0x9FC2FF : 0xFFFFFF, l.ghost() ? 0.25f : 0f));
+            if (!l.structure().entities().isEmpty()) {
+                out.add(new FrameRequest.LayerDraw(entityMesh(mesh), model, mirrored, l.ghost() ? 0.45f : 1f, l.ghost() ? 0x9FC2FF : 0xFFFFFF,
+                        l.ghost() ? 0.25f : 0f));
+            }
         }
         return out;
     }
