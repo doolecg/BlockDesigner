@@ -1,3 +1,44 @@
+# BlockDesigner 0.4.18
+
+Every mob now looks the way it does in the game, fire and lava move, eyes glow, and Select or replace by type finds mobs too. The Resource Tracker tab is gone: it is now a plugin of its own.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.18.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.18.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.18-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Every mob has its real model.** Mobs are drawn with Minecraft's own models, taken from the game itself, so they match it exactly: horses, llamas, cats, foxes, pandas, illagers, the witch, the warden, the wither, fish, squid and all the rest, where many used to be plain coloured boxes.
+  - **Their variants come from the mob:** a cat's coat, a horse's colour and markings, a llama's wool, a rabbit's fur, a panda's gene, parrot and axolotl colours, tropical fish shapes, patterns and colours, slime and phantom sizes, shulker colours, a zombie villager's biome and job.
+  - **Baby mobs** use their own baby models where the game version has them.
+  - **The ender dragon** hovers with its wings spread, and **the snow golem** wears its carved pumpkin.
+  - Boats, minecarts and end crystals sit where the game puts them.
+- **31 more mobs in the Mobs tab:** zombie villager, zombified piglin, piglin brute, hoglin, zoglin, ravager, evoker, illusioner, vex, cave spider, silverfish, endermite, magma cube, ghast, happy ghast, phantom, shulker, breeze, bogged, parched, creaking, camel husk, warden, wither, giant, elder guardian, skeleton and zombie horses, tadpole, nautilus and zombie nautilus, and the ender dragon.
+- **Mob icons show the mob.** The Mobs tab, the info bar and Select by type show each mob's model instead of a spawn egg.
+- **Animated textures play:** fire, soul fire, lava, campfire flames, magma, sea lanterns, prismarine and every other animated block, at the game's speed. The view only redraws for them while one is on screen.
+- **Glowing eyes:** endermen, spiders, phantoms, the ender dragon, the breeze, the copper golem and the warden's glowing patches stand out at full brightness, as in the game.
+- **Select or replace by type finds mobs** (Select mode, Alt+T). Mob types are listed with the blocks, with their counts. Select them (new selection, add or remove), or replace with **Air** to remove them; replacing with a block leaves mobs alone. Right-click a mob for **Select by type › All <mob> in visible layers**.
+
+## Changed
+- **The Resource Tracker is a plugin now.** Its "Coming soon" tab is gone from the right-hand panel. Install [Resource Tracker 1.0.0](https://github.com/doolecg/BlockDesigner-ResourceTracker/releases/latest) for the materials a build needs as survival items (stacks and shulker boxes), what you've gathered and what's left, saved for each project.
+- **Slimes and magma cubes** are as big as their size, and so is their box.
+
+## Fixed
+- **Campfires and redstone torches** are placed lit, as in the game (they used to come out unlit, with no flames).
+- **Witches, striders and other tall textures** no longer come out scrambled: a texture taller than it is wide was cut down to its top square.
+
+## For builders of BlockDesigner
+- `packaging/mob_models.py <26.x client jar> <javap>` rebuilds `mob_models.json` (every entity model layer, read out of the game's own model code) for a new Minecraft version. `AllMobsRenderIT` renders every mob to a contact sheet (set `MC_VERSION=1.21.1` for the older game).
+
+---
+
 # BlockDesigner 0.4.17
 
 One tab per plugin, plugin tool options in the bottom-left corner, and block options you pick like hotbar slots. It also brings plugin API 5, which the new Palette tool in Palette Tools 1.1.0 needs.
