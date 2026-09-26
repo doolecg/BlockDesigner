@@ -74,6 +74,7 @@ final class ViewportSettings {
 
         rows.section(withKey("Flying", keys, Keybinds.Action.FLY));
         rows.slider("Fly speed", 2, 80, () -> s.flySpeed, v -> s.flySpeed = v, v -> String.format("%.1f b/s", v));
+        rows.slider("Reach", 3, 64, () -> s.flyReach, v -> s.flyReach = Math.round(v * 2) / 2.0, v -> String.format("%.1f blocks", Math.round(v * 2) / 2.0));
         rows.slider("Look sensitivity", 0.2, 3, () -> s.lookSensitivity, v -> s.lookSensitivity = v, v -> String.format("%.2f×", v));
         rows.check("Momentum (glide to a stop)", () -> s.flyMomentum, v -> s.flyMomentum = v);
 

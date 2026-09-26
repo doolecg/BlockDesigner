@@ -50,6 +50,8 @@ public final class Settings {
     public int breakDelayMs = 250;
     /** Creative flight speed in blocks per second (Minecraft: ~10.9, sprinting ~21.6). */
     public double flySpeed = 10.9;
+    /** How far away blocks can be broken and placed while flying (a little past Minecraft creative's 5). */
+    public double flyReach = 7;
     /** Paint brush / eraser size (1 = one block, n = a (2n-1)-block wide shape) and shape (cube, else sphere). */
     public int brushSize = 2;
     public boolean brushCube;
@@ -131,6 +133,7 @@ public final class Settings {
         placeDelayMs = d.placeDelayMs;
         breakDelayMs = d.breakDelayMs;
         flySpeed = d.flySpeed;
+        flyReach = d.flyReach;
         flyMomentum = d.flyMomentum;
         brushRate = d.brushRate;
         blockSounds = d.blockSounds;

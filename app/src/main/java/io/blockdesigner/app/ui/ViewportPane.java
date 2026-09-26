@@ -210,8 +210,10 @@ public final class ViewportPane extends StackPane {
     }
     private double dragDistance;
     private static final double CLICK_SLOP = 5;
-    /** Creative-mode block reach while flying, as in Minecraft (block_interaction_range 5; survival is 4.5). */
-    private static final float CREATIVE_REACH = 5;
+    /** Block reach while flying: the Reach slider (Minecraft creative's block_interaction_range is 5). */
+    private float creativeReach() {
+        return (float) Math.clamp(ws.settings().flyReach, 1, 256);
+    }
 
     // Minecraft-style hold-to-repeat place/break
     private Action holdAction;
@@ -888,7 +890,7 @@ public final class ViewportPane extends StackPane {
             java.util.Set<BlockPos> touched = stroke.touched;
             override = p -> touched.contains(p) ? forced : null;
         }
-        return Picker.pick(ws.scene(), r[0], r[1], fly ? CREATIVE_REACH : 10000, l -> !l.locked() && !placing.contains(l),
+        return Picker.pick(ws.scene(), r[0], r[1], fly ? creativeReach() : 10000, l -> !l.locked() && !placing.contains(l),
                 sliceMin(), sliceMax(), override, this::hitboxes);
     }
 
@@ -945,7 +947,7 @@ public final class ViewportPane extends StackPane {
         if (fly && g.isPresent()) {
             // Reach is measured along the look ray to where it meets the ground, like Minecraft's ray cast.
             float t = Math.abs(r[1].y) < 1e-6f ? Float.MAX_VALUE : (planeY - r[0].y) / r[1].y;
-            if (t > CREATIVE_REACH) return Optional.empty();
+            if (t > creativeReach()) return Optional.empty();
         }
         return g;
     }
@@ -986,7 +988,7 @@ public final class ViewportPane extends StackPane {
     private EntityHit pickEntity(double x, double y, float before) {
         Vector3f[] r = ray(x, y);
         Vector3f o = r[0], d = new Vector3f(r[1]).normalize();
-        float max = Math.min(before, fly ? CREATIVE_REACH : 10000);
+        float max = Math.min(before, fly ? creativeReach() : 10000);
         int lo = sliceMin(), hi = sliceMax();
         EntityHit best = null;
         for (Layer l : ws.scene().layers()) {

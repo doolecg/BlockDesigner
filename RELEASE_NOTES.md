@@ -1,3 +1,28 @@
+# BlockDesigner 0.4.13
+
+A Reach slider for creative flight, a longer default reach, and links to the plugins in their new homes.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.13.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.13.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.13-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Reach slider** in Viewport settings › Flying. It sets how far away you can break and place blocks while flying, from 3 to 64 blocks.
+
+## Changed
+- **Longer reach while flying:** 7 blocks by default, a couple more than before.
+- **Plugins have their own homes.** [Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes), [Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools) and [Hello Plugin](https://github.com/doolecg/BlockDesigner-HelloPlugin) each have their own repository and releases, linked from the README.
+
+---
+
 # BlockDesigner 0.4.12
 
 Shapes place blocks facing the right way and can break too, and plugins can now add their own objects to the scene, which the new Reference Planes plugin uses.

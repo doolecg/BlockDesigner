@@ -275,7 +275,17 @@ Commands take one slash and work on every visible, unlocked layer:
 
 Plugins are `.jar` files that add schematic formats, exporters, importers, menu actions, `/commands`, transforms with a live preview, side panels and tools. Manage them under **Plugins (puzzle icon) › Manage plugins…**, where you can install, enable or disable, reload and uninstall them. Plugins run with the same access as BlockDesigner itself, so only install ones you trust.
 
-To write one, see **[PLUGINS.md](PLUGINS.md)** (guide), [docs/plugin-api-reference.md](docs/plugin-api-reference.md) (every API type) and the examples [`examples/hello-plugin`](examples/hello-plugin) and [`examples/palette-tools`](examples/palette-tools).
+Each plugin lives in its own repository and is released there, separately from BlockDesigner:
+
+| Plugin | What it does | Needs |
+|---|---|---|
+| **[Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes)** | Reference images in the scene, like Blender's: move, rotate and scale them, pick the views they show in, set opacity and UV. Listed in Layers as REFERENCE | 0.4.12 |
+| **[Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools)** | Weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool | 0.4.4 |
+| **[Hello Plugin](https://github.com/doolecg/BlockDesigner-HelloPlugin)** | A `/pillar` command, a bill of materials exporter and a plain-text schematic format: a starting point for your own plugin | 0.3.0 |
+
+Download a plugin's `.jar` from its releases page, then install it with **Plugins › Manage plugins… › Install…**.
+
+To write one, see **[PLUGINS.md](PLUGINS.md)** (guide), [docs/plugin-api-reference.md](docs/plugin-api-reference.md) (every API type) and the plugin repositories above. [Hello Plugin](https://github.com/doolecg/BlockDesigner-HelloPlugin) is the simplest template to copy. Copies of the two examples also stay in [`examples/`](examples), because BlockDesigner's own tests load them.
 
 ## Building from source
 
