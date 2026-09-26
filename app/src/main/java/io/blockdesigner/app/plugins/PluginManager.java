@@ -458,7 +458,7 @@ public final class PluginManager {
             if (!ID.matcher(id).matches()) throw new IOException("Plugin id '" + id + "' must use a-z, 0-9, _ . -");
             if (main.isBlank()) throw new IOException("The descriptor has no \"main\" class");
             return new PluginInfo(id, n.path("name").asText(null), n.path("version").asText(null), n.path("author").asText(null),
-                    n.path("description").asText(null), main, n.path("api").asInt(1));
+                    n.path("description").asText(null), main, n.path("api").asInt(1), n.path("updates").asText(null));
         }
     }
 

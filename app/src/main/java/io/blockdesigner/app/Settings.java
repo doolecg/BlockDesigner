@@ -35,6 +35,8 @@ public final class Settings {
     public double leftPanelWidth, rightPanelWidth, leftSplit;
     /** Look for a newer release on GitHub when the app opens. */
     public boolean checkForUpdates = true;
+    /** Update plugins that link a release source by themselves, at startup. */
+    public boolean autoUpdatePlugins = true;
     /** A release version the user chose to skip; not offered again at startup. */
     public String skippedVersion;
     /** Whether the Resource Tracker tab is open in the right panel. */

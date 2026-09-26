@@ -30,10 +30,20 @@ import java.util.List;
 
 /** Lists installed plugins: switch them on and off, install a jar, open the folder, see errors and logs. */
 final class PluginsDialog extends Dialog<Void> {
+    /** Plugin updates: whether they happen by themselves, and checking now. */
+    interface Updates {
+        boolean auto();
+
+        void setAuto(boolean on);
+
+        /** Checks and installs updates in the background; {@code done} gets a summary on the JavaFX thread. */
+        void checkNow(java.util.function.Consumer<String> done);
+    }
+
     private final PluginManager plugins;
     private final VBox rows = new VBox(8);
 
-    PluginsDialog(Window owner, PluginManager plugins, boolean dark) {
+    PluginsDialog(Window owner, PluginManager plugins, boolean dark, Updates updates) {
         this.plugins = plugins;
         initOwner(owner);
         setTitle("Plugins");
@@ -68,11 +78,32 @@ final class PluginsDialog extends Dialog<Void> {
         HBox tools = new HBox(8, install, folder, reload, sp, api);
         tools.setAlignment(Pos.CENTER_LEFT);
 
+        CheckBox auto = new CheckBox("Update plugins automatically");
+        auto.setSelected(updates.auto());
+        auto.setTooltip(new Tooltip("At startup, plugins that link their release source update to their newest release"));
+        auto.setOnAction(e -> updates.setAuto(auto.isSelected()));
+        Button check = new Button("Check for updates", new FontIcon(Feather.DOWNLOAD_CLOUD));
+        Label checked = new Label();
+        checked.setWrapText(true);
+        checked.getStyleClass().add("plugin-meta");
+        check.setOnAction(e -> {
+            check.setDisable(true);
+            checked.setText("Checking…");
+            updates.checkNow(summary -> {
+                check.setDisable(false);
+                checked.setText(summary);
+                rebuild();
+            });
+        });
+        HBox.setHgrow(checked, Priority.ALWAYS);
+        HBox updateRow = new HBox(10, check, auto, checked);
+        updateRow.setAlignment(Pos.CENTER_LEFT);
+
         ScrollPane scroll = new ScrollPane(rows);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("export-cards-scroll");
         VBox.setVgrow(scroll, Priority.ALWAYS);
-        VBox body = new VBox(12, title, warn, tools, scroll);
+        VBox body = new VBox(12, title, warn, tools, updateRow, scroll);
         body.setPadding(new Insets(4));
         body.setPrefSize(640, 520);
         dp.setContent(body);
@@ -126,7 +157,9 @@ final class PluginsDialog extends Dialog<Void> {
         remove.setOnAction(e -> uninstall(p));
         Region sp = new Region();
         HBox.setHgrow(sp, Priority.ALWAYS);
-        VBox text = new VBox(2, name, meta, desc);
+        Label source = new Label(io.blockdesigner.app.plugins.PluginUpdater.describe(info));
+        source.getStyleClass().add("plugin-meta");
+        VBox text = new VBox(2, name, meta, desc, source);
         HBox head = new HBox(10, on, text, sp, remove);
         head.setAlignment(Pos.TOP_LEFT);
         VBox box = new VBox(6, head);

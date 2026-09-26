@@ -196,7 +196,20 @@ class UiSnapshotsIT {
         };
         var pm = new io.blockdesigner.app.plugins.PluginManager(pluginDir, host, new java.util.HashSet<>());
         pm.loadAll();
-        snapshotDialog(new PluginsDialog(null, pm, dark), dir.resolve("plugins" + suffix + ".png"));
+        snapshotDialog(new PluginsDialog(null, pm, dark, new PluginsDialog.Updates() {
+            @Override
+            public boolean auto() {
+                return true;
+            }
+
+            @Override
+            public void setAuto(boolean on) {
+            }
+
+            @Override
+            public void checkNow(java.util.function.Consumer<String> done) {
+            }
+        }), dir.resolve("plugins" + suffix + ".png"));
         snapshotDialog(new ExportDialog(null, ws, null, pm.exporters(), null, "plugin:hello/bom"), dir.resolve("export-plugin" + suffix + ".png"));
         pm.shutdown();
 

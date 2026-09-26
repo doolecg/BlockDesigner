@@ -650,7 +650,7 @@ public final class MainWindow {
 
             @Override
             public void managePlugins() {
-                new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait();
+                showPluginsDialog();
             }
 
             @Override
@@ -787,6 +787,7 @@ public final class MainWindow {
         if (ws.settings().showStartScreen) startScreen.open();
         startAssetLoading(false);
         if (ws.settings().checkForUpdates) checkForUpdates(false);
+        if (ws.settings().autoUpdatePlugins) updatePlugins(false, null);
         // 0.4.7 moved the install to Program Files: remove the old per-user copy in AppData (settings are kept).
         Thread.ofVirtual().name("tidy-old-install").start(() -> {
             var old = Updater.leftoverPerUserInstalls();
@@ -823,6 +824,85 @@ public final class MainWindow {
             } catch (Exception e) {
                 if (manual) Platform.runLater(() -> error("Couldn't check for updates", e.getMessage() == null ? e.toString() : e.getMessage()));
             }
+        });
+    }
+
+    private final io.blockdesigner.app.plugins.PluginUpdater pluginUpdater = new io.blockdesigner.app.plugins.PluginUpdater();
+
+    /** The Plugins window, with automatic updates and "Check for updates". */
+    private void showPluginsDialog() {
+        new PluginsDialog(stage, plugins, ws.darkProperty().get(), new PluginsDialog.Updates() {
+            @Override
+            public boolean auto() {
+                return ws.settings().autoUpdatePlugins;
+            }
+
+            @Override
+            public void setAuto(boolean on) {
+                ws.settings().autoUpdatePlugins = on;
+                ws.settings().save();
+            }
+
+            @Override
+            public void checkNow(java.util.function.Consumer<String> done) {
+                updatePlugins(true, done);
+            }
+        }).showAndWait();
+    }
+
+    /**
+     * Updates every plugin that links a release source to its latest release, in the background: download, check it's
+     * the same plugin and fits this BlockDesigner, then install it in place (keeping it on or off as it was). At startup
+     * ({@code manual} false) it only speaks up when something was updated; {@code done} gets a one-line summary.
+     */
+    private void updatePlugins(boolean manual, java.util.function.Consumer<String> done) {
+        List<io.blockdesigner.plugin.PluginInfo> infos = plugins.plugins().stream().map(io.blockdesigner.app.plugins.PluginManager.Plugin::info)
+                .filter(io.blockdesigner.app.plugins.PluginUpdater::updatable).toList();
+        if (infos.isEmpty()) {
+            if (done != null) done.accept("No installed plugin links a release source, so they're updated by hand.");
+            return;
+        }
+        Thread.ofVirtual().name("plugin-update").start(() -> {
+            List<String> updated = new ArrayList<>(), problems = new ArrayList<>();
+            for (var info : infos) {
+                try {
+                    var found = pluginUpdater.check(info);
+                    if (found == null) continue;
+                    java.nio.file.Path jar = pluginUpdater.download(found);
+                    var got = io.blockdesigner.app.plugins.PluginManager.readDescriptor(jar);
+                    if (!got.id().equals(info.id())) throw new java.io.IOException("the download is a different plugin (" + got.id() + ")");
+                    if (got.api() > io.blockdesigner.plugin.PluginApi.VERSION) {
+                        problems.add(info.name() + " " + found.version() + " needs a newer BlockDesigner");
+                        continue;
+                    }
+                    java.util.concurrent.CompletableFuture<Void> installed = new java.util.concurrent.CompletableFuture<>();
+                    Platform.runLater(() -> {
+                        try {
+                            var old = plugins.find(info.id()).orElse(null);
+                            boolean wasOff = old != null && old.state() == io.blockdesigner.app.plugins.PluginManager.State.DISABLED;
+                            var p = plugins.install(jar);
+                            if (wasOff) plugins.setEnabled(p, false);
+                            plugins.log(p, "Updated from " + info.version() + " to " + got.version() + " (" + found.page() + ")");
+                            installed.complete(null);
+                        } catch (Throwable t) {
+                            installed.completeExceptionally(t);
+                        }
+                    });
+                    installed.get();
+                    updated.add(info.name() + " " + got.version());
+                } catch (Exception e) {
+                    Throwable c = e instanceof java.util.concurrent.ExecutionException ee && ee.getCause() != null ? ee.getCause() : e;
+                    problems.add(info.name() + ": " + (c.getMessage() == null ? c.toString() : c.getMessage()));
+                }
+            }
+            String summary = updated.isEmpty() && problems.isEmpty() ? "Every plugin is up to date."
+                    : (updated.isEmpty() ? "" : "Updated " + String.join(", ", updated) + ".")
+                    + (problems.isEmpty() ? "" : (updated.isEmpty() ? "" : " ") + "Not updated: " + String.join("; ", problems) + ".");
+            Platform.runLater(() -> {
+                if (!updated.isEmpty()) viewport.showToast("Updated " + String.join(", ", updated));
+                if (manual || !updated.isEmpty()) ws.statusProperty().set(summary);
+                if (done != null) done.accept(summary);
+            });
         });
     }
 
@@ -903,7 +983,7 @@ public final class MainWindow {
     /** The Settings window (theme, mode, general options). */
     public void openSettings() {
         SettingsDialog d = new SettingsDialog(stage, ws, keys, this::applyAccelerators, () -> startAssetLoading(true),
-                () -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait(),
+                this::showPluginsDialog,
                 () -> checkForUpdates(true));
         d.setRestart(this::restartApp);
         d.showAndWait();
@@ -1025,7 +1105,7 @@ public final class MainWindow {
         }
         items.add(new SeparatorMenuItem());
         MenuItem manage = new MenuItem("Manage plugins…", new FontIcon(Feather.SETTINGS));
-        manage.setOnAction(e -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait());
+        manage.setOnAction(e -> showPluginsDialog());
         items.add(manage);
         menu.getItems().setAll(items);
     }

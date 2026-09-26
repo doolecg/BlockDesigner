@@ -109,7 +109,10 @@ final class PluginHomeTab {
         HBox line = new HBox(8, status, meta);
         line.setAlignment(Pos.CENTER_LEFT);
 
-        VBox v = new VBox(6, top, line);
+        Label updates = new Label(io.blockdesigner.app.plugins.PluginUpdater.describe(info));
+        updates.setGraphic(new FontIcon(io.blockdesigner.app.plugins.PluginUpdater.updatable(info) ? Feather.REFRESH_CW : Feather.DOWNLOAD));
+        updates.getStyleClass().add("plugin-meta");
+        VBox v = new VBox(6, top, line, updates);
         if (!info.description().isBlank()) {
             Label d = new Label(info.description());
             d.setWrapText(true);

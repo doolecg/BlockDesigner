@@ -129,6 +129,21 @@ Put `blockdesigner-plugin.json` at the root of the jar (in Gradle, `src/main/res
 
 Declare the lowest version whose features you use. BlockDesigner refuses plugins that ask for a newer API than it has (they show as *needs a newer BlockDesigner* in the Plugins window) and keeps loading older ones, so API 1 and 2 plugins run unchanged on an API 3 BlockDesigner.
 
+### Updates: `"updates"`
+
+Add your plugin's GitHub repository to the manifest and BlockDesigner keeps it up to date by itself:
+
+```json
+"updates": "https://github.com/you/your-plugin"
+```
+
+At startup (and from **Check for updates** in the Plugins window), BlockDesigner reads that repository's latest
+release. If its tag (`1.2.0` or `v1.2.0`) is newer than the installed `version`, it downloads the release's jar (the one
+named `<id>-<version>.jar`, or its only jar), checks the download against the size and checksum GitHub publishes,
+checks it's the same plugin id and an API this BlockDesigner has, and installs it in place, keeping it on or off as
+it was. A release that needs a newer BlockDesigner is left alone until BlockDesigner is updated. Without `"updates"`
+the plugin is updated by hand (Install… a newer jar). Users can turn automatic updates off in the Plugins window.
+
 ### The entry point
 
 `main` implements `BlockDesignerPlugin`. Register everything in `enable`; `disable` is optional and only needed for resources you created yourself (threads, open files), because everything registered through the context is removed automatically.

@@ -1,3 +1,27 @@
+# BlockDesigner 0.4.16
+
+Plugins update themselves.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.16.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.16.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.16-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Automatic plugin updates.** Plugins that link their release source update to their newest release at startup: BlockDesigner downloads the jar, checks it against the size and checksum GitHub publishes, and installs it in place (a plugin you turned off stays off). Plugins without a release source are updated by hand, as before.
+- **Plugins window:** a **Check for updates** button, an **Update plugins automatically** switch (on by default), and where each plugin updates from. Each plugin's tab says it too.
+
+**Your plugins:** [Reference Planes 1.1.2](https://github.com/doolecg/BlockDesigner-ReferencePlanes/releases/latest) and [Palette Tools 1.0.2](https://github.com/doolecg/BlockDesigner-PaletteTools/releases/latest) are the first versions that link their release source. Install them once by hand (Plugins › Manage plugins… › Install…); after that they update themselves.
+
+---
+
 # BlockDesigner 0.4.15
 
 Doors, tall plants and beds break as a whole, turned layers stay put, [ and ] size the brush, and swinging to the axis views is smooth.
