@@ -16,18 +16,29 @@ import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -40,6 +51,12 @@ final class OptionsEditor extends GridPane {
     private final BlockCatalog blocks;
     private final Supplier<BlockState> held;
     private final Consumer<OptionValues> onChange;
+    /** The label and control of each option, to hide the ones whose condition is off. */
+    private final Map<String, List<Node>> rows = new LinkedHashMap<>();
+    /** Block icons for the block slots (null: the slots show short names), and the slots to redraw when they come. */
+    private Function<BlockState, Image> icons;
+    private final List<Runnable> slotRedraws = new ArrayList<>();
+    private List<String> shown;
 
     /**
      * @param held     the block in hand, for the "use held block" buttons (may return null)
@@ -58,29 +75,66 @@ final class OptionsEditor extends GridPane {
         fields.setHgrow(Priority.ALWAYS);
         fields.setFillWidth(true);
         getColumnConstraints().addAll(labels, fields);
-        int row = 0;
         for (Options.Option o : initial.options().all()) {
             Node control = control(o);
-            if (o instanceof Options.ToggleOption) {
-                add(control, 0, row, 2, 1);
-            } else {
+            List<Node> nodes = new ArrayList<>();
+            if (!(o instanceof Options.ToggleOption)) {
                 Label l = new Label(o.label());
                 l.getStyleClass().add("prop-label");
-                add(l, 0, row);
-                add(control, 1, row);
+                nodes.add(l);
+            }
+            nodes.add(control);
+            rows.put(o.key(), nodes);
+        }
+        updateShown();
+    }
+
+    /**
+     * Lays out only the options whose {@link Options#shown conditions} hold with the current values. Hidden ones are
+     * taken out of the grid rather than just hidden, so they leave no gaps. Rows that stay are only moved, never
+     * taken out, so the control in use keeps the focus.
+     */
+    private void updateShown() {
+        List<String> now = rows.keySet().stream().filter(k -> values.options().shown(k, values)).toList();
+        if (now.equals(shown)) return;
+        for (var e : rows.entrySet())
+            if (!now.contains(e.getKey())) getChildren().removeAll(e.getValue());
+        int row = 0, index = 0;
+        for (String key : now) {
+            List<Node> nodes = rows.get(key);
+            for (int i = 0; i < nodes.size(); i++, index++) {
+                Node n = nodes.get(i);
+                // Inserted in place, so Tab still walks the options top to bottom.
+                if (!getChildren().contains(n)) getChildren().add(index, n);
+                // A toggle spans both columns; otherwise the label goes left and the control right.
+                GridPane.setConstraints(n, nodes.size() == 1 ? 0 : i, row, nodes.size() == 1 ? 2 : 1, 1);
             }
             row++;
         }
+        shown = now;
     }
 
     OptionValues values() {
         return values;
     }
 
+    /** Draws the block options' slots with the workspace's block icons (once Minecraft's assets are loaded). */
+    OptionsEditor icons(io.blockdesigner.app.Workspace ws) {
+        return icons(st -> ws.assets() == null ? null : BlockIcons.icon(ws.assets(), st));
+    }
+
+    /** Draws the block options' slots with these icons (e.g. {@code s -> BlockIcons.icon(assets, s)}). */
+    OptionsEditor icons(Function<BlockState, Image> icons) {
+        this.icons = icons;
+        slotRedraws.forEach(Runnable::run);
+        return this;
+    }
+
     private void set(String key, Object value) {
         OptionValues next = values.with(key, value);
         if (next.equals(values)) return;
         values = next;
+        updateShown();
         onChange.accept(values);
     }
 
@@ -131,8 +185,8 @@ final class OptionsEditor extends GridPane {
                 f.textProperty().addListener((obs, a, b) -> set(key, b));
                 yield f;
             }
-            case Options.BlockOption b -> blockField(key, values.block(key).toString(), false);
-            case Options.BlockListOption b -> blockField(key, values.blockList(key).toString().replace("minecraft:", ""), true);
+            case Options.BlockOption b -> blockSlots(key, values.block(key).toString(), false);
+            case Options.BlockListOption b -> blockSlots(key, values.blockList(key).toString().replace("minecraft:", ""), true);
             case Options.FileOption f -> fileField(key, f);
         };
     }
@@ -144,11 +198,24 @@ final class OptionsEditor extends GridPane {
     }
 
     /** A block (or weighted pattern) typed as text, with a button that takes the held block. */
-    private Node blockField(String key, String text, boolean pattern) {
+    private static final double SLOT = 30;
+
+    /**
+     * A block, or a weighted mix of blocks, as small hotbar-style slots. Click a slot to put the held block in it (or
+     * drop one from the block list), right-click to take it out of a mix, the wheel over it to change its share; the
+     * + slot adds the held block. The pencil shows the same value as text (block states, exact weights). The text is
+     * the one source of truth: the slots write into it and are redrawn from the value it parses to.
+     */
+    private Node blockSlots(String key, String text, boolean pattern) {
         TextField f = new TextField(text.startsWith("minecraft:") ? text.substring("minecraft:".length()) : text);
         f.setPromptText(pattern ? "e.g. 70%stone,30%andesite" : "e.g. stone_bricks");
         Tooltip tip = new Tooltip(pattern ? "Blocks with optional weights: 70%stone,30%andesite" : "A block, e.g. oak_stairs[facing=east]");
         f.setTooltip(tip);
+        f.setVisible(false);
+        f.setManaged(false);
+        HBox slots = new HBox(3);
+        slots.setAlignment(Pos.CENTER_LEFT);
+        Runnable redraw = () -> drawSlots(slots, key, pattern, f);
         f.textProperty().addListener((obs, a, b) -> {
             try {
                 set(key, pattern ? BlockPattern.parse(b, blocks) : blocks.resolve(b));
@@ -158,20 +225,132 @@ final class OptionsEditor extends GridPane {
                 if (!f.getStyleClass().contains("error")) f.getStyleClass().add("error");
                 f.setTooltip(new Tooltip(e.getMessage()));
             }
+            redraw.run();
         });
-        Button hand = new Button(null, new FontIcon(pattern ? Feather.PLUS : Feather.CORNER_DOWN_LEFT));
-        hand.getStyleClass().add("flat");
-        hand.setTooltip(new Tooltip(pattern ? "Add the held block to the mix" : "Use the held block"));
-        hand.setOnAction(e -> {
+        Button edit = new Button(null, new FontIcon(Feather.EDIT_2));
+        edit.getStyleClass().add("flat");
+        edit.setTooltip(new Tooltip("Edit as text"));
+        edit.setOnAction(e -> {
+            boolean show = !f.isVisible();
+            f.setVisible(show);
+            f.setManaged(show);
+            if (show) f.requestFocus();
+        });
+        HBox.setHgrow(slots, Priority.ALWAYS);
+        HBox top = new HBox(4, slots, edit);
+        top.setAlignment(Pos.CENTER_LEFT);
+        slotRedraws.add(redraw);
+        redraw.run();
+        return new VBox(4, top, f);
+    }
+
+    private void drawSlots(HBox slots, String key, boolean pattern, TextField f) {
+        slots.getChildren().clear();
+        if (!pattern) {
+            slots.getChildren().add(slot(values.block(key), null, "Click: use the held block · or drop a block here", () -> {
+                BlockState h = held.get();
+                if (h != null && !h.isAir()) f.setText(id(h));
+            }, dropped -> f.setText(id(dropped)), null, null));
+            return;
+        }
+        List<BlockPattern.Entry> entries = values.blockList(key).entries();
+        double total = entries.stream().mapToDouble(BlockPattern.Entry::weight).sum();
+        for (int i = 0; i < entries.size(); i++) {
+            int index = i;
+            BlockPattern.Entry en = entries.get(i);
+            String share = Math.round(en.weight() / total * 100) + "%";
+            slots.getChildren().add(slot(en.block(), entries.size() > 1 ? share : null,
+                    share + " of the mix · click: swap for the held block · right-click: remove · wheel: more or less",
+                    () -> {
+                        BlockState h = held.get();
+                        if (h != null && !h.isAir()) f.setText(withEntry(entries, index, new BlockPattern.Entry(h, en.weight())));
+                    },
+                    dropped -> f.setText(withEntry(entries, index, new BlockPattern.Entry(dropped, en.weight()))),
+                    entries.size() > 1 ? () -> f.setText(withEntry(entries, index, null)) : null,
+                    up -> {
+                        // Steps of about 5% of the mix, never below a weight of 1.
+                        double step = Math.max(1, Math.round(total / 20));
+                        double w = Math.max(1, en.weight() + (up ? step : -step));
+                        f.setText(withEntry(entries, index, new BlockPattern.Entry(en.block(), w)));
+                    }));
+        }
+        StackPane add = new StackPane(new FontIcon(Feather.PLUS));
+        add.getStyleClass().addAll("hotbar-slot", "option-slot");
+        add.setMinSize(SLOT, SLOT);
+        add.setPrefSize(SLOT, SLOT);
+        add.setMaxSize(SLOT, SLOT);
+        Tooltip.install(add, new Tooltip("Add the held block to the mix · or drop a block here"));
+        add.setOnMouseClicked(e -> {
             BlockState h = held.get();
-            if (h == null || h.isAir()) return;
-            String id = h.toString().replace("minecraft:", "");
-            f.setText(pattern && !f.getText().isBlank() ? f.getText() + "," + id : id);
+            if (h != null && !h.isAir()) f.setText(withEntry(entries, entries.size(), new BlockPattern.Entry(h, 1)));
         });
-        HBox.setHgrow(f, Priority.ALWAYS);
-        HBox box = new HBox(4, f, hand);
-        box.setAlignment(Pos.CENTER_LEFT);
-        return box;
+        dropTarget(add, dropped -> f.setText(withEntry(entries, entries.size(), new BlockPattern.Entry(dropped, 1))));
+        slots.getChildren().add(add);
+    }
+
+    /** One slot: the block's icon (or short name), its share of a mix in the corner, and what clicks do. */
+    private StackPane slot(BlockState st, String badge, String hint, Runnable click, Consumer<BlockState> drop, Runnable remove,
+                           Consumer<Boolean> wheel) {
+        StackPane p = new StackPane();
+        p.getStyleClass().addAll("hotbar-slot", "option-slot");
+        p.setMinSize(SLOT, SLOT);
+        p.setPrefSize(SLOT, SLOT);
+        p.setMaxSize(SLOT, SLOT);
+        Image icon = icons == null ? null : icons.apply(st);
+        if (icon != null) {
+            ImageView iv = new ImageView(icon);
+            iv.setFitWidth(SLOT - 8);
+            iv.setFitHeight(SLOT - 8);
+            iv.setSmooth(false);
+            p.getChildren().add(iv);
+        } else {
+            Label l = new Label(st.path().length() > 5 ? st.path().substring(0, 5) : st.path());
+            l.getStyleClass().add("hotbar-fallback");
+            p.getChildren().add(l);
+        }
+        if (badge != null) {
+            Label b = new Label(badge);
+            b.getStyleClass().add("hotbar-number");
+            StackPane.setAlignment(b, Pos.BOTTOM_RIGHT);
+            p.getChildren().add(b);
+        }
+        Tooltip.install(p, new Tooltip(id(st) + "\n" + hint));
+        p.setOnMouseClicked(e -> {
+            if (e.getButton() == MouseButton.PRIMARY) click.run();
+            else if (e.getButton() == MouseButton.SECONDARY && remove != null) remove.run();
+        });
+        if (wheel != null) p.setOnScroll(e -> {
+            if (e.getDeltaY() != 0) wheel.accept(e.getDeltaY() > 0);
+            e.consume();
+        });
+        dropTarget(p, drop);
+        return p;
+    }
+
+    private static void dropTarget(StackPane p, Consumer<BlockState> drop) {
+        p.setOnDragOver(e -> {
+            if (Hotbar.dragged(e) != null) e.acceptTransferModes(TransferMode.COPY);
+            e.consume();
+        });
+        p.setOnDragDropped(e -> {
+            BlockState st = Hotbar.dragged(e);
+            if (st != null) drop.accept(st);
+            e.setDropCompleted(st != null);
+            e.consume();
+        });
+    }
+
+    /** The mix as text with entry {@code index} replaced ({@code null} removes it; {@code index == size} appends). */
+    private static String withEntry(List<BlockPattern.Entry> entries, int index, BlockPattern.Entry entry) {
+        List<BlockPattern.Entry> next = new ArrayList<>(entries);
+        if (index == next.size()) next.add(entry);
+        else if (entry == null) next.remove(index);
+        else next.set(index, entry);
+        return new BlockPattern(next).toString().replace("minecraft:", "");
+    }
+
+    private static String id(BlockState st) {
+        return st.toString().replace("minecraft:", "");
     }
 
     private Node fileField(String key, Options.FileOption o) {

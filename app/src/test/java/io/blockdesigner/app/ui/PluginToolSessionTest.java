@@ -53,7 +53,21 @@ class PluginToolSessionTest {
         public LayeredEdit newEdit(String label) {
             return new LayeredEdit(ws, ws.scene().layers(), layer, null, label, null);
         }
+
+        public io.blockdesigner.app.plugins.TransformRunner.Target selection() {
+            return selection;
+        }
+
+        public WorldEdit.World readWorld(io.blockdesigner.app.plugins.TransformRunner.Target target) {
+            return TransformTargets.readWorld(ws, target, ws.scene().layers());
+        }
+
+        public int apply(String label, io.blockdesigner.app.plugins.TransformRunner.Target target,
+                         io.blockdesigner.app.plugins.TransformRunner.Changes changes) {
+            return TransformTargets.apply(ws, target, changes, label, ws.scene().layers(), layer);
+        }
     };
+    private io.blockdesigner.app.plugins.TransformRunner.Target selection;
 
     @BeforeEach
     void load() throws IOException {
@@ -124,6 +138,44 @@ class PluginToolSessionTest {
         assertThat(ghosts).isEmpty();
         s.release(at(1, ToolEvent.Button.PRIMARY));
         assertThat(layer.structure().blockCount()).as("cancelled: nothing built").isEqualTo(10);
+        s.deactivate();
+    }
+
+    @Test
+    void toolsPreviewAndApplyTransformsOnTheSelection() {
+        PluginToolSession s = new PluginToolSession(ws, pm, pm.tools().getFirst(), viewport);
+        s.activate();
+        io.blockdesigner.plugin.PluginTransform sand = new io.blockdesigner.plugin.PluginTransform() {
+            public String id() {
+                return "sand";
+            }
+
+            public String name() {
+                return "Sand";
+            }
+
+            public void apply(io.blockdesigner.plugin.TransformContext c) {
+                for (BlockPos p : c.solidBlocks()) c.world().set(p, BlockState.of(c.options().choice("mode")));
+            }
+        };
+        var opts = io.blockdesigner.plugin.Options.builder().choice("mode", "Mode", List.of("sand", "gravel"), "sand").build().defaults();
+        assertThat(s.selection()).isEmpty();
+        assertThat(s.previewTransform(sand, opts, 1)).as("nothing selected").isZero();
+        assertThat(ghosts).isEmpty();
+
+        selection = io.blockdesigner.app.plugins.TransformRunner.Target.of(List.of(new BlockPos(2, 0, 0), new BlockPos(3, 0, 0)), "2 blocks", null);
+        assertThat(s.selection()).map(io.blockdesigner.plugin.ToolContext.Selection::blocks).contains(List.of(new BlockPos(2, 0, 0), new BlockPos(3, 0, 0)));
+        assertThat(s.previewTransform(sand, opts, 1)).isEqualTo(2);
+        assertThat(ghosts).containsOnlyKeys(new BlockPos(2, 0, 0), new BlockPos(3, 0, 0));
+        assertThat(outlines).containsExactly(new Box(2, 0, 0, 3, 0, 0));
+        assertThat(layer.structure().get(2, 0, 0).path()).as("a preview changes nothing").endsWith("grass_block");
+
+        int steps = ws.editor().undoStack().size();
+        assertThat(s.applyTransform(sand, opts.with("mode", "gravel"), 1)).isEqualTo(2);
+        assertThat(ghosts).isEmpty();
+        assertThat(layer.structure().get(3, 0, 0).path()).endsWith("gravel");
+        assertThat(layer.structure().get(4, 0, 0).path()).endsWith("grass_block");
+        assertThat(ws.editor().undoStack().size()).isEqualTo(steps + 1);
         s.deactivate();
     }
 

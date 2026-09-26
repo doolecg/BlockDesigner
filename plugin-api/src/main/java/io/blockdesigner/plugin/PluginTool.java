@@ -35,6 +35,15 @@ public interface PluginTool {
         return null;
     }
 
+    /**
+     * True for a tool that works on the selection: the left mouse button then selects blocks as in Select mode (click,
+     * drag a box, Shift adds, Ctrl removes, a plain click sets //pos1) while the tool is active, and the tool gets the
+     * right button, the wheel and keys. API 5; older BlockDesigners ignore it.
+     */
+    default boolean selects() {
+        return false;
+    }
+
     /** Parameters shown in the tool's options bar while it is active; the current values are {@link ToolContext#options()}. */
     default Options options() {
         return Options.none();

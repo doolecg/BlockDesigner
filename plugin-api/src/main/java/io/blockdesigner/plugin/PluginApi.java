@@ -11,8 +11,14 @@ public final class PluginApi {
      * Move / Rotate / Scale tools and saved with the project). API 1 and 2 plugins keep working.
      * <br>4: settings in the plugin's own tab ({@link PluginContext#registerSettings}). Every plugin gets that tab,
      * whatever API it declares; only plugins that register settings need {@code "api": 4}.
+     * <br>5: tools can read the selection and preview and apply transforms on it
+     * ({@link ToolContext#selection}, {@link ToolContext#previewTransform}, {@link ToolContext#applyTransform}), hear
+     * about option changes ({@link ToolHandler#optionsChanged}), and options can show only for some values of a
+     * choice ({@link Options.Builder#showWhen}); a tool can leave the left button to block selection
+     * ({@link PluginTool#selects}); plugins can read and fill the hotbar, draw block icons, and pick and set up their
+     * own tools ({@link PluginContext#hotbar}, {@link PluginContext#blockIcon}, {@link PluginContext#setToolOptions}).
      */
-    public static final int VERSION = 4;
+    public static final int VERSION = 5;
 
     /** Name of the descriptor file at the root of a plugin jar. */
     public static final String DESCRIPTOR = "blockdesigner-plugin.json";

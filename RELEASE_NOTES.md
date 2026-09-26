@@ -1,3 +1,32 @@
+# BlockDesigner 0.4.17
+
+One tab per plugin, plugin tool options in the bottom-left corner, and block options you pick like hotbar slots. It also brings plugin API 5, which the new Palette tool in Palette Tools 1.1.0 needs.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.17.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.17.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.17-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Plugin tools that work on the selection.** A plugin tool can now let you select blocks with the left button, as in Select mode (click, drag a box, Shift adds, Ctrl removes), and show what it will do as ghosts before you apply it. [Palette Tools 1.1.0](https://github.com/doolecg/BlockDesigner-PaletteTools/releases/latest) uses this for its new Palette tool: palette swap, weathering and gradients right in the view, plus preset gradients.
+
+## Changed
+- **One tab per plugin.** A plugin's panels are now pages of its own tab, picked in a row along the top (Overview, then its panels), instead of each having a tab of its own.
+- **Plugin tool options sit bottom left** in the 3D view, and messages and the command line move up above them. Only the options that matter for what you've picked show.
+- **Blocks in plugin options are small hotbar slots** with the block's icon. Click one to use the held block, drop a block on it from the block list, right-click to take it out of a mix, and scroll over it to change its share. The pencil next to them still edits them as text.
+
+## For plugin authors
+- **Plugin API 5:** tools can leave the left button to selection (`selects()`), read the selection and preview and apply transforms on it, and hear about option changes; options can show only for some values of a choice (`showWhen`); plugins can read and fill the hotbar, draw block icons, and pick and set up their own tools. See [PLUGINS.md](https://github.com/doolecg/BlockDesigner/blob/main/PLUGINS.md#api-5-extension-points).
+
+---
+
 # BlockDesigner 0.4.16
 
 Plugins update themselves.

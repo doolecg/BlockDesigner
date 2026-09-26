@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -26,7 +27,7 @@ import java.util.regex.Pattern;
  */
 public final class Options {
     private static final Pattern KEY = Pattern.compile("[A-Za-z0-9_.-]+");
-    private static final Options NONE = new Options(List.of());
+    private static final Options NONE = new Options(List.of(), Map.of());
 
     /** One parameter. {@link #key()} identifies it in {@link OptionValues}; {@link #label()} is shown next to its control. */
     public sealed interface Option permits IntegerOption, DecimalOption, ToggleOption, BlockOption, BlockListOption,
@@ -94,10 +95,29 @@ public final class Options {
         }
     }
 
-    private final List<Option> options;
+    /**
+     * Shows an option only while a choice option has one of {@code values} (API 5): a tool with a "Mode" choice can
+     * show just the options of the chosen mode.
+     */
+    public record Condition(String choiceKey, Set<String> values) {
+        public Condition {
+            Objects.requireNonNull(choiceKey, "choiceKey");
+            values = Set.copyOf(values);
+        }
 
-    private Options(List<Option> options) {
+        public boolean test(OptionValues v) {
+            return values.contains(v.choice(choiceKey));
+        }
+    }
+
+    private final List<Option> options;
+    private final Map<String, List<Condition>> conditions;
+
+    private Options(List<Option> options, Map<String, List<Condition>> conditions) {
         this.options = List.copyOf(options);
+        Map<String, List<Condition>> c = new LinkedHashMap<>();
+        conditions.forEach((k, v) -> c.put(k, List.copyOf(v)));
+        this.conditions = Map.copyOf(c);
     }
 
     /** No parameters: the feature runs straight away. */
@@ -123,6 +143,17 @@ public final class Options {
         return options.isEmpty();
     }
 
+    /** When the option {@code key} is shown: every condition must hold; empty when always (see {@link Builder#showWhen}). */
+    public List<Condition> conditions(String key) {
+        return conditions.getOrDefault(key, List.of());
+    }
+
+    /** Whether the option {@code key} is shown with these values. Hidden options keep their values. */
+    public boolean shown(String key, OptionValues values) {
+        for (Condition c : conditions(key)) if (!c.test(values)) return false;
+        return true;
+    }
+
     /** Values with every option at its default. */
     public OptionValues defaults() {
         return OptionValues.defaults(this);
@@ -131,6 +162,8 @@ public final class Options {
     /** Builds {@link Options}; keys must be unique and use {@code A-Z a-z 0-9 _ . -}. */
     public static final class Builder {
         private final Map<String, Option> options = new LinkedHashMap<>();
+        private final Map<String, List<Condition>> conditions = new LinkedHashMap<>();
+        private String last;
 
         private Builder() {
         }
@@ -175,11 +208,27 @@ public final class Options {
         private Builder add(Option o) {
             if (!KEY.matcher(o.key()).matches()) throw new IllegalArgumentException("Option keys use A-Z, a-z, 0-9, _ . - only: " + o.key());
             if (options.putIfAbsent(o.key(), o) != null) throw new IllegalArgumentException("Option '" + o.key() + "' added twice");
+            last = o.key();
+            return this;
+        }
+
+        /**
+         * Shows the option added just before this call only while the choice option {@code choiceKey} (added earlier)
+         * is one of {@code values} (API 5; older BlockDesigners show it always). Called more than once, every
+         * condition must hold.
+         */
+        public Builder showWhen(String choiceKey, String... values) {
+            if (last == null) throw new IllegalStateException("showWhen follows the option it applies to");
+            if (!(options.get(choiceKey) instanceof ChoiceOption c) || choiceKey.equals(last))
+                throw new IllegalArgumentException("showWhen needs an earlier choice option, not '" + choiceKey + "'");
+            for (String v : values)
+                if (!c.values().contains(v)) throw new IllegalArgumentException("'" + v + "' is not a value of '" + choiceKey + "'");
+            conditions.computeIfAbsent(last, k -> new ArrayList<>()).add(new Condition(choiceKey, Set.of(values)));
             return this;
         }
 
         public Options build() {
-            return options.isEmpty() ? NONE : new Options(new ArrayList<>(options.values()));
+            return options.isEmpty() ? NONE : new Options(new ArrayList<>(options.values()), conditions);
         }
     }
 }

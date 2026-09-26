@@ -5,6 +5,7 @@ import io.blockdesigner.core.model.BlockState;
 import io.blockdesigner.core.model.Box;
 import io.blockdesigner.core.worldedit.WorldEdit;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -30,6 +31,39 @@ public interface ToolContext {
      * are (new blocks go into the active layer). A stroke still open when the tool is deactivated is committed.
      */
     Stroke beginStroke(String label);
+
+    /**
+     * The selected blocks (Select mode, or the //pos1 //pos2 region), in world coordinates; empty when nothing is
+     * selected. Blocks on locked or hidden layers are left out. API 5.
+     */
+    Optional<Selection> selection();
+
+    /**
+     * Runs {@code transform} on the {@link #selection()} with these options and seed (the transform's own options are
+     * ignored), and shows what it would change as ghosts with the selection outlined, replacing the preview. Nothing
+     * in the project changes. Returns how many blocks would change; 0 (and a cleared preview) when nothing is
+     * selected. Exceptions from the transform are passed on. API 5.
+     */
+    int previewTransform(PluginTransform transform, OptionValues options, long seed);
+
+    /**
+     * Runs {@code transform} on the {@link #selection()} for real as one undo step labelled with its name, the same
+     * way as {@link #previewTransform} (same options and seed, same result), and clears the preview. Returns how many
+     * blocks changed. API 5.
+     */
+    int applyTransform(PluginTransform transform, OptionValues options, long seed);
+
+    /**
+     * The selected blocks.
+     *
+     * @param bounds world box around {@code blocks}
+     * @param blocks the non-air selected blocks, world positions
+     */
+    record Selection(Box bounds, List<BlockPos> blocks) {
+        public Selection {
+            blocks = List.copyOf(blocks);
+        }
+    }
 
     /** Ghost blocks and outlines drawn over the scene. Cleared when the tool is deactivated. */
     interface Preview {

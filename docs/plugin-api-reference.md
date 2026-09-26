@@ -49,7 +49,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 
 | Member | Description |
 |---|---|
-| `static final int VERSION = 3` | The API version this BlockDesigner provides. Plugins declaring a newer `api` are not loaded. |
+| `static final int VERSION = 5` | The API version this BlockDesigner provides. Plugins declaring a newer `api` are not loaded. |
 | `static final String DESCRIPTOR = "blockdesigner-plugin.json"` | Name of the manifest at the root of a plugin jar. |
 
 ### BlockDesignerPlugin
@@ -79,7 +79,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `void registerAction(PluginAction action)` | 1 | Adds an entry to the Plugins menu. |
 | `void registerCommand(PluginCommand command)` | 1 | Adds a command to the command bar. |
 | `void registerTransform(PluginTransform transform)` | 2 | Adds a transform (Plugins › Transform, right-click menu, `/transform <id>`). |
-| `void registerPanel(PluginPanel panel)` | 2 | Adds a panel (a closable tab on the right). |
+| `void registerPanel(PluginPanel panel)` | 2 | Adds a panel: a page of the plugin's tab on the right (from 0.4.17; before, a tab of its own). |
 | `void registerImporter(PluginImporter importer)` | 2 | Adds an importer (Import window, drag and drop). |
 | `void registerTool(PluginTool tool)` | 2 | Adds a tool to the tool dock. |
 | `void registerObjectType(SceneObjectType type)` | 3 | Adds a kind of scene object; objects of it in the open project appear. |
@@ -98,6 +98,11 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `void status(String message)` | 1 | Sets the status bar text. |
 | `void toast(String message)` | 1 | Shows a short message over the 3D view. |
 | `void runOnUiThread(Runnable task)` | 1 | Runs on the JavaFX thread (immediately when already on it). |
+| `List<BlockState> hotbar()` | 5 | The hotbar's nine slots, left to right; air for an empty slot. |
+| `void setHotbar(List<BlockState> blocks)` | 5 | Fills the hotbar from the left with up to nine blocks (air leaves a slot empty), empties the rest and holds the first. |
+| `Optional<Image> blockIcon(BlockState block)` | 5 | The block's icon as the block list and hotbar draw it (JavaFX `Image`); empty while no assets are loaded. |
+| `void pickTool(String toolId)` | 5 | Picks one of this plugin's tools, as its key or button does. |
+| `void setToolOptions(String toolId, UnaryOperator<OptionValues> change)` | 5 | Changes one of this plugin's tools' remembered options; its options bar follows when it is active. |
 
 ## API 1 extension points
 
@@ -146,6 +151,10 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `Optional<Option> get(String key)` | One option by key. |
 | `boolean isEmpty()` | Whether there are no options. |
 | `OptionValues defaults()` | Values with every option at its default. |
+| `List<Condition> conditions(String key)` | API 5: when the option shows (every condition must hold); empty for always. |
+| `boolean shown(String key, OptionValues values)` | API 5: whether the option shows with these values. Hidden options keep their values. |
+
+`record Condition(String choiceKey, Set<String> values)`: holds while the choice option `choiceKey` is one of `values`.
 
 `Builder` methods (each returns the builder; finish with `Options build()`):
 
@@ -159,6 +168,9 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `choice(String key, String label, List<String> values, String defaultValue)` | Drop-down |
 | `text(String key, String label, String defaultValue)` | Text field |
 | `file(String key, String label, List<String> extensions)` | File field with Browse (extensions without the dot; empty for any) |
+| `showWhen(String choiceKey, String... values)` | API 5: shows the option added just before only while an earlier choice option is one of `values`. Call it more than once and every condition must hold. Older BlockDesigners show the option always. |
+
+From 0.4.17, block and block-mix options show as small hotbar-style slots with the block's icon (click for the held block, drop a block on it, right-click removes one from a mix, the wheel changes its share); a pencil button edits the same value as text.
 
 `sealed interface Option { String key(); String label(); }` with the records `IntegerOption`, `DecimalOption`, `ToggleOption`, `BlockOption`, `BlockListOption`, `ChoiceOption`, `TextOption` and `FileOption`, one per builder method.
 
@@ -293,10 +305,10 @@ Typed getters throw `IllegalArgumentException` for an unknown key or the wrong t
 | Member | Description |
 |---|---|
 | `PluginContext plugin()` | The plugin's context. |
-| `boolean isShowing()` | Whether the panel is open and its tab selected. |
+| `boolean isShowing()` | Whether the panel is on screen: its page picked in the plugin's tab, and the tab open and selected. |
 | `void onShown(Runnable action)` | Runs each time the panel comes into view. |
-| `void setBadge(String text)` | Text next to the tab title; `null` or empty removes it. |
-| `void reveal()` | Opens the panel if closed and selects its tab. |
+| `void setBadge(String text)` | Text next to the panel's page button; `null` or empty removes it. |
+| `void reveal()` | Opens the plugin's tab if closed, selects it and shows the panel's page. |
 
 ### PluginTool
 
@@ -309,7 +321,8 @@ Typed getters throw `IllegalArgumentException` for an unknown key or the wrong t
 | `default String description()` | One tooltip line: what the buttons do. |
 | `default String icon()` | 16×16 SVG path data; `null` for a default. |
 | `default String defaultKey()` | JavaFX `KeyCombination` text (`"Shift+K"`), or `null`; ignored when the key is already bound. |
-| `default Options options()` | Parameters shown in the tool's options bar. |
+| `default Options options()` | Parameters shown in the tool's options bar (bottom left of the view). |
+| `default boolean selects()` | API 5: true for a tool that works on the selection. The left button then selects blocks as in Select mode (click, drag a box, Shift adds, Ctrl removes) and the tool gets the right button, the wheel and keys. |
 | `ToolHandler activate(ToolContext context)` | The tool was picked: return the handler for its input. |
 
 ### ToolHandler
@@ -322,6 +335,7 @@ Typed getters throw `IllegalArgumentException` for an unknown key or the wrong t
 | `void press(ToolEvent e)` / `void drag(ToolEvent e)` / `void release(ToolEvent e)` | Left or right button down, moved while held, up. |
 | `boolean scroll(ToolEvent e, double delta)` | Wheel turned (+1 / -1 per notch); return true when used, else the view zooms. |
 | `boolean key(String key)` | A key outside text fields (`"R"`, `"Shift+R"`, `"Esc"`, `"Enter"`); return true when used. |
+| `void optionsChanged()` | API 5: the user (or the plugin, through `setToolOptions`) changed a value in the options bar. |
 | `void deactivate()` | Another tool was picked or the plugin is being disabled. |
 
 ### ToolEvent
@@ -347,6 +361,11 @@ Typed getters throw `IllegalArgumentException` for an unknown key or the wrong t
 | `BlockCatalog blocks()` | The block catalog. |
 | `Preview preview()` | Ghost blocks and outlines. |
 | `Stroke beginStroke(String label)` | Starts an edit that becomes one undo step when committed. |
+| `Optional<Selection> selection()` | API 5: the selected blocks (Select mode, or the `//pos1 //pos2` region) in world coordinates; empty when nothing is selected. Locked and hidden layers are left out. |
+| `int previewTransform(PluginTransform t, OptionValues options, long seed)` | API 5: runs a transform on the selection with these options and seed and shows the result as ghosts (the selection outlined); nothing changes. Returns how many blocks would change. |
+| `int applyTransform(PluginTransform t, OptionValues options, long seed)` | API 5: the same, for real, as one undo step; clears the preview. Returns how many blocks changed. |
+
+`record Selection(Box bounds, List<BlockPos> blocks)`: the box around the selected blocks, and the non-air ones.
 
 `interface Preview`: `void ghost(Map<BlockPos, BlockState> blocks)` (air entries outlined in red; replaces earlier ghosts), `void outline(Box box)` (`null` removes it), `void clear()`.
 `interface Stroke extends AutoCloseable`: `WorldEdit.World world()` (world coordinates; reads see the stroke's own writes), `void commit()`, `void cancel()` (puts every changed block back), `close()` commits.

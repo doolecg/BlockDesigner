@@ -258,6 +258,18 @@ public final class Workspace {
         return selectedBlock.get();
     }
 
+    /** Fills the hotbar from the left (null leaves a slot empty), empties the rest and holds the first block. */
+    public void setHotbar(java.util.List<BlockState> blocks) {
+        for (int i = 0; i < HOTBAR_SIZE; i++) hotbar.set(i, i < blocks.size() ? blocks.get(i) : null);
+        hotbarSlot.set(-1);
+        for (int i = 0; i < HOTBAR_SIZE; i++) {
+            if (hotbar.get(i) != null) {
+                selectHotbarSlot(i);
+                break;
+            }
+        }
+    }
+
     /** Shift+C (by default): empties every slot (the held block stays selected). */
     public void clearHotbar() {
         for (int i = 0; i < HOTBAR_SIZE; i++) hotbar.set(i, null);

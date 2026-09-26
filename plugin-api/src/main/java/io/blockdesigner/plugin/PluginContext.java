@@ -133,4 +133,30 @@ public interface PluginContext {
 
     /** Runs on the JavaFX thread (immediately when already on it). */
     void runOnUiThread(Runnable task);
+
+    // ---- hotbar, icons and tools (API 5) ---------------------------------------------------------------------
+
+    /** The hotbar's nine slots, left to right; air for an empty slot. Since API 5. */
+    java.util.List<io.blockdesigner.core.model.BlockState> hotbar();
+
+    /**
+     * Fills the hotbar from the left with up to nine blocks (air leaves a slot empty), empties the rest and holds the
+     * first block. Since API 5.
+     */
+    void setHotbar(java.util.List<io.blockdesigner.core.model.BlockState> blocks);
+
+    /**
+     * The block's icon as the block list and hotbar draw it; empty while no Minecraft assets are loaded. Call on the
+     * JavaFX thread. Since API 5.
+     */
+    Optional<javafx.scene.image.Image> blockIcon(io.blockdesigner.core.model.BlockState block);
+
+    /** Picks one of this plugin's tools by its id, as its key or button does. Since API 5. */
+    void pickTool(String toolId);
+
+    /**
+     * Changes the remembered options of one of this plugin's tools (by its id); when it is the active tool, its
+     * options bar and handler follow straight away. Since API 5.
+     */
+    void setToolOptions(String toolId, java.util.function.UnaryOperator<OptionValues> change);
 }

@@ -31,10 +31,12 @@ API 2 also adds exporter options, summaries and progress; declarative `Options`;
 
 When a plugin is disabled, or fails while enabling, BlockDesigner removes everything it registered.
 
-**Every plugin gets its own tab** on the right, whatever API it declares, so users can see it's running. The tab
-shows its name, version and a Running (or Failed) status, its description, its settings (API 4), and everything it
-registered, each with a button to use it: actions, tools, transforms and panels, plus its commands, formats,
-importers, exporters and object types. A **Turn off** button disables it. Users can close the tab like any other.
+**Every plugin gets its own tab** on the right, whatever API it declares, so users can see it's running, and from
+0.4.17 it is the only tab a plugin gets. Its **Overview** page shows its name, version and a Running (or Failed)
+status, its description, its settings (API 4), and everything it registered, each with a button to use it: actions,
+tools, transforms and panels, plus its commands, formats, importers, exporters and object types. A **Turn off** button
+disables it. The plugin's panels are further pages of the same tab, picked in a row of buttons along the top. Users can
+close the tab like any other.
 
 ## Getting started
 
@@ -689,6 +691,37 @@ ctx.registerSettings(Options.builder()
         .build(), v -> height = v.decimal("height"));
 ```
 
+## API 5 extension points
+
+Plugins that use any of these declare `"api": 5` (BlockDesigner 0.4.17 and later).
+
+### Tools that work on the selection
+
+A tool whose `selects()` returns true leaves the left button to block selection, exactly as in Select mode, and gets
+the right button, the wheel and keys. Its `ToolContext` can read the selection and run a transform on it:
+`previewTransform(transform, options, seed)` shows the result as ghosts, `applyTransform(...)` writes it as one undo
+step, both with the same seed so what was previewed is what gets applied. `ToolHandler.optionsChanged()` says when the
+options bar changed, and `SceneEvent.SelectionChanged` when the selection did, so the preview can follow both.
+
+### Options that show only for some choices
+
+`showWhen(choiceKey, values...)` after an option shows it only while an earlier choice option has one of those values,
+so a tool with a Mode choice shows just the options of the chosen mode:
+
+```java
+Options.builder()
+        .choice("mode", "Mode", List.of("Swap", "Gradient"), "Swap")
+        .block("from", "Replace", BlockState.of("oak_planks")).showWhen("mode", "Swap")
+        .blockList("blocks", "Blocks", List.of(BlockState.of("stone"), BlockState.of("andesite"))).showWhen("mode", "Gradient")
+        .build();
+```
+
+### Hotbar, icons and your own tools
+
+`ctx.hotbar()` and `ctx.setHotbar(blocks)` read and fill the hotbar (up to nine blocks). `ctx.blockIcon(block)` gives
+a block's icon for your panels. `ctx.pickTool(id)` picks one of your tools and `ctx.setToolOptions(id, v -> ...)`
+changes its options, for example from a list of presets in a panel.
+
 ## Rules of the road
 
 - **Threads:** every call into a plugin (`enable`, actions, commands, transforms, panels, tools, events, exporter `summary`) runs on the JavaFX thread. `PluginExporter.export` and `PluginImporter.importFile` run on a background thread; exporters get their own copies of the layers. Do long work on your own thread and come back with `ctx.runOnUiThread(...)` before you touch the scene.
@@ -700,7 +733,7 @@ ctx.registerSettings(Options.builder()
 
 ## Limits and what's not supported yet
 
-- `PluginPanel.Dock.LEFT` and `BOTTOM` fall back to the right-hand tabs; there is no left or bottom dock yet.
+- Panels are pages of the plugin's tab on the right; `PluginPanel.Dock` is not used, so there is no left or bottom dock yet.
 - Plugin tool keys aren't in Settings › Keybinds; they can be changed in `settings.json` (`pluginToolKeys`). A default key BlockDesigner already uses is ignored.
 - Plugin tools don't receive input in flight mode.
 - `/transform <id>` only opens the dialog; applying straight from the command line with options isn't supported.

@@ -410,6 +410,31 @@ public final class MainWindow {
             public io.blockdesigner.app.plugins.SceneObjectStore objects() {
                 return ws.objects();
             }
+
+            @Override
+            public List<io.blockdesigner.core.model.BlockState> hotbar() {
+                return new ArrayList<>(ws.hotbar());
+            }
+
+            @Override
+            public void setHotbar(List<io.blockdesigner.core.model.BlockState> blocks) {
+                ws.setHotbar(blocks);
+            }
+
+            @Override
+            public javafx.scene.image.Image blockIcon(io.blockdesigner.core.model.BlockState block) {
+                return ws.assets() == null ? null : BlockIcons.icon(ws.assets(), block);
+            }
+
+            @Override
+            public void pickTool(io.blockdesigner.app.plugins.PluginManager.Tool tool) {
+                pickPluginTool(tool);
+            }
+
+            @Override
+            public void toolOptionsChanged(io.blockdesigner.app.plugins.PluginManager.Tool tool, io.blockdesigner.plugin.OptionValues values) {
+                viewport.pluginToolOptionsChanged(tool, values);
+            }
         };
     }
 
@@ -482,112 +507,20 @@ public final class MainWindow {
 
     // ---- plugin panels ----------------------------------------------------------------------------------------
 
-    /** A plugin panel's tab in the right-hand tabs, created the first time it is shown. */
-    private final class PanelTab implements io.blockdesigner.plugin.PanelContext {
-        final io.blockdesigner.app.plugins.PluginManager.Panel panel;
-        final javafx.scene.control.Tab tab = new javafx.scene.control.Tab();
-        final Label badge = new Label();
-        final List<Runnable> onShown = new ArrayList<>();
-        boolean created;
-
-        PanelTab(io.blockdesigner.app.plugins.PluginManager.Panel panel) {
-            this.panel = panel;
-            Label title = new Label(panel.panel().title());
-            badge.getStyleClass().add("badge");
-            badge.setVisible(false);
-            badge.setManaged(false);
-            HBox head = new HBox(6, ToolIcons.plugin(panel.panel().icon(), 14), title, badge);
-            head.setAlignment(Pos.CENTER_LEFT);
-            tab.setGraphic(head);
-            tab.setTooltip(new Tooltip(panel.panel().title() + " · from the plugin " + panel.plugin().info().name()));
-            tab.selectedProperty().addListener((o, a, selected) -> {
-                if (selected) shown();
-            });
-        }
-
-        /** Builds the content on first show, then runs the plugin's on-shown actions. */
-        void shown() {
-            if (!created) {
-                created = true;
-                try {
-                    tab.setContent(panel.panel().create(this));
-                } catch (Throwable t) {
-                    plugins.report(panel.plugin(), "Panel '" + panel.panel().title() + "'", t);
-                    Label err = new Label("This panel failed to open: " + t.getMessage());
-                    err.setWrapText(true);
-                    err.getStyleClass().add("plugin-error");
-                    err.setPadding(new Insets(12));
-                    tab.setContent(err);
-                }
-            }
-            for (Runnable r : List.copyOf(onShown)) {
-                try {
-                    r.run();
-                } catch (Throwable t) {
-                    plugins.log(panel.plugin(), "Panel '" + panel.panel().title() + "' on-shown action failed: " + t);
-                }
-            }
-        }
-
-        @Override
-        public io.blockdesigner.plugin.PluginContext plugin() {
-            return panel.plugin().context();
-        }
-
-        @Override
-        public boolean isShowing() {
-            return tab.isSelected() && sideTabs.getTabs().contains(tab) && mainSplit.getItems().contains(rightPanel) && stage.isShowing();
-        }
-
-        @Override
-        public void onShown(Runnable action) {
-            onShown.add(action);
-        }
-
-        @Override
-        public void setBadge(String text) {
-            boolean show = text != null && !text.isBlank();
-            badge.setText(show ? text : "");
-            badge.setVisible(show);
-            badge.setManaged(show);
-        }
-
-        @Override
-        public void reveal() {
-            reopenTab(tab);
-        }
-    }
-
-    private final java.util.Map<String, PanelTab> pluginTabs = new java.util.LinkedHashMap<>();
-    /** Each running (or failed) plugin's own tab: status, settings and what it adds, by plugin id. */
+    /** Each running (or failed) plugin's own tab, the only one it gets: its overview and its panels, by plugin id. */
     private final java.util.Map<String, PluginHomeTab> homeTabs = new java.util.LinkedHashMap<>();
     /** Set while plugin tabs are added or removed with their plugins, so that isn't mistaken for the user closing them. */
     private boolean syncingPanels;
 
     /**
-     * Adds tabs for newly enabled plugins' panels and removes those of disabled ones. Every panel docks on the right
-     * for now; {@link io.blockdesigner.plugin.PluginPanel.Dock LEFT and BOTTOM} fall back to it.
+     * Adds a tab for each newly enabled plugin and removes those of disabled ones. A plugin's panels are pages of its
+     * tab, so every plugin has exactly one; {@link io.blockdesigner.plugin.PluginPanel.Dock} is not used for now.
      */
     private void syncPluginPanels() {
         if (rightPanel.getCenter() == null) return; // the tabs aren't built yet (setRightPanel adds them)
-        java.util.Map<String, io.blockdesigner.app.plugins.PluginManager.Panel> now = new java.util.LinkedHashMap<>();
-        for (var p : plugins.panels()) now.put(p.key(), p);
         syncingPanels = true;
         try {
             syncHomeTabs();
-            for (var it = pluginTabs.entrySet().iterator(); it.hasNext(); ) {
-                var e = it.next();
-                var current = now.get(e.getKey());
-                if (current != null && current.panel() == e.getValue().panel.panel()) continue;
-                sideTabs.getTabs().remove(e.getValue().tab);
-                it.remove();
-            }
-            for (var e : now.entrySet()) {
-                if (pluginTabs.containsKey(e.getKey())) continue;
-                PanelTab pt = new PanelTab(e.getValue());
-                pluginTabs.put(e.getKey(), pt);
-                if (!ws.settings().closedPluginPanels.contains(e.getKey())) sideTabs.getTabs().add(pt.tab);
-            }
         } finally {
             syncingPanels = false;
         }
@@ -643,12 +576,6 @@ public final class MainWindow {
             }
 
             @Override
-            public void openPanel(io.blockdesigner.app.plugins.PluginManager.Panel p) {
-                PanelTab pt = pluginTabs.get(p.key());
-                if (pt != null) reopenTab(pt.tab);
-            }
-
-            @Override
             public void managePlugins() {
                 showPluginsDialog();
             }
@@ -657,6 +584,16 @@ public final class MainWindow {
             public void disable(io.blockdesigner.app.plugins.PluginManager.Plugin p) {
                 plugins.setEnabled(p, false);
                 viewport.showToast(p.info().name() + " turned off · Manage plugins turns it back on");
+            }
+
+            @Override
+            public boolean isShowing(javafx.scene.control.Tab tab) {
+                return tab.isSelected() && sideTabs.getTabs().contains(tab) && mainSplit.getItems().contains(rightPanel) && stage.isShowing();
+            }
+
+            @Override
+            public void reveal(javafx.scene.control.Tab tab) {
+                reopenTab(tab);
             }
         };
     }
@@ -679,7 +616,7 @@ public final class MainWindow {
         if (!sideTabs.getTabs().contains(tab)) sideTabs.getTabs().add(tab);
         sideTabs.getSelectionModel().select(tab);
         // A tab that was already selected doesn't fire a selection change: run its on-shown actions anyway.
-        for (PanelTab pt : pluginTabs.values()) if (pt.tab == tab) pt.shown();
+        for (PluginHomeTab home : homeTabs.values()) if (home.tab == tab) home.shown();
     }
 
     /** Syncs settings, the closed-tabs bar and whether the right panel is shown at all. */
@@ -687,12 +624,7 @@ public final class MainWindow {
         boolean resources = sideTabs.getTabs().contains(resourcesTab);
         ws.settings().showResources = resources;
         if (!syncingPanels) {
-            // Remember which plugin panels the user closed, so they stay closed next time.
-            for (var e : pluginTabs.entrySet()) {
-                boolean open = sideTabs.getTabs().contains(e.getValue().tab);
-                if (open) ws.settings().closedPluginPanels.remove(e.getKey());
-                else if (!ws.settings().closedPluginPanels.contains(e.getKey())) ws.settings().closedPluginPanels.add(e.getKey());
-            }
+            // Remember which plugin tabs the user closed, so they stay closed next time.
             for (var e : homeTabs.entrySet()) {
                 String key = homeKey(e.getKey());
                 boolean open = sideTabs.getTabs().contains(e.getValue().tab);
@@ -706,11 +638,6 @@ public final class MainWindow {
         for (PluginHomeTab home : homeTabs.values()) {
             if (!sideTabs.getTabs().contains(home.tab)) {
                 closedTabsBar.getChildren().add(closedTabButton(home.tab, home.plugin.info().name(), ToolIcons.plugin(home.icon(), 14)));
-            }
-        }
-        for (PanelTab pt : pluginTabs.values()) {
-            if (!sideTabs.getTabs().contains(pt.tab)) {
-                closedTabsBar.getChildren().add(closedTabButton(pt.tab, pt.panel.panel().title(), ToolIcons.plugin(pt.panel.panel().icon(), 14)));
             }
         }
         boolean anyClosed = !closedTabsBar.getChildren().isEmpty();
@@ -1331,7 +1258,7 @@ public final class MainWindow {
         io.blockdesigner.plugin.OptionValues values = plugins.optionStore().load(key, importer.options(), plugins.blocks());
         if (!importer.options().isEmpty()) {
             OptionsEditor editor = new OptionsEditor(values, plugins.blocks(), () -> ws.selectedBlockProperty().get(), v -> {
-            });
+            }).icons(ws);
             javafx.scene.control.Dialog<ButtonType> d = new javafx.scene.control.Dialog<>();
             d.initOwner(stage);
             d.setTitle(importer.displayName());

@@ -99,4 +99,45 @@ class OptionsTest {
         assertThatThrownBy(() -> BlockPattern.parse("x%stone", PARSE)).hasMessageContaining("weight");
         assertThatThrownBy(() -> BlockPattern.parse(" , ", PARSE)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void showWhenHidesAnOptionOutsideItsChoices() {
+        Options o = Options.builder()
+                .choice("mode", "Mode", List.of("swap", "weather", "gradient"), "swap")
+                .block("from", "Replace", BlockState.of("oak_planks"))
+                .showWhen("mode", "swap")
+                .decimal("amount", "Amount", 0.3, 0, 1)
+                .showWhen("mode", "weather", "gradient")
+                .toggle("always", "Always", true)
+                .build();
+        OptionValues v = o.defaults();
+        assertThat(o.shown("from", v)).isTrue();
+        assertThat(o.shown("amount", v)).isFalse();
+        assertThat(o.shown("always", v)).isTrue();
+        assertThat(o.shown("mode", v)).isTrue();
+        OptionValues g = v.with("mode", "gradient");
+        assertThat(o.shown("from", g)).isFalse();
+        assertThat(o.shown("amount", g)).isTrue();
+        // Hidden options keep their values.
+        assertThat(g.block("from")).isEqualTo(BlockState.of("oak_planks"));
+        assertThat(o.conditions("from")).containsExactly(new Options.Condition("mode", java.util.Set.of("swap")));
+        assertThat(o.conditions("always")).isEmpty();
+        // Several conditions: all must hold.
+        Options two = Options.builder()
+                .choice("mode", "Mode", List.of("a", "b"), "a")
+                .choice("style", "Style", List.of("soft", "hard"), "soft")
+                .decimal("blend", "Blend", 0.5, 0, 1)
+                .showWhen("style", "soft")
+                .showWhen("mode", "a")
+                .build();
+        OptionValues t = two.defaults();
+        assertThat(two.shown("blend", t)).isTrue();
+        assertThat(two.shown("blend", t.with("style", "hard"))).isFalse();
+        assertThat(two.shown("blend", t.with("mode", "b"))).isFalse();
+
+        assertThatThrownBy(() -> Options.builder().showWhen("mode", "x")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> Options.builder().toggle("a", "A", true).showWhen("a", "x")).hasMessageContaining("choice");
+        assertThatThrownBy(() -> Options.builder().choice("m", "M", List.of("a"), "a").toggle("t", "T", true).showWhen("m", "b"))
+                .hasMessageContaining("not a value");
+    }
 }

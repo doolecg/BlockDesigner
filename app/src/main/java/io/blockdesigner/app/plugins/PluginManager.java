@@ -826,5 +826,45 @@ public final class PluginManager {
         public void runOnUiThread(Runnable task) {
             host.runOnUiThread(task);
         }
+
+        @Override
+        public List<BlockState> hotbar() {
+            List<BlockState> out = new ArrayList<>();
+            for (BlockState st : host.hotbar()) out.add(st == null ? BlockState.AIR : st);
+            return List.copyOf(out);
+        }
+
+        @Override
+        public void setHotbar(List<BlockState> blocks) {
+            if (blocks.size() > 9) throw new IllegalArgumentException("The hotbar has 9 slots, not " + blocks.size());
+            List<BlockState> slots = new ArrayList<>();
+            for (BlockState st : blocks) slots.add(st == null || st.isAir() ? null : st);
+            host.setHotbar(slots);
+        }
+
+        @Override
+        public Optional<javafx.scene.image.Image> blockIcon(BlockState block) {
+            return Optional.ofNullable(host.blockIcon(block));
+        }
+
+        @Override
+        public void pickTool(String toolId) {
+            host.pickTool(tool(toolId));
+        }
+
+        @Override
+        public void setToolOptions(String toolId, java.util.function.UnaryOperator<OptionValues> change) {
+            Tool t = tool(toolId);
+            String key = OptionStore.key(p.info.id(), "tool", toolId);
+            OptionValues v = change.apply(optionStore.load(key, t.tool().options(), catalog));
+            if (v == null) throw new IllegalArgumentException("setToolOptions: the change gave no values");
+            optionStore.save(key, v);
+            host.toolOptionsChanged(t, v);
+        }
+
+        private Tool tool(String id) {
+            for (PluginTool t : p.tools) if (t.id().equals(id)) return new Tool(p, t);
+            throw new IllegalArgumentException(p.info.name() + " has no tool '" + id + "'");
+        }
     }
 }

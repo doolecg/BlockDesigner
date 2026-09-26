@@ -417,7 +417,7 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
             if (!ex.options().isEmpty()) {
                 pluginEditor = new OptionsEditor(pluginOptions.load(optionsKey(pc), ex.options(), blocks), blocks,
                         () -> ws.selectedBlockProperty().get(), v -> {
-                });
+                }).icons(ws);
             }
         }
 

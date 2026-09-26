@@ -69,4 +69,28 @@ public interface PluginHost {
     default SceneObjectStore objects() {
         return null;
     }
+
+    // ---- API 5 ------------------------------------------------------------------------------------------------
+
+    /** The hotbar's slots, null for empty ones. */
+    default List<io.blockdesigner.core.model.BlockState> hotbar() {
+        return List.of();
+    }
+
+    /** Fills the hotbar from the left (null leaves a slot empty) and holds the first block. */
+    default void setHotbar(List<io.blockdesigner.core.model.BlockState> blocks) {
+    }
+
+    /** A block's icon, or null while no assets are loaded. */
+    default javafx.scene.image.Image blockIcon(io.blockdesigner.core.model.BlockState block) {
+        return null;
+    }
+
+    /** Makes a plugin tool the active tool. */
+    default void pickTool(PluginManager.Tool tool) {
+    }
+
+    /** A plugin changed a tool's remembered options: the active tool's options bar should follow. */
+    default void toolOptionsChanged(PluginManager.Tool tool, io.blockdesigner.plugin.OptionValues values) {
+    }
 }

@@ -84,7 +84,7 @@ final class TransformDialog extends Dialog<Void> {
         target.setMaxWidth(Double.MAX_VALUE);
         body.getChildren().addAll(by, target);
 
-        editor = new OptionsEditor(values, plugins.blocks(), () -> ws.selectedBlockProperty().get(), v -> schedulePreview());
+        editor = new OptionsEditor(values, plugins.blocks(), () -> ws.selectedBlockProperty().get(), v -> schedulePreview()).icons(ws);
         if (!t.options().isEmpty()) body.getChildren().add(editor);
         if (t.randomized()) body.getChildren().add(seedRow());
         status.setWrapText(true);

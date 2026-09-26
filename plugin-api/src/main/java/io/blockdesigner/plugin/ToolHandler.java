@@ -41,6 +41,10 @@ public interface ToolHandler {
         return false;
     }
 
+    /** The user changed a value in the tool's options bar; read the new ones from {@link ToolContext#options()}. API 5. */
+    default void optionsChanged() {
+    }
+
     /** Another tool was picked (or the plugin is being disabled): finish or cancel what is in progress. */
     default void deactivate() {
     }

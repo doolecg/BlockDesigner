@@ -1333,3 +1333,45 @@
     -fx-font-weight: bold;
     -fx-font-size: 12px;
 }
+
+/* Block slots in plugin options: small hotbar slots. */
+.option-slot {
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+    -fx-border-width: 1.5;
+    -fx-border-color: -bd-glass-border;
+}
+
+.option-slot:hover {
+    -fx-border-color: -bd-accent;
+}
+
+.option-slot .hotbar-number {
+    -fx-font-size: 8.5px;
+}
+
+/* A plugin tab's pages (Overview and its panels), picked along the top. */
+.plugin-pages {
+    -fx-border-color: transparent transparent -bd-glass-border transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 8 10 6 10;
+}
+
+.plugin-page {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-padding: 3 8 3 8;
+    -fx-font-size: 11.5px;
+    -fx-cursor: hand;
+}
+
+.plugin-page:hover {
+    -fx-background-color: -bd-accent-soft;
+}
+
+.plugin-page:selected {
+    -fx-background-color: -bd-accent-soft;
+    -fx-border-color: -bd-accent;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+}

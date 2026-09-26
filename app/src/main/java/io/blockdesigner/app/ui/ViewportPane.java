@@ -386,8 +386,10 @@ public final class ViewportPane extends StackPane {
         pluginToolBar.getStyleClass().add("brush-bar");
         pluginToolBar.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
         pluginToolBar.setVisible(false);
-        StackPane.setAlignment(pluginToolBar, Pos.BOTTOM_CENTER);
-        StackPane.setMargin(pluginToolBar, new javafx.geometry.Insets(0, 0, 76, 0));
+        // Plugin tool options sit bottom left; the toast and command bar move up over them (see updateModeBadge).
+        StackPane.setAlignment(pluginToolBar, Pos.BOTTOM_LEFT);
+        StackPane.setMargin(pluginToolBar, new javafx.geometry.Insets(0, 0, 14, 12));
+        pluginToolBar.heightProperty().addListener((o, x, y) -> updateModeBadge());
         StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 14, 0));
         shapeInfo.getStyleClass().add("viewport-toast");
@@ -1097,7 +1099,7 @@ public final class ViewportPane extends StackPane {
         ToolKind mode = ws.toolProperty().get();
         if (fly) {
             // Minecraft controls in Build mode: left break, right place, middle pick. Select mode selects the aimed block.
-            if (mode == ToolKind.SELECT && e.getButton() == MouseButton.PRIMARY) {
+            if ((mode == ToolKind.SELECT || pluginSelects()) && e.getButton() == MouseButton.PRIMARY) {
                 selectClick(e.isShiftDown(), e.isShortcutDown());
             } else if (mode == ToolKind.SELECT && e.getButton() == MouseButton.SECONDARY) {
                 setCorner(false);
@@ -1140,7 +1142,7 @@ public final class ViewportPane extends StackPane {
             orbitPivot = viewSwing ? null : pivotUnder(e.getX(), e.getY());
             return;
         }
-        if (pluginToolActive() && (e.getButton() == MouseButton.PRIMARY || e.getButton() == MouseButton.SECONDARY)) {
+        if (pluginGets(e.getButton())) {
             updateHover(e.getX(), e.getY());
             pluginTool.press(toolEvent(e.getX(), e.getY(), e.getButton(), e.isShiftDown(), e.isShortcutDown(), e.isAltDown()));
             return;
@@ -1228,7 +1230,7 @@ public final class ViewportPane extends StackPane {
             updateHover(e.getX(), e.getY());
             return;
         }
-        if (pluginToolActive() && (dragButton == MouseButton.PRIMARY || dragButton == MouseButton.SECONDARY)) {
+        if (pluginGets(dragButton)) {
             updateHover(e.getX(), e.getY());
             pluginTool.drag(toolEvent(e.getX(), e.getY(), dragButton, e.isShiftDown(), e.isShortcutDown(), e.isAltDown()));
             return;
@@ -1240,7 +1242,7 @@ public final class ViewportPane extends StackPane {
             return;
         }
         updateHover(e.getX(), e.getY());
-        if (ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty() && dragDistance > CLICK_SLOP) {
+        if (selecting() && dragDistance > CLICK_SLOP) {
             marquee.setX(Math.min(pressX, e.getX()));
             marquee.setY(Math.min(pressY, e.getY()));
             marquee.setWidth(Math.abs(e.getX() - pressX));
@@ -1258,7 +1260,7 @@ public final class ViewportPane extends StackPane {
             if (fly) e.consume();
             return;
         }
-        if (!fly && pluginToolActive() && (e.getButton() == MouseButton.PRIMARY || e.getButton() == MouseButton.SECONDARY)) {
+        if (!fly && pluginGets(e.getButton())) {
             updateHover(e.getX(), e.getY());
             pluginTool.release(toolEvent(e.getX(), e.getY(), e.getButton(), e.isShiftDown(), e.isShortcutDown(), e.isAltDown()));
             dragButton = null;
@@ -1310,11 +1312,11 @@ public final class ViewportPane extends StackPane {
             if (e.isShiftDown()) showContextMenu(e.getScreenX(), e.getScreenY());
             else setCorner(false);
         }
-        if (e.getButton() == MouseButton.PRIMARY && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
+        if (e.getButton() == MouseButton.PRIMARY && selecting()) {
             if (marquee.isVisible()) {
                 marqueeSelect(Math.min(pressX, e.getX()), Math.min(pressY, e.getY()), Math.max(pressX, e.getX()), Math.max(pressY, e.getY()),
                         e.isShiftDown(), e.isShortcutDown());
-            } else if (click && !e.isShiftDown() && !e.isShortcutDown() && clickObject(e.getX(), e.getY())) {
+            } else if (click && !e.isShiftDown() && !e.isShortcutDown() && !pluginSelects() && clickObject(e.getX(), e.getY())) {
                 // A click on a scene object selects it (G / R then move or turn it).
                 showToast(ws.objects().selected().map(o -> o.name() + " · " + keyText(Keybinds.Action.TOOL_MOVE) + " move · "
                         + keyText(Keybinds.Action.TOOL_ROTATE) + " rotate · right-click for options").orElse(""));
@@ -4337,6 +4339,21 @@ public final class ViewportPane extends StackPane {
         return pluginTool != null && ws.toolProperty().get() == ToolKind.PLUGIN && placing.isEmpty();
     }
 
+    /** The active plugin tool {@link io.blockdesigner.plugin.PluginTool#selects selects}: the left button selects blocks. */
+    private boolean pluginSelects() {
+        return pluginToolActive() && pluginTool.selects();
+    }
+
+    /** The left button selects blocks now: Select mode, or a plugin tool that works on the selection. */
+    private boolean selecting() {
+        return (ws.toolProperty().get() == ToolKind.SELECT || pluginSelects()) && placing.isEmpty();
+    }
+
+    /** Whether the active plugin tool gets this button (a selecting tool leaves the left one to selection). */
+    private boolean pluginGets(MouseButton b) {
+        return pluginToolActive() && (b == MouseButton.SECONDARY || b == MouseButton.PRIMARY && !pluginTool.selects());
+    }
+
     /**
      * Makes a plugin tool the viewport's tool (the caller then sets the PLUGIN tool mode); null puts the current one
      * down. Returns false when the plugin failed to activate it.
@@ -4363,24 +4380,53 @@ public final class ViewportPane extends StackPane {
                 Layer active = ws.activeLayerProperty().get();
                 return new LayeredEdit(ws, worldLayers(), active != null && !active.locked() ? active : null, ViewportPane.this::newLayer, label, null);
             }
+
+            @Override
+            public io.blockdesigner.app.plugins.TransformRunner.Target selection() {
+                return transformTarget(io.blockdesigner.plugin.PluginTransform.Scope.SELECTION);
+            }
+
+            @Override
+            public io.blockdesigner.core.worldedit.WorldEdit.World readWorld(io.blockdesigner.app.plugins.TransformRunner.Target target) {
+                return transformWorld(target);
+            }
+
+            @Override
+            public int apply(String label, io.blockdesigner.app.plugins.TransformRunner.Target target,
+                             io.blockdesigner.app.plugins.TransformRunner.Changes changes) {
+                return applyTransform(label, target, changes);
+            }
         });
         if (!s.activate()) {
             updateHotbarVisibility();
             return false;
         }
         pluginTool = s;
-        var opts = tool.tool().options();
-        if (!opts.isEmpty()) {
-            Label title = new Label(tool.tool().name());
-            title.getStyleClass().add("brush-title");
-            OptionsEditor editor = new OptionsEditor(s.options(), plugins.blocks(), () -> ws.selectedBlockProperty().get(), s::setOptions);
-            editor.setPrefWidth(320);
-            pluginToolBar.getChildren().addAll(title, editor);
-        }
+        pluginToolOptionsBar(plugins);
         updateHotbarVisibility();
         if (ws.toolProperty().get() == ToolKind.PLUGIN) showToast(pluginToolToast());
         requestFocus();
         return true;
+    }
+
+    /** Fills the options bar (bottom left) with the active plugin tool's options; empty when it has none. */
+    private void pluginToolOptionsBar(io.blockdesigner.app.plugins.PluginManager plugins) {
+        pluginToolBar.getChildren().clear();
+        PluginToolSession s = pluginTool;
+        if (s == null || s.tool().tool().options().isEmpty()) return;
+        Label title = new Label(s.tool().tool().name());
+        title.getStyleClass().add("brush-title");
+        OptionsEditor editor = new OptionsEditor(s.options(), plugins.blocks(), () -> ws.selectedBlockProperty().get(), s::setOptions).icons(ws);
+        editor.setPrefWidth(320);
+        pluginToolBar.getChildren().addAll(title, editor);
+    }
+
+    /** A plugin changed a tool's options from outside (a preset, say): when that tool is active, show and use them. */
+    public void pluginToolOptionsChanged(io.blockdesigner.app.plugins.PluginManager.Tool tool, io.blockdesigner.plugin.OptionValues values) {
+        if (pluginTool == null || !pluginTool.tool().key().equals(tool.key())) return;
+        pluginTool.setOptions(values);
+        pluginToolOptionsBar(pluginTool.plugins());
+        updateHotbarVisibility();
     }
 
     /** The active plugin tool, if one is picked. */
@@ -5183,10 +5229,13 @@ public final class ViewportPane extends StackPane {
         // While the brush options show, their own mode pill stands in for the badge.
         modeBar.setVisible(!brushBar.isVisible());
         modeFrame.setStyle(c == null ? "" : "-bd-mode: " + c + ";");
-        // The key hints sit bottom right, above whatever is along the bottom (hotbar, plugin tool options).
-        double bottom = 14 + (hotbar.isVisible() ? 72 : 0) + (pluginToolBar.isVisible() ? 50 : 0);
+        // The key hints sit bottom right, above the hotbar when it shows.
+        double bottom = 14 + (hotbar.isVisible() ? 72 : 0);
         StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, bottom, 0));
-        StackPane.setMargin(toast, new javafx.geometry.Insets(0, 0, 14, 14));
+        // Bottom left: the toast and the command bar stack above the plugin tool options when they show.
+        double lift = pluginToolBar.isVisible() ? pluginToolBar.getHeight() + 8 : 0;
+        StackPane.setMargin(toast, new javafx.geometry.Insets(0, 0, 14 + lift, 14));
+        StackPane.setMargin(commandBar, new javafx.geometry.Insets(0, 0, Math.max(74, 14 + lift), 12));
         // Top centre: the block info box, below the brush options when they show.
         StackPane.setMargin(hud, new javafx.geometry.Insets(brushBar.isVisible() ? 60 : 12, 0, 0, 0));
     }

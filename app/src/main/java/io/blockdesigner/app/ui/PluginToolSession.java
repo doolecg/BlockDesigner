@@ -3,6 +3,7 @@ package io.blockdesigner.app.ui;
 import io.blockdesigner.app.Workspace;
 import io.blockdesigner.app.plugins.OptionStore;
 import io.blockdesigner.app.plugins.PluginManager;
+import io.blockdesigner.app.plugins.TransformRunner;
 import io.blockdesigner.core.model.BlockPos;
 import io.blockdesigner.core.model.BlockState;
 import io.blockdesigner.core.model.Box;
@@ -10,6 +11,7 @@ import io.blockdesigner.core.worldedit.WorldEdit;
 import io.blockdesigner.plugin.BlockCatalog;
 import io.blockdesigner.plugin.OptionValues;
 import io.blockdesigner.plugin.PluginContext;
+import io.blockdesigner.plugin.PluginTransform;
 import io.blockdesigner.plugin.ToolContext;
 import io.blockdesigner.plugin.ToolEvent;
 import io.blockdesigner.plugin.ToolHandler;
@@ -34,6 +36,15 @@ final class PluginToolSession implements ToolContext {
 
         /** A world edit across the visible layers (new blocks into the active layer), labelled for undo. */
         LayeredEdit newEdit(String label);
+
+        /** The selected blocks as a transform target, or null when nothing is selected. */
+        TransformRunner.Target selection();
+
+        /** The blocks as a transform on {@code target} reads them. */
+        WorldEdit.World readWorld(TransformRunner.Target target);
+
+        /** Writes a transform's changes as one undo step; returns how many cells changed. */
+        int apply(String label, TransformRunner.Target target, TransformRunner.Changes changes);
     }
 
     private final Workspace ws;
@@ -60,6 +71,19 @@ final class PluginToolSession implements ToolContext {
         return tool;
     }
 
+    PluginManager plugins() {
+        return plugins;
+    }
+
+    /** Whether the tool leaves the left button to block selection (see {@link io.blockdesigner.plugin.PluginTool#selects}). */
+    boolean selects() {
+        try {
+            return tool.tool().selects();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /** Calls the plugin's {@code activate}; false (and a toast) when it fails. */
     boolean activate() {
         try {
@@ -77,6 +101,7 @@ final class PluginToolSession implements ToolContext {
     void setOptions(OptionValues values) {
         options = values;
         plugins.optionStore().save(optionsKey, values);
+        call("optionsChanged", ToolHandler::optionsChanged);
     }
 
     void hover(ToolEvent e) {
@@ -185,6 +210,45 @@ final class PluginToolSession implements ToolContext {
             else solid.put(p, st);
         });
         viewport.showPreview(solid, removed, outline == null ? List.of() : List.of(outline));
+    }
+
+    @Override
+    public Optional<Selection> selection() {
+        TransformRunner.Target t = viewport.selection();
+        return t == null ? Optional.empty() : Optional.of(new Selection(t.bounds(), t.blocks()));
+    }
+
+    @Override
+    public int previewTransform(PluginTransform transform, OptionValues values, long seed) {
+        TransformRunner.Target t = viewport.selection();
+        if (t == null) {
+            preview().clear();
+            return 0;
+        }
+        TransformRunner.Changes c = run(transform, t, values, seed, true);
+        // Air in the changes shows as a red outline, as with the tool's own ghosts.
+        ghosts = new LinkedHashMap<>(c.blocks());
+        outline = t.bounds();
+        show();
+        return c.size();
+    }
+
+    @Override
+    public int applyTransform(PluginTransform transform, OptionValues values, long seed) {
+        TransformRunner.Target t = viewport.selection();
+        preview().clear();
+        if (t == null) return 0;
+        return viewport.apply(transform.name(), t, run(transform, t, values, seed, false));
+    }
+
+    private TransformRunner.Changes run(PluginTransform transform, TransformRunner.Target t, OptionValues values, long seed, boolean preview) {
+        try {
+            return TransformRunner.run(transform, viewport.readWorld(t), t, values, seed, plugins.blocks(), preview);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException(transform.name() + ": " + e.getMessage(), e);
+        }
     }
 
     @Override
