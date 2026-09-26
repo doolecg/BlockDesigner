@@ -986,11 +986,9 @@ public final class MainWindow {
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (scene.getFocusOwner() instanceof TextInputControl) return;
             // Any key pressed with Alt is a shortcut, so the Alt-held shape wheel must not open (or stay open).
-            if (e.getCode() != KeyCode.ALT) viewport.altComboPressed();
-            // While flying, W A S D, Space, Shift and Ctrl belong to flight: no shortcut may take them (Ctrl+D, Ctrl+A…).
-            if (viewport.isFlying() && (e.getCode() == KeyCode.W || e.getCode() == KeyCode.A || e.getCode() == KeyCode.S
-                    || e.getCode() == KeyCode.D || e.getCode() == KeyCode.SPACE || e.getCode() == KeyCode.SHIFT
-                    || e.getCode() == KeyCode.CONTROL)) return;
+            if (!viewport.isWheelKey(e.getCode())) viewport.altComboPressed();
+            // While flying, the flying keys (W A S D, Space, Shift, Ctrl) belong to flight: no shortcut may take them.
+            if (viewport.isFlying() && viewport.isFlyKey(e.getCode())) return;
             // The brush popup's own keys (mode letters, size, strength) while it is open.
             if (viewport.brushPopupKey(e)) {
                 e.consume();
@@ -1001,32 +999,7 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
-            ToolKind tool = ws.toolProperty().get();
-            // Alt+1…Alt+0 pick the brush mode (Alt isn't a flight key, so this works while flying too).
-            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && e.isAltDown() && !e.isShortcutDown()
-                    && e.getCode().isDigitKey() && !e.getCode().isKeypadKey()) {
-                String name = e.getCode().getName();
-                int d = name.charAt(name.length() - 1) - '0';
-                viewport.setBrushMode(d == 0 ? 9 : d - 1);
-                e.consume();
-                return;
-            }
-            if (boundKey(e, scene)) {
-                e.consume();
-                return;
-            }
-            // Numpad: Blender's view keys (front, right, top, ortho…), with or without Ctrl.
-            if ((e.getCode().isKeypadKey() || e.getCode() == KeyCode.DECIMAL) && !e.isAltDown() && viewport.numpad(e)) {
-                e.consume();
-                return;
-            }
-            if (e.isShortcutDown() || e.isAltDown()) return;
-            if (e.getCode().isDigitKey() && !e.getCode().isKeypadKey() && e.getCode() != KeyCode.DIGIT0) {
-                // 1-9 hold a hotbar slot, like Minecraft.
-                String name = e.getCode().getName();
-                ws.selectHotbarSlot(name.charAt(name.length() - 1) - '1');
-                e.consume();
-            }
+            if (boundKey(e, scene)) e.consume();
         });
         applyAccelerators();
     }
@@ -1097,6 +1070,12 @@ public final class MainWindow {
                 case BRUSH_BIGGER -> brush ? () -> viewport.stepBrush(1) : null;
                 case BRUSH_WEAKER -> brush ? () -> viewport.stepBrushStrength(-1) : null;
                 case BRUSH_STRONGER -> brush ? () -> viewport.stepBrushStrength(1) : null;
+                case BRUSH_MODE_1, BRUSH_MODE_2, BRUSH_MODE_3, BRUSH_MODE_4, BRUSH_MODE_5, BRUSH_MODE_6, BRUSH_MODE_7, BRUSH_MODE_8,
+                     BRUSH_MODE_9, BRUSH_MODE_10 -> brush ? () -> viewport.setBrushMode(a.ordinal() - Keybinds.Action.BRUSH_MODE_1.ordinal()) : null;
+                case HOTBAR_1, HOTBAR_2, HOTBAR_3, HOTBAR_4, HOTBAR_5, HOTBAR_6, HOTBAR_7, HOTBAR_8, HOTBAR_9 ->
+                        () -> ws.selectHotbarSlot(a.ordinal() - Keybinds.Action.HOTBAR_1.ordinal());
+                case VIEW_FRONT, VIEW_BACK, VIEW_RIGHT, VIEW_LEFT, VIEW_TOP, VIEW_BOTTOM, VIEW_OPPOSITE, VIEW_ORTHO_TOGGLE,
+                     ORBIT_LEFT, ORBIT_RIGHT, ORBIT_UP, ORBIT_DOWN, FRAME_ACTIVE -> () -> viewport.cameraKey(a);
                 case SHORTCUTS -> viewport::toggleShortcuts;
                 case KEY_HINTS -> viewport::toggleKeyHints;
                 case VIEWPORT_SETTINGS -> viewport::toggleSettings;

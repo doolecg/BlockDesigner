@@ -12,6 +12,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class KeybindsTest {
     @Test
+    void noTwoDefaultsClash() {
+        Keybinds k = new Keybinds(new Settings());
+        for (Keybinds.Action a : Keybinds.Action.values())
+            for (KeyCombination c : k.get(a)) assertThat(k.usersOf(c, a)).as(a + " " + Keybinds.text(c)).isEmpty();
+    }
+
+    @Test
     void everyDefaultParses() {
         for (Keybinds.Action a : Keybinds.Action.values()) {
             assertThat(a.defaults()).as(a.name()).isNotEmpty().doesNotContainNull();
@@ -59,5 +66,42 @@ class KeybindsTest {
         assertThat(k.caps(Keybinds.Action.LAYER_BELOW)).isEqualTo(List.of("["));
         assertThat(Keybinds.text(k.get(Keybinds.Action.REPLACE_MODE)[0])).isEqualTo("Shift+X");
         assertThat(k.get(Keybinds.Action.TOOL_ERASER)[1]).as("the old second keys are gone").isNull();
+    }
+
+    static javafx.scene.input.KeyEvent press(KeyCode c, boolean shift, boolean ctrl, boolean alt) {
+        return new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", c, shift, ctrl, alt, false);
+    }
+
+    @Test
+    void heldKeysTakeModifiersAloneAndMatchWhateverElseIsDown() {
+        Settings s = new Settings();
+        Keybinds k = new Keybinds(s);
+        assertThat(k.holds(Keybinds.Action.FLY_DOWN, KeyCode.SHIFT)).isTrue();
+        assertThat(k.holds(Keybinds.Action.FLY_SPRINT, KeyCode.CONTROL)).isTrue();
+        assertThat(k.caps(Keybinds.Action.FLY_DOWN)).isEqualTo(List.of("Shift"));
+        // Sprinting forward: W is still "forward" with Ctrl held.
+        assertThat(k.matches(Keybinds.Action.FLY_FORWARD, press(KeyCode.W, false, true, false))).isTrue();
+
+        k.set(Keybinds.Action.FLY_DOWN, 0, Keybinds.parse("Ctrl"));
+        k.set(Keybinds.Action.FLY_SPRINT, 0, Keybinds.parse("Shift"));
+        Keybinds again = new Keybinds(s);
+        assertThat(again.holds(Keybinds.Action.FLY_DOWN, KeyCode.CONTROL)).isTrue();
+        assertThat(again.holds(Keybinds.Action.FLY_DOWN, KeyCode.SHIFT)).isFalse();
+        assertThat(again.holds(Keybinds.Action.FLY_SPRINT, KeyCode.SHIFT)).isTrue();
+    }
+
+    @Test
+    void pressedKeysMatchExactly() {
+        Keybinds k = new Keybinds(new Settings());
+        assertThat(k.matches(Keybinds.Action.HOTBAR_1, press(KeyCode.DIGIT1, false, false, false))).isTrue();
+        assertThat(k.matches(Keybinds.Action.HOTBAR_1, press(KeyCode.DIGIT1, false, false, true))).isFalse();
+        assertThat(k.matches(Keybinds.Action.BRUSH_MODE_10, press(KeyCode.DIGIT0, false, false, true))).isTrue();
+        assertThat(k.matches(Keybinds.Action.VIEW_BACK, press(KeyCode.NUMPAD1, false, true, false))).isTrue();
+        assertThat(k.matches(Keybinds.Action.VIEW_FRONT, press(KeyCode.NUMPAD1, false, true, false))).isFalse();
+        assertThat(k.matches(Keybinds.Action.CANCEL, press(KeyCode.ESCAPE, false, false, false))).isTrue();
+        assertThat(k.caps(Keybinds.Action.SLICE_UP)).isEqualTo(List.of("PgUp"));
+        // W is the Move tool and flying forward, which never meet: not a clash.
+        assertThat(k.usersOf(k.get(Keybinds.Action.TOOL_MOVE)[0], Keybinds.Action.TOOL_MOVE)).isEmpty();
+        assertThat(k.caps(Keybinds.Action.ORBIT_LEFT)).isEqualTo(List.of("Num 4"));
     }
 }

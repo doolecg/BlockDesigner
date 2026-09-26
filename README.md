@@ -58,7 +58,7 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 | Q | Select mode |
 | G | Build mode on / off (also while flying) |
 | W / E | Move / Rotate tool (gizmos for the selected layers, or the selected blocks) |
-| B / F | Brush / Eraser |
+| B / Y | Brush / Eraser |
 | Esc | Cancel a drag or placement, clear the selection, stop flying, then back to Select |
 
 ### Camera
@@ -69,7 +69,7 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 | Shift+middle-drag | Pan |
 | Alt+middle-drag | Swing to the next orthographic view in that direction |
 | Wheel | Zoom |
-| Shift+F | Frame the selected blocks, or else the active layer |
+| F | Focus: frame the selected blocks, or else the active layer |
 | Shift+F / Home | Frame everything |
 | C | Creative flight on / off |
 | P / O | Perspective / orthographic |

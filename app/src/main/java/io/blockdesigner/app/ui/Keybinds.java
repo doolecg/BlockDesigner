@@ -18,7 +18,8 @@ import java.util.Map;
 public final class Keybinds {
     /** Which part of the app an action belongs to (the editor groups them this way). */
     public enum Group {
-        FILE("File & edit"), TOOLS("Tools"), BUILD("Building"), SELECTION("Selection"), LAYERS("Layers"), BRUSH("Brush & eraser"), VIEW("View & panels");
+        FILE("File & edit"), TOOLS("Tools"), BUILD("Building"), HOTBAR("Hotbar"), SELECTION("Selection"), LAYERS("Layers"),
+        MOVE("Moving layers & placing"), BRUSH("Brush & eraser"), CAMERA("Camera & views"), FLYING("Flying"), VIEW("View & panels");
 
         public final String label;
 
@@ -46,12 +47,27 @@ public final class Keybinds {
         TOOL_MOVE(Group.TOOLS, "Move", "W"),
         TOOL_ROTATE(Group.TOOLS, "Rotate", "E"),
         TOOL_BRUSH(Group.TOOLS, "Paint brush", "B"),
-        TOOL_ERASER(Group.TOOLS, "Eraser", "F"),
+        TOOL_ERASER(Group.TOOLS, "Eraser", "Y"),
 
         SHUFFLE(Group.BUILD, "Shuffle hotbar blocks on / off", "Shift+Z"),
         REPLACE_MODE(Group.BUILD, "Replace mode on / off", "Shift+X"),
         CLEAR_HOTBAR(Group.BUILD, "Clear the hotbar", "Shift+C"),
         COMMAND_BAR(Group.BUILD, "WorldEdit command line", "T", "Slash"),
+        SHAPE_WHEEL(Group.BUILD, true, "Shape wheel (hold)", "Alt"),
+        SYMMETRY(Group.BUILD, "Symmetry settings", "M"),
+        SYMMETRY_CENTRE(Group.BUILD, "Put the symmetry centre on the aimed block", "Shift+M"),
+        DELETE(Group.BUILD, "Delete the selection (Build mode: empty the held hotbar slot)", "Delete", "Backspace"),
+        CANCEL(Group.BUILD, "Cancel / clear the selection / back to Select", "Esc"),
+
+        HOTBAR_1(Group.HOTBAR, "Hotbar slot 1", "1"),
+        HOTBAR_2(Group.HOTBAR, "Hotbar slot 2", "2"),
+        HOTBAR_3(Group.HOTBAR, "Hotbar slot 3", "3"),
+        HOTBAR_4(Group.HOTBAR, "Hotbar slot 4", "4"),
+        HOTBAR_5(Group.HOTBAR, "Hotbar slot 5", "5"),
+        HOTBAR_6(Group.HOTBAR, "Hotbar slot 6", "6"),
+        HOTBAR_7(Group.HOTBAR, "Hotbar slot 7", "7"),
+        HOTBAR_8(Group.HOTBAR, "Hotbar slot 8", "8"),
+        HOTBAR_9(Group.HOTBAR, "Hotbar slot 9", "9"),
 
         SELECT_BY_TYPE(Group.SELECTION, "Select or replace by type", "Alt+T"),
         SELECT_ALL(Group.SELECTION, "Select all in the active layer", "Shortcut+A"),
@@ -72,15 +88,60 @@ public final class Keybinds {
         LAYER_BELOW(Group.LAYERS, "Active layer: the one below", "Open Bracket"),
         LAYER_ABOVE(Group.LAYERS, "Active layer: the one above", "Close Bracket"),
 
+        NUDGE_LEFT(Group.MOVE, "Move layers left", "Left"),
+        NUDGE_RIGHT(Group.MOVE, "Move layers right", "Right"),
+        NUDGE_FORWARD(Group.MOVE, "Move layers away from you", "Up"),
+        NUDGE_BACK(Group.MOVE, "Move layers towards you", "Down"),
+        FAST_NUDGE(Group.MOVE, true, "Bigger steps (hold)", "Tab"),
+        ROTATE_PLACEMENT(Group.MOVE, "Turn the import being placed", "R"),
+        PLACE(Group.MOVE, "Place the import", "Enter"),
+        SLICE_UP(Group.MOVE, "Slice view: level up", "Page Up"),
+        SLICE_DOWN(Group.MOVE, "Slice view: level down", "Page Down"),
+        SLICE_SINGLE(Group.MOVE, "Slice view: single level on / off", "Insert"),
+
         BRUSH_SMALLER(Group.BRUSH, "Smaller brush", "Minus", "Subtract"),
         BRUSH_BIGGER(Group.BRUSH, "Bigger brush", "Equals", "Add"),
         BRUSH_WEAKER(Group.BRUSH, "Weaker brush", "Comma"),
         BRUSH_STRONGER(Group.BRUSH, "Stronger brush", "Period"),
+        BRUSH_MODE_1(Group.BRUSH, "Brush mode: Draw", "Alt+1"),
+        BRUSH_MODE_2(Group.BRUSH, "Brush mode: Erase", "Alt+2"),
+        BRUSH_MODE_3(Group.BRUSH, "Brush mode: Smooth", "Alt+3"),
+        BRUSH_MODE_4(Group.BRUSH, "Brush mode: Erode", "Alt+4"),
+        BRUSH_MODE_5(Group.BRUSH, "Brush mode: Fill", "Alt+5"),
+        BRUSH_MODE_6(Group.BRUSH, "Brush mode: Pinch", "Alt+6"),
+        BRUSH_MODE_7(Group.BRUSH, "Brush mode: Raise", "Alt+7"),
+        BRUSH_MODE_8(Group.BRUSH, "Brush mode: Lower", "Alt+8"),
+        BRUSH_MODE_9(Group.BRUSH, "Brush mode: Flatten", "Alt+9"),
+        BRUSH_MODE_10(Group.BRUSH, "Brush mode: Slope", "Alt+0"),
+
+        FRAME_ALL(Group.CAMERA, "Frame everything", "Home"),
+        FRAME_ACTIVE(Group.CAMERA, "Frame the active layer", "Decimal"),
+        VIEW_FRONT(Group.CAMERA, "Front view", "Numpad 1"),
+        VIEW_BACK(Group.CAMERA, "Back view", "Shortcut+Numpad 1"),
+        VIEW_RIGHT(Group.CAMERA, "Right view", "Numpad 3"),
+        VIEW_LEFT(Group.CAMERA, "Left view", "Shortcut+Numpad 3"),
+        VIEW_TOP(Group.CAMERA, "Top view", "Numpad 7"),
+        VIEW_BOTTOM(Group.CAMERA, "Bottom view", "Shortcut+Numpad 7"),
+        VIEW_OPPOSITE(Group.CAMERA, "The opposite view", "Numpad 9"),
+        VIEW_ORTHO_TOGGLE(Group.CAMERA, "Perspective / orthographic", "Numpad 5"),
+        ORBIT_LEFT(Group.CAMERA, "Orbit left 15°", "Numpad 4"),
+        ORBIT_RIGHT(Group.CAMERA, "Orbit right 15°", "Numpad 6"),
+        ORBIT_UP(Group.CAMERA, "Orbit up 15°", "Numpad 8"),
+        ORBIT_DOWN(Group.CAMERA, "Orbit down 15°", "Numpad 2"),
+
+        FLY(Group.FLYING, "Creative flight on / off", "C"),
+        FLY_FORWARD(Group.FLYING, true, "Fly forward (hold)", "W"),
+        FLY_BACK(Group.FLYING, true, "Fly back (hold)", "S"),
+        FLY_LEFT(Group.FLYING, true, "Fly left (hold)", "A"),
+        FLY_RIGHT(Group.FLYING, true, "Fly right (hold)", "D"),
+        FLY_UP(Group.FLYING, true, "Fly up (hold)", "Space"),
+        FLY_DOWN(Group.FLYING, true, "Fly down (hold)", "Shift"),
+        FLY_SPRINT(Group.FLYING, true, "Sprint (hold)", "Ctrl"),
 
         SHORTCUTS(Group.VIEW, "Shortcuts list", "F1", "Alt+K"),
         KEY_HINTS(Group.VIEW, "Key hints on / off", "Shift+F1"),
         VIEWPORT_SETTINGS(Group.VIEW, "Viewport settings", "N"),
-        FRAME(Group.VIEW, "Frame the selection (or else the active layer)", "Shift+F"),
+        FRAME(Group.VIEW, "Focus: frame the selection (or else the active layer)", "F"),
         GRID(Group.VIEW, "Ground grid on / off", "Alt+G"),
         PERSPECTIVE(Group.VIEW, "Perspective view", "P"),
         ORTHOGRAPHIC(Group.VIEW, "Orthographic view", "O"),
@@ -88,10 +149,20 @@ public final class Keybinds {
 
         public final Group group;
         public final String label;
+        /**
+         * A key that is held rather than pressed (flying, bigger steps, the shape wheel): bound to a single key,
+         * modifiers included (Shift, Ctrl, Alt), and matched whatever else is held with it.
+         */
+        public final boolean held;
         final String[] defaults;
 
         Action(Group group, String label, String... defaults) {
+            this(group, false, label, defaults);
+        }
+
+        Action(Group group, boolean held, String label, String... defaults) {
             this.group = group;
+            this.held = held;
             this.label = label;
             this.defaults = defaults;
         }
@@ -168,18 +239,75 @@ public final class Keybinds {
         return !settings.keybinds.containsKey(a.name());
     }
 
-    /** Whether the key event is one of the action's bindings. */
+    /** Whether the key event is one of the action's bindings (for a held action: its key, whatever else is down). */
     public boolean matches(Action a, KeyEvent e) {
+        if (a.held) return holds(a, e.getCode());
         for (KeyCombination k : get(a)) if (k != null && k.match(e)) return true;
         return false;
     }
 
-    /** The other actions bound to {@code k} (for the editor's conflict warning). */
+    /** Whether {@code code} is one of a held action's keys. */
+    public boolean holds(Action a, KeyCode code) {
+        for (KeyCombination k : get(a)) {
+            if (k instanceof KeyCodeCombination kc && kc.getCode() == code) return true;
+            if (k instanceof HeldKey h && h.code == code) return true;
+        }
+        return false;
+    }
+
+    /**
+     * One key on its own, modifier keys included (JavaFX's KeyCodeCombination refuses Shift, Ctrl or Alt alone):
+     * what a held action is bound to when that key is a modifier. It matches the key whatever else is down.
+     */
+    public static final class HeldKey extends KeyCombination {
+        final KeyCode code;
+
+        HeldKey(KeyCode code) {
+            this.code = code;
+        }
+
+        @Override
+        public boolean match(KeyEvent e) {
+            return e.getCode() == code;
+        }
+
+        @Override
+        public String getName() {
+            return code.getName();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof HeldKey h && h.code == code;
+        }
+
+        @Override
+        public int hashCode() {
+            return code.hashCode();
+        }
+    }
+
+    /** The action for a held key (e.g. which flying direction {@code code} is), or null. */
+    public boolean isHeldKey(KeyCode code, Action... among) {
+        for (Action a : among) if (holds(a, code)) return true;
+        return false;
+    }
+
+    /** Keys only held while flying, which take their keys over from every other action then (and only then). */
+    static boolean whileFlying(Action a) {
+        return a != null && a.group == Group.FLYING && a.held;
+    }
+
+    /**
+     * The other actions bound to {@code k} (for the editor's conflict warning). The flying keys don't clash with the
+     * rest: they only count while flying, when nothing else gets those keys (W is both Move and fly forward).
+     */
     public List<Action> usersOf(KeyCombination k, Action except) {
         List<Action> out = new ArrayList<>();
         if (k == null) return out;
         for (Action a : Action.values()) {
             if (a == except) continue;
+            if (except != null && whileFlying(a) != whileFlying(except)) continue;
             for (KeyCombination o : get(a)) if (o != null && o.equals(k)) out.add(a);
         }
         return out;
@@ -198,6 +326,7 @@ public final class Keybinds {
         if (k.getShortcut() == KeyCombination.ModifierValue.DOWN || k.getControl() == KeyCombination.ModifierValue.DOWN) out.add("Ctrl");
         if (k.getShift() == KeyCombination.ModifierValue.DOWN) out.add("Shift");
         if (k.getAlt() == KeyCombination.ModifierValue.DOWN) out.add("Alt");
+        if (k instanceof HeldKey h) return List.of(keyName(h.code));
         if (k instanceof KeyCodeCombination kc) out.add(keyName(kc.getCode()));
         return out;
     }
@@ -223,6 +352,19 @@ public final class Keybinds {
             case QUOTE -> "'";
             case BACK_QUOTE -> "`";
             case DELETE -> "Del";
+            case BACK_SPACE -> "Backspace";
+            case CONTROL -> "Ctrl";
+            case ENTER -> "Enter";
+            case INSERT -> "Ins";
+            case HOME -> "Home";
+            case TAB -> "Tab";
+            case LEFT -> "←";
+            case RIGHT -> "→";
+            case UP -> "↑";
+            case DOWN -> "↓";
+            case DECIMAL -> "Num .";
+            case NUMPAD0, NUMPAD1, NUMPAD2, NUMPAD3, NUMPAD4, NUMPAD5, NUMPAD6, NUMPAD7, NUMPAD8, NUMPAD9 -> "Num " + c.getName().substring(c.getName().length() - 1);
+            case CONTEXT_MENU -> "Menu";
             case ESCAPE -> "Esc";
             case PAGE_UP -> "PgUp";
             case PAGE_DOWN -> "PgDn";
@@ -236,6 +378,13 @@ public final class Keybinds {
 
     private static String capitalise(String s) {
         return s.substring(0, 1).toUpperCase(Locale.ROOT) + s.substring(1);
+    }
+
+    /** The binding a held action records: the key alone (modifier keys too), whatever else is down. */
+    public static KeyCombination heldFromEvent(KeyEvent e) {
+        KeyCode c = e.getCode();
+        if (c == KeyCode.UNDEFINED || c == KeyCode.WINDOWS || c == KeyCode.META || c == KeyCode.COMMAND) return null;
+        return c.isModifierKey() ? new HeldKey(c) : new KeyCodeCombination(c);
     }
 
     /** The combination for a key event (null for a lone modifier), as the editor records it. */
@@ -257,7 +406,9 @@ public final class Keybinds {
         try {
             return KeyCombination.valueOf(s);
         } catch (RuntimeException e) {
-            return null;
+            // A held key on its own ("Shift", "Ctrl", "Alt") isn't a combination JavaFX can parse.
+            KeyCode c = KeyCode.getKeyCode(s.strip());
+            return c == null ? null : new HeldKey(c);
         }
     }
 

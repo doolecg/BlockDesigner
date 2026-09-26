@@ -74,6 +74,11 @@ class UiSnapshotsIT {
                             snapshotDialog(sd, dir.resolve("settings-general" + (dark ? "-dark" : "-light") + ".png"));
                             navTo(sd, "Keybinds");
                             snapshotDialog(sd, dir.resolve("settings-keybinds" + (dark ? "-dark" : "-light") + ".png"));
+                            // Held keys (flying) on their own, via the search.
+                            sd.getDialogPane().lookupAll(".search-field").stream()
+                                    .filter(f -> f instanceof javafx.scene.control.TextField tf && tf.getPromptText() != null && tf.getPromptText().startsWith("Search actions"))
+                                    .findFirst().ifPresent(f -> ((javafx.scene.control.TextField) f).setText("fly"));
+                            snapshotDialog(sd, dir.resolve("settings-keybinds-fly" + (dark ? "-dark" : "-light") + ".png"));
                         }
                         navTo(sd, "Appearance");
                         snapshotDialog(sd, dir.resolve("settings-" + n + ".png"));

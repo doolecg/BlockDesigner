@@ -354,9 +354,10 @@ final class SettingsDialog extends Dialog<Void> {
         fill.run();
 
         page.getChildren().setAll(title("Keybinds"),
-                hint("Click a key to change it, then press the new key or combination (Esc cancels). Each action can have a second key. "
-                        + "Keys shown in red are used by another action too; both still run. Mouse buttons, flying (WASD) and the "
-                        + "viewport's own keys (M, Esc, arrows, Home…) are fixed."),
+                hint("Click a key to change it, then press the new key or combination (click it again, or anywhere else, to "
+                        + "cancel). Each action can have a second key. Actions marked \"hold\" take a single key, and Shift, Ctrl or Alt "
+                        + "on its own works for them. Keys shown in red are used by another action too; the first one that applies "
+                        + "wins. Mouse buttons are fixed."),
                 top, list);
     }
 
@@ -411,23 +412,31 @@ final class SettingsDialog extends Dialog<Void> {
         b.setMinWidth(96);
         b.setFocusTraversable(false);
         b.setOnAction(e -> {
-            if (listening != null) {
-                listening.getStyleClass().remove("keybind-listening");
-            }
-            listening = b;
-            b.setText("Press a key…");
-            b.getStyleClass().add("keybind-listening");
-            b.requestFocus();
-        });
-        b.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
-            if (listening != b) return;
-            e.consume();
-            if (e.getCode() == KeyCode.ESCAPE) {
+            // Clicking the key again while it waits cancels, as does clicking anywhere else.
+            if (listening == b) {
                 listening = null;
                 refreshRow(row, a);
                 return;
             }
-            KeyCombination got = Keybinds.fromEvent(e);
+            if (listening != null) {
+                listening.getStyleClass().remove("keybind-listening");
+            }
+            listening = b;
+            b.setText(a.held ? "Hold a key…" : "Press a key…");
+            b.getStyleClass().add("keybind-listening");
+            b.requestFocus();
+        });
+        b.focusedProperty().addListener((o, was, is) -> {
+            if (!is && listening == b) {
+                listening = null;
+                refreshRow(row, a);
+            }
+        });
+        b.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+            if (listening != b) return;
+            e.consume();
+            // Held actions take one key on its own, Shift, Ctrl and Alt included; the rest take a combination.
+            KeyCombination got = a.held ? Keybinds.heldFromEvent(e) : Keybinds.fromEvent(e);
             if (got == null) return;
             listening = null;
             keys.set(a, slot, got);

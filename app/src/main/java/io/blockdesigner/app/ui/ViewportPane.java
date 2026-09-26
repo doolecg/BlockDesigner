@@ -732,7 +732,7 @@ public final class ViewportPane extends StackPane {
         addEventFilter(KeyEvent.KEY_PRESSED, this::onKey);
         addEventFilter(KeyEvent.KEY_RELEASED, e -> {
             flyKeys.remove(e.getCode());
-            if (e.getCode() == KeyCode.TAB) {
+            if (keys != null && keys.holds(Keybinds.Action.FAST_NUDGE, e.getCode())) {
                 fastNudge = false;
                 e.consume();
             }
@@ -740,10 +740,10 @@ public final class ViewportPane extends StackPane {
         });
         sceneProperty().addListener((o, a, sc) -> {
             if (sc == null) return;
-            // Alt alone (held) opens the shape wheel in Build mode; any other key while Alt is down cancels it, so
-            // Alt+key shortcuts keep working. Scene-level so it sees keys the main window handles first.
+            // The wheel key (Alt) held alone opens the shape wheel in Build mode; any other key while it is down
+            // cancels it, so Alt+key shortcuts keep working. Scene-level so it sees keys the main window handles first.
             sc.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
-                if (ev.getCode() == KeyCode.ALT) {
+                if (isWheelKey(ev.getCode())) {
                     boolean typing = sc.getFocusOwner() instanceof javafx.scene.control.TextInputControl;
                     if (!altAlone && !ev.isShortcutDown() && !typing && ws.toolProperty().get() == ToolKind.BUILD && placing.isEmpty()
                             && !commandBar.isVisible()) {
@@ -755,7 +755,7 @@ public final class ViewportPane extends StackPane {
                 }
             });
             sc.addEventFilter(KeyEvent.KEY_RELEASED, ev -> {
-                if (ev.getCode() != KeyCode.ALT) return;
+                if (!isWheelKey(ev.getCode())) return;
                 radialDelay.stop();
                 altAlone = false;
                 if (shapeRadial.isOpen()) {
@@ -1215,10 +1215,28 @@ public final class ViewportPane extends StackPane {
         e.consume();
     }
 
-    private static boolean isFlyKey(KeyCode k) {
-        return k == KeyCode.W || k == KeyCode.A || k == KeyCode.S || k == KeyCode.D || k == KeyCode.SPACE
-                || k == KeyCode.SHIFT || k == KeyCode.CONTROL;
+    /** Whether {@code k} is one of the flying keys (forward, back, left, right, up, down, sprint). */
+    public boolean isFlyKey(KeyCode k) {
+        return keys != null && keys.isHeldKey(k, Keybinds.Action.FLY_FORWARD, Keybinds.Action.FLY_BACK, Keybinds.Action.FLY_LEFT,
+                Keybinds.Action.FLY_RIGHT, Keybinds.Action.FLY_UP, Keybinds.Action.FLY_DOWN, Keybinds.Action.FLY_SPRINT);
     }
+
+    /** Whether {@code k} is the key held for the shape wheel. */
+    public boolean isWheelKey(KeyCode k) {
+        return keys != null && keys.holds(Keybinds.Action.SHAPE_WHEEL, k);
+    }
+
+    /** Whether any key bound to a flying action is down. */
+    private boolean flying(Keybinds.Action a) {
+        for (KeyCode c : flyKeys) if (keys.holds(a, c)) return true;
+        return false;
+    }
+
+    /** The keys the viewport itself handles, when it has focus (the rest are the main window's). */
+    private static final Keybinds.Action[] VIEWPORT_KEYS = {Keybinds.Action.FLY, Keybinds.Action.NUDGE_LEFT, Keybinds.Action.NUDGE_RIGHT,
+            Keybinds.Action.NUDGE_FORWARD, Keybinds.Action.NUDGE_BACK, Keybinds.Action.SLICE_UP, Keybinds.Action.SLICE_DOWN,
+            Keybinds.Action.SLICE_SINGLE, Keybinds.Action.SYMMETRY, Keybinds.Action.SYMMETRY_CENTRE, Keybinds.Action.CANCEL,
+            Keybinds.Action.DELETE, Keybinds.Action.ROTATE_PLACEMENT, Keybinds.Action.PLACE, Keybinds.Action.FRAME_ALL};
 
     private void onKey(KeyEvent e) {
         // Typing in the command bar is for the bar, not the viewport's keys.
@@ -1229,46 +1247,54 @@ public final class ViewportPane extends StackPane {
             e.consume();
             return;
         }
-        switch (k) {
-            case TAB -> fastNudge = true;
-            case C -> {
-                if (e.isShortcutDown() || e.isAltDown()) return;
-                setFly(!fly);
+        if (k == KeyCode.CONTEXT_MENU) {
+            // The keyboard's menu key opens the Select-mode menu, like a right-click.
+            if (ws.toolProperty().get() != ToolKind.SELECT) return;
+            javafx.geometry.Point2D c = localToScreen(lastX, lastY);
+            if (c != null) showContextMenu(c.getX(), c.getY());
+            e.consume();
+            return;
+        }
+        if (keys == null) return;
+        if (keys.holds(Keybinds.Action.FAST_NUDGE, k)) {
+            fastNudge = true;
+            e.consume();
+            return;
+        }
+        for (Keybinds.Action a : VIEWPORT_KEYS) {
+            if (keys.matches(a, e) && viewportKey(a)) {
+                e.consume();
+                return;
             }
-            case LEFT, RIGHT -> {
+        }
+    }
+
+    /** Runs one of the viewport's own key actions; false when it doesn't apply right now (the key is left alone). */
+    private boolean viewportKey(Keybinds.Action a) {
+        switch (a) {
+            case FLY -> setFly(!fly);
+            case NUDGE_LEFT, NUDGE_RIGHT -> {
                 int[] r = camera.screenRightAxis();
-                int s = k == KeyCode.RIGHT ? 1 : -1;
+                int s = a == Keybinds.Action.NUDGE_RIGHT ? 1 : -1;
                 nudge(r[0] * s, 0, r[1] * s);
             }
-            case UP, DOWN -> {
+            case NUDGE_FORWARD, NUDGE_BACK -> {
                 int[] f = camera.screenForwardAxis();
-                int s = k == KeyCode.UP ? 1 : -1;
+                int s = a == Keybinds.Action.NUDGE_FORWARD ? 1 : -1;
                 nudge(f[0] * s, 0, f[1] * s);
             }
-            case PAGE_UP -> stepSlice(1);
-            case PAGE_DOWN -> stepSlice(-1);
-            case INSERT -> toggleSingleSlice();
-            case CONTEXT_MENU -> {
-                if (ws.toolProperty().get() != ToolKind.SELECT) return;
-                javafx.geometry.Point2D c = localToScreen(lastX, lastY);
-                if (c != null) showContextMenu(c.getX(), c.getY());
-            }
-            case T -> {
-                // T opens the command line like Minecraft's chat; Alt+T is Select by type.
-                if (e.isShortcutDown() || !placing.isEmpty()) return;
-                if (e.isAltDown()) openSelectByTypeAtAim();
-                else openCommandBar();
-            }
-            case M -> {
-                if (e.isShortcutDown() || e.isAltDown()) return;
-                if (e.isShiftDown()) centreSymmetryHere();
-                else if (fly) showSymmetry(-1, -1);
+            case SLICE_UP -> stepSlice(1);
+            case SLICE_DOWN -> stepSlice(-1);
+            case SLICE_SINGLE -> toggleSingleSlice();
+            case SYMMETRY -> {
+                if (fly) showSymmetry(-1, -1);
                 else {
                     javafx.geometry.Point2D p = localToScreen(lastMouseX, lastMouseY);
                     if (p != null) showSymmetry(p.getX() + 12, p.getY() + 12);
                 }
             }
-            case ESCAPE -> {
+            case SYMMETRY_CENTRE -> centreSymmetryHere();
+            case CANCEL -> {
                 if (shapeDrag != null) cancelShape();
                 else if (shapeRadial.isOpen()) cancelShapeRadial();
                 else if (gizmoDrag != null) cancelGizmoDrag();
@@ -1278,7 +1304,7 @@ public final class ViewportPane extends StackPane {
                 else if (!blockSel.isEmpty() || !entitySel.isEmpty() || worldEdit.region() != null) clearRegionAndSelection();
                 else ws.toolProperty().set(ToolKind.SELECT);
             }
-            case DELETE, BACK_SPACE -> {
+            case DELETE -> {
                 if (ws.toolProperty().get() == ToolKind.BUILD) {
                     // Build mode: Delete empties the held hotbar slot.
                     BlockState removed = ws.clearHeldSlot();
@@ -1287,26 +1313,26 @@ public final class ViewportPane extends StackPane {
                 } else if (!blockSel.isEmpty() || !entitySel.isEmpty()) {
                     deleteSelectedBlocks();
                 } else {
-                    return;
+                    return false;
                 }
             }
-            case R -> {
-                if (!placing.isEmpty()) rotatePlacement(1);
-                else return;
+            case ROTATE_PLACEMENT -> {
+                if (placing.isEmpty()) return false;
+                rotatePlacement(1);
             }
-            case HOME -> {
+            case PLACE -> {
+                if (placing.isEmpty()) return false;
+                commitPlacement();
+            }
+            case FRAME_ALL -> {
                 setFly(false);
                 frameAll();
             }
-            case ENTER -> {
-                if (!placing.isEmpty()) commitPlacement();
-                else return;
-            }
             default -> {
-                return;
+                return false;
             }
         }
-        e.consume();
+        return true;
     }
 
     // ---- creative flight ------------------------------------------------------------------------------------
@@ -1328,7 +1354,10 @@ public final class ViewportPane extends StackPane {
         if (enable) {
             requestFocus();
             recenterMouse();
-            showToast("Flying · WASD move (W/S follow the view) · Space/Shift up/down · Ctrl sprint" + keyNote(Keybinds.Action.TOOL_BUILD, "toggles building") + " · Esc exit");
+            showToast("Flying · " + keyText(Keybinds.Action.FLY_FORWARD) + keyText(Keybinds.Action.FLY_LEFT) + keyText(Keybinds.Action.FLY_BACK)
+                    + keyText(Keybinds.Action.FLY_RIGHT) + " move · " + keyText(Keybinds.Action.FLY_UP) + "/" + keyText(Keybinds.Action.FLY_DOWN)
+                    + " up/down" + keyNote(Keybinds.Action.FLY_SPRINT, "sprint") + keyNote(Keybinds.Action.TOOL_BUILD, "toggles building")
+                    + keyNote(Keybinds.Action.CANCEL, "exit"));
         } else {
             showToast("Orbit camera");
         }
@@ -1381,14 +1410,14 @@ public final class ViewportPane extends StackPane {
         // Forward follows the look direction, pitch included (spectator / UE-style); strafing stays level.
         Vector3f flat = camera.flatForward(), f = camera.forward(), r = new Vector3f(-flat.z, 0, flat.x);
         Vector3f move = new Vector3f();
-        if (flyKeys.contains(KeyCode.W)) move.add(f);
-        if (flyKeys.contains(KeyCode.S)) move.sub(f);
-        if (flyKeys.contains(KeyCode.D)) move.add(r);
-        if (flyKeys.contains(KeyCode.A)) move.sub(r);
+        if (flying(Keybinds.Action.FLY_FORWARD)) move.add(f);
+        if (flying(Keybinds.Action.FLY_BACK)) move.sub(f);
+        if (flying(Keybinds.Action.FLY_RIGHT)) move.add(r);
+        if (flying(Keybinds.Action.FLY_LEFT)) move.sub(r);
         if (move.lengthSquared() > 0) move.normalize();
-        if (flyKeys.contains(KeyCode.SPACE)) move.y += 1;
-        if (flyKeys.contains(KeyCode.SHIFT)) move.y -= 1;
-        double speed = ws.settings().flySpeed * (flyKeys.contains(KeyCode.CONTROL) ? 2 : 1);
+        if (flying(Keybinds.Action.FLY_UP)) move.y += 1;
+        if (flying(Keybinds.Action.FLY_DOWN)) move.y -= 1;
+        double speed = ws.settings().flySpeed * (flying(Keybinds.Action.FLY_SPRINT) ? 2 : 1);
         Vector3f want = move.mul((float) speed);
         if (ws.settings().flyMomentum) {
             // Eases up to speed quickly and glides to a stop in about half a second, a lighter version of Minecraft's.
@@ -2181,37 +2210,36 @@ public final class ViewportPane extends StackPane {
     }
 
     /**
-     * Blender's numpad views: 1 front, 3 right, 7 top (Ctrl for back, left, bottom), 9 the opposite side, 5
-     * perspective / orthographic, 2 4 6 8 orbit in 15° steps, . frames the active layer. Returns whether it was used.
+     * The camera keys (Blender's numpad by default): front, right and top views and their opposites, the opposite of
+     * the current view, perspective / orthographic, orbiting in 15° steps, and framing the active layer.
      */
-    public boolean numpad(KeyEvent e) {
-        boolean ctrl = e.isShortcutDown();
+    public void cameraKey(Keybinds.Action a) {
         float step = (float) Math.toRadians(15);
-        switch (e.getCode()) {
-            case NUMPAD1 -> snapView(ctrl ? ViewCube.View.BACK : ViewCube.View.FRONT);
-            case NUMPAD3 -> snapView(ctrl ? ViewCube.View.LEFT : ViewCube.View.RIGHT);
-            case NUMPAD7 -> snapView(ctrl ? ViewCube.View.BOTTOM : ViewCube.View.TOP);
-            case NUMPAD9 -> oppositeView();
-            case NUMPAD5 -> toggleOrtho();
-            case NUMPAD4, NUMPAD6, NUMPAD8, NUMPAD2 -> {
+        switch (a) {
+            case VIEW_FRONT -> snapView(ViewCube.View.FRONT);
+            case VIEW_BACK -> snapView(ViewCube.View.BACK);
+            case VIEW_RIGHT -> snapView(ViewCube.View.RIGHT);
+            case VIEW_LEFT -> snapView(ViewCube.View.LEFT);
+            case VIEW_TOP -> snapView(ViewCube.View.TOP);
+            case VIEW_BOTTOM -> snapView(ViewCube.View.BOTTOM);
+            case VIEW_OPPOSITE -> oppositeView();
+            case VIEW_ORTHO_TOGGLE -> toggleOrtho();
+            case ORBIT_LEFT, ORBIT_RIGHT, ORBIT_UP, ORBIT_DOWN -> {
                 if (fly) setFly(false);
                 leaveAutoOrtho();
                 animStart = -1;
-                KeyCode k = e.getCode();
-                camera.orbit(k == KeyCode.NUMPAD4 ? -step : k == KeyCode.NUMPAD6 ? step : 0,
-                        k == KeyCode.NUMPAD8 ? -step : k == KeyCode.NUMPAD2 ? step : 0);
+                camera.orbit(a == Keybinds.Action.ORBIT_LEFT ? -step : a == Keybinds.Action.ORBIT_RIGHT ? step : 0,
+                        a == Keybinds.Action.ORBIT_UP ? -step : a == Keybinds.Action.ORBIT_DOWN ? step : 0);
                 requestRedraw();
             }
-            case DECIMAL -> {
-                Layer a = ws.activeLayerProperty().get();
-                if (a != null) frameLayer(a);
+            case FRAME_ACTIVE -> {
+                Layer l = ws.activeLayerProperty().get();
+                if (l != null) frameLayer(l);
                 else frameAll();
             }
             default -> {
-                return false;
             }
         }
-        return true;
     }
 
     // ---- move / rotate gizmos --------------------------------------------------------------------------------
@@ -4201,18 +4229,27 @@ public final class ViewportPane extends StackPane {
         ToolKind tool = ws.toolProperty().get();
         if (!placing.isEmpty()) {
             h.add(KeyHints.Hint.of("Place", "LMB"));
-            h.add(KeyHints.Hint.of("Rotate", "R"));
+            hint(h, "Place", Keybinds.Action.PLACE);
+            hint(h, "Rotate", Keybinds.Action.ROTATE_PLACEMENT);
             h.add(KeyHints.Hint.of("Rotate", "Alt", "Wheel"));
-            h.add(KeyHints.Hint.of("Cancel", "Esc"));
+            hint(h, "Cancel", Keybinds.Action.CANCEL);
         } else if (shapeDrag != null) {
             h.add(KeyHints.Hint.of("Place the " + shapeDrag.shape.label.toLowerCase(java.util.Locale.ROOT), "RMB"));
             if (shapeDrag.shape.usesHeight()) h.add(KeyHints.Hint.of("Height", "Wheel"));
-            h.add(KeyHints.Hint.of("Cancel", "Esc"));
+            hint(h, "Cancel", Keybinds.Action.CANCEL);
         } else {
             if (fly) {
-                h.add(KeyHints.Hint.of("Fly", "W", "A", "S", "D"));
-                h.add(KeyHints.Hint.of("Up / down", "Space", "Shift"));
-                h.add(KeyHints.Hint.of("Sprint", "Ctrl"));
+                List<String> move = new ArrayList<>();
+                for (Keybinds.Action a : new Keybinds.Action[]{Keybinds.Action.FLY_FORWARD, Keybinds.Action.FLY_LEFT, Keybinds.Action.FLY_BACK, Keybinds.Action.FLY_RIGHT})
+                    move.addAll(keys == null ? List.of() : keys.caps(a));
+                if (!move.isEmpty()) h.add(new KeyHints.Hint(move, "Fly"));
+                List<String> updown = new ArrayList<>();
+                if (keys != null) {
+                    updown.addAll(keys.caps(Keybinds.Action.FLY_UP));
+                    updown.addAll(keys.caps(Keybinds.Action.FLY_DOWN));
+                }
+                if (!updown.isEmpty()) h.add(new KeyHints.Hint(updown, "Up / down"));
+                hint(h, "Sprint", Keybinds.Action.FLY_SPRINT);
             }
             switch (tool) {
                 case BUILD -> {
@@ -4221,11 +4258,15 @@ public final class ViewportPane extends StackPane {
                     h.add(KeyHints.Hint.of("Break", "LMB"));
                     h.add(KeyHints.Hint.of(ws.replaceProperty().get() ? "Replace block" : single ? "Place" : "Drag out " + s.label.toLowerCase(java.util.Locale.ROOT), "RMB"));
                     h.add(KeyHints.Hint.of("Pick block", "MMB"));
-                    h.add(KeyHints.Hint.of(single ? "Shapes" : "Change shape", "Alt"));
+                    hint(h, single ? "Shapes" : "Change shape", Keybinds.Action.SHAPE_WHEEL);
                     hint(h, ws.replaceProperty().get() ? "Stop replacing" : "Replace mode", Keybinds.Action.REPLACE_MODE);
                     hint(h, ws.shuffleProperty().get() ? "Stop shuffling" : "Shuffle hotbar", Keybinds.Action.SHUFFLE);
-                    h.add(KeyHints.Hint.of("Symmetry", "M"));
-                    h.add(KeyHints.Hint.of("Hotbar", "1-9"));
+                    hint(h, "Symmetry", Keybinds.Action.SYMMETRY);
+                    // The nine slots as "1-9" while they are on the number keys, else the first slot's key.
+                    boolean digits = keys != null && java.util.stream.IntStream.range(0, 9).allMatch(i ->
+                            keys.caps(Keybinds.Action.values()[Keybinds.Action.HOTBAR_1.ordinal() + i]).equals(List.of(Integer.toString(i + 1))));
+                    if (digits) h.add(KeyHints.Hint.of("Hotbar", "1-9"));
+                    else hint(h, "Hotbar slot 1", Keybinds.Action.HOTBAR_1);
                 }
                 case SELECT -> {
                     h.add(KeyHints.Hint.of("Select area", "LMB"));
@@ -4235,8 +4276,8 @@ public final class ViewportPane extends StackPane {
                     if (!blockSel.isEmpty()) {
                         hint(h, "Move / rotate them", Keybinds.Action.TOOL_MOVE);
                         hint(h, "Move to new layer", Keybinds.Action.MOVE_TO_LAYER);
-                        h.add(KeyHints.Hint.of("Delete", "Del"));
-                        h.add(KeyHints.Hint.of("Clear selection", "Esc"));
+                        hint(h, "Delete", Keybinds.Action.DELETE);
+                        hint(h, "Clear selection", Keybinds.Action.CANCEL);
                     }
                 }
                 case MOVE -> {
@@ -4254,7 +4295,7 @@ public final class ViewportPane extends StackPane {
                     hint(h, "Smaller brush", Keybinds.Action.BRUSH_SMALLER);
                     hint(h, "Bigger brush", Keybinds.Action.BRUSH_BIGGER);
                     hint(h, "Weaker / stronger", Keybinds.Action.BRUSH_WEAKER);
-                    h.add(KeyHints.Hint.of("Brush modes", "Alt", "1-0"));
+                    hint(h, "Brush mode: Draw", Keybinds.Action.BRUSH_MODE_1);
                 }
                 case ERASER -> {
                     h.add(KeyHints.Hint.of("Erase", "LMB"));
@@ -4267,9 +4308,9 @@ public final class ViewportPane extends StackPane {
             if (!fly) {
                 h.add(KeyHints.Hint.of("Orbit", "MMB"));
                 h.add(KeyHints.Hint.of("Pan", "Shift", "MMB"));
-                h.add(KeyHints.Hint.of("Fly", "C"));
+                hint(h, "Fly", Keybinds.Action.FLY);
             } else {
-                h.add(KeyHints.Hint.of("Stop flying", "C"));
+                hint(h, "Stop flying", Keybinds.Action.FLY);
             }
         }
         hint(h, "All shortcuts", Keybinds.Action.SHORTCUTS);

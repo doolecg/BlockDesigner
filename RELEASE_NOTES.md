@@ -1,3 +1,35 @@
+# BlockDesigner 0.4.3
+
+Every keyboard key can now be changed. Settings › Keybinds covers the viewport too: flying, camera views, nudging, the hotbar, brush modes and more.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.3.exe** | You want a normal install. Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.3-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 updates to this by itself. On 0.4.0 or 0.4.1, install it by hand once: their updater can't install updates (see [0.4.2](https://github.com/doolecg/BlockDesigner/releases/tag/0.4.2)).
+
+## Changed
+- **F is Focus again:** it frames the selected blocks, or else the active layer. It had been Shift+F since 0.4.1.
+- **The Eraser moves to Y.**
+
+## New
+- **More keys in Settings › Keybinds**, in these groups (the defaults are the keys from before):
+  - **Flying:** forward, back, left, right, up, down, sprint, and flight on / off.
+  - **Camera & views:** the numpad views (front, back, left, right, top, bottom, opposite), perspective / orthographic, orbiting in 15° steps, and framing everything or the active layer.
+  - **Moving layers & placing:** the arrow-key nudges, bigger steps (Tab), turning and placing an import, and the slice view's level up / down and single level.
+  - **Building:** the shape wheel key, symmetry and its centre, Delete, and Esc.
+  - **Hotbar:** each of the nine slots.
+  - **Brush:** each of the ten brush modes.
+- **Held keys:** actions you hold (flying, bigger steps, the shape wheel) take a single key, and Shift, Ctrl or Alt on its own works for them. You could fly down with Ctrl and sprint with Shift, for example.
+- **Recording a key:** click it again, or click anywhere else, to cancel. Esc can now be bound like any other key.
+- **Clash warnings:** the flying keys don't count as clashing with other actions, because they only act while you fly. W is both the Move tool and fly forward.
+- **The key hints and flying tips** show your own keys.
+
+---
+
 # BlockDesigner 0.4.2
 
 A fix for updating. In 0.4.0 and 0.4.1, **Install and restart** could download the update, close BlockDesigner, and then never install it or open again. That happened when the install folder's path had a space in it, as it does for any Windows user name with a space. The setup then waited on an error box that stayed hidden.
