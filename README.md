@@ -240,7 +240,7 @@ Commands take one slash and work on every visible, unlocked layer:
 | Shift+wheel (outside Build mode) | Same as Ctrl+wheel |
 | Arrow keys, hold Tab | Move, bigger steps |
 | Alt+wheel (Shift+wheel in Build mode) | Turn by the bounding-box side under the mouse: spin (top or bottom) or flip (a side) |
-| Wheel / Alt+wheel in Build mode | Hotbar slot / zoom |
+| Alt+wheel in Build mode | Next / previous hotbar slot (the wheel still zooms) |
 | [ / ] | Make the layer below / above active |
 | Ctrl+Shift+N / Ctrl+D / Ctrl+M | New / duplicate / merge |
 | F2 | Rename the active layer |

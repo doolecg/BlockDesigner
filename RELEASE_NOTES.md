@@ -1,3 +1,27 @@
+# BlockDesigner 0.4.11
+
+The wheel zooms again in Build mode, shapes end on the side of the block you point at, and notifications move to the bottom left.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.11.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.11.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.11-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Changed
+- **Build mode wheel.** The mouse wheel zooms again, and Alt+wheel now picks the hotbar slot. Scrolling with Alt held doesn't open the shape wheel. Shift+wheel still turns the layer.
+- **Shapes follow the block side at both ends.** While dragging out a line, floor or wall, pointing at a block ends the shape on the side you aim at, just where a single block would go, as long as that spot lies on the shape's line or plane. A line into a wall now stops at the wall's face.
+- **Notifications** now pop up at the bottom left of the viewport.
+- **Creative flight in Build mode** shows two pills at the top left: Build mode and Creative.
+
+---
+
 # BlockDesigner 0.4.10
 
 A Scale tool next to Move and Rotate, a Minecraft-style wheel in Build mode, moving and turning by the side of a layer's box, and a tidier viewport.

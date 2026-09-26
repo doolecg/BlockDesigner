@@ -124,7 +124,7 @@ final class ShortcutsPanel extends VBox {
                     {"{NUDGE_LEFT} {NUDGE_RIGHT} {NUDGE_FORWARD} {NUDGE_BACK}", "Left / right, away / towards you"},
                     {"Hold {FAST_NUDGE}", "Bigger steps"},
                     {"Alt+wheel", "Turn by the bounding-box side under the mouse: spin (top or bottom) or flip (a side)"},
-                    {"Build mode", "Wheel: hotbar slot · Alt+wheel: zoom · Shift+wheel: turn (as Alt+wheel above)"}},
+                    {"Build mode", "Wheel: zoom · Alt+wheel: hotbar slot · Shift+wheel: turn (as Alt+wheel above)"}},
             {{"Layers"},
                     {"{LAYER_BELOW} / {LAYER_ABOVE}", "Make the layer below / above active"},
                     {"{NEW_LAYER}", "New empty layer"},

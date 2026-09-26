@@ -131,6 +131,8 @@ public final class ViewportPane extends StackPane {
     /** Waits a moment after Alt goes down so Alt+key shortcuts never flash the wheel. */
     private final PauseTransition radialDelay = new PauseTransition(Duration.millis(140));
     private boolean altAlone;
+    /** Alt+wheel went to the hotbar while Alt is down: the shape wheel stays shut until Alt is let go. */
+    private boolean wheelKeyUsed;
     private final Label shapeInfo = new Label();
     private ShapeDrag shapeDrag;
     private final SymmetryPopup symmetryPopup;
@@ -267,8 +269,8 @@ public final class ViewportPane extends StackPane {
         toast.getStyleClass().add("viewport-toast");
         toast.setOpacity(0);
         toast.setMouseTransparent(true);
-        // Notifications sit bottom right, under the key hints.
-        StackPane.setAlignment(toast, Pos.BOTTOM_RIGHT);
+        // Notifications sit bottom left.
+        StackPane.setAlignment(toast, Pos.BOTTOM_LEFT);
         StackPane.setAlignment(viewCube, Pos.TOP_RIGHT);
         StackPane.setMargin(viewCube, new javafx.geometry.Insets(6, 56, 0, 0));
         sliceBadge.getStyleClass().add("viewport-badge");
@@ -816,7 +818,7 @@ public final class ViewportPane extends StackPane {
             sc.addEventFilter(KeyEvent.KEY_PRESSED, ev -> {
                 if (isWheelKey(ev.getCode())) {
                     boolean typing = sc.getFocusOwner() instanceof javafx.scene.control.TextInputControl;
-                    if (!altAlone && !ev.isShortcutDown() && !typing && ws.toolProperty().get() == ToolKind.BUILD && placing.isEmpty()
+                    if (!altAlone && !wheelKeyUsed && !ev.isShortcutDown() && !typing && ws.toolProperty().get() == ToolKind.BUILD && placing.isEmpty()
                             && !commandBar.isVisible()) {
                         altAlone = true;
                         radialDelay.playFromStart();
@@ -829,6 +831,7 @@ public final class ViewportPane extends StackPane {
                 if (!isWheelKey(ev.getCode())) return;
                 radialDelay.stop();
                 altAlone = false;
+                wheelKeyUsed = false;
                 if (shapeRadial.isOpen()) {
                     var pick = shapeRadial.highlighted();
                     shapeRadial.close();
@@ -1318,15 +1321,14 @@ public final class ViewportPane extends StackPane {
         } else if (e.isControlDown()) {
             nudgeByBox(box, sign);
         } else if (build && e.isAltDown()) {
-            // Build mode: the plain wheel is the hotbar, so zoom moves to Alt.
-            camera.zoom((float) Math.pow(1.0018, -delta * ws.settings().zoomSpeed));
-            requestRedraw();
+            // Build mode: Alt+wheel is the hotbar (wheel down: the next slot, as in Minecraft); Alt stops opening the
+            // shape wheel until it's let go.
+            if (altAlone || shapeRadial.isOpen()) cancelShapeRadial();
+            wheelKeyUsed = true;
+            ws.scrollHotbar(-sign);
         } else if (build && e.isShiftDown()) {
             // Build mode: Shift turns (a mob under the mouse, else the layer by its box side).
             turnUnderMouse(box, sign);
-        } else if (build) {
-            // Minecraft: wheel down moves to the next hotbar slot.
-            ws.scrollHotbar(-sign);
         } else if (e.isAltDown()) {
             if (!placing.isEmpty()) rotatePlacement(sign);
             else turnUnderMouse(box, sign);
@@ -4352,6 +4354,13 @@ public final class ViewportPane extends StackPane {
     }
 
     private BlockPos shapeEndAt(double x, double y) {
+        // Pointing at a block: the end is the cell on the aimed side of it (the block itself when replacing), as for
+        // the start, whenever that cell lies on the shape's line or plane.
+        Picker.Hit aimed = pick(x, y).orElse(null);
+        if (aimed != null) {
+            BlockPos c = shapeDrag.replace ? aimed.world() : aimed.adjacentWorld();
+            if (onShapeGuide(c)) return c;
+        }
         Vector3f[] r = ray(x, y);
         Vector3f o = r[0], d = new Vector3f(r[1]).normalize();
         BlockPos a = shapeDrag.anchor;
@@ -4407,6 +4416,24 @@ public final class ViewportPane extends StackPane {
                     }
                 }
                 yield out;
+            }
+        };
+    }
+
+    /** Whether a cell lies on the line (a straight axis through the start) or plane the shape's end is dragged along. */
+    private boolean onShapeGuide(BlockPos c) {
+        BlockPos a = shapeDrag.anchor;
+        int dx = c.x() - a.x(), dy = c.y() - a.y(), dz = c.z() - a.z();
+        return switch (shapeDrag.shape.plane) {
+            case NONE -> false;
+            case AXIS -> (dx != 0 ? 1 : 0) + (dy != 0 ? 1 : 0) + (dz != 0 ? 1 : 0) <= 1;
+            case HORIZONTAL -> {
+                BlockPos n = shapeDrag.shape.followsFace() ? shapeDrag.up : new BlockPos(0, 1, 0);
+                yield n.x() != 0 ? dx == 0 : n.z() != 0 ? dz == 0 : dy == 0;
+            }
+            case VERTICAL -> {
+                Vector3f f = camera.forward();
+                yield Math.abs(f.x) > Math.abs(f.z) ? dx == 0 : dz == 0;
             }
         };
     }
@@ -4716,7 +4743,7 @@ public final class ViewportPane extends StackPane {
         String text = switch (t) {
             case VIEW -> "View";
             case SELECT -> "Select";
-            case BUILD -> fly ? "Creative flight" : "Build mode";
+            case BUILD -> "Build mode";
             case MOVE -> "Move";
             case ROTATE -> "Rotate";
             case SCALE -> "Scale";
@@ -4728,6 +4755,8 @@ public final class ViewportPane extends StackPane {
         // One pill per active feature, after the mode's own pill.
         List<String> features = new ArrayList<>();
         if (t == ToolKind.BUILD) {
+            // Flying in Build mode is Minecraft's creative mode: its own pill beside Build mode.
+            if (fly) features.add("Creative");
             if (ws.replaceProperty().get()) features.add("Replace");
             if (ws.shuffleProperty().get()) features.add("Shuffle");
             if (shape() != io.blockdesigner.core.place.ShapeTool.Shape.SINGLE) features.add(shape().label);
@@ -4760,11 +4789,10 @@ public final class ViewportPane extends StackPane {
         // While the brush options show, their own mode pill stands in for the badge.
         modeBar.setVisible(!brushBar.isVisible());
         modeFrame.setStyle(c == null ? "" : "-bd-mode: " + c + ";");
-        // Bottom right, above whatever is along the bottom (hotbar, plugin tool options): notifications, and the
-        // key hints above them (the notification's row is kept free so the hints don't jump).
+        // The key hints sit bottom right, above whatever is along the bottom (hotbar, plugin tool options).
         double bottom = 14 + (hotbar.isVisible() ? 72 : 0) + (pluginToolBar.isVisible() ? 50 : 0);
-        StackPane.setMargin(toast, new javafx.geometry.Insets(0, 14, bottom, 0));
-        StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, bottom + 42, 0));
+        StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, bottom, 0));
+        StackPane.setMargin(toast, new javafx.geometry.Insets(0, 0, 14, 14));
         // Top centre: the block info box, below the brush options when they show.
         StackPane.setMargin(hud, new javafx.geometry.Insets(brushBar.isVisible() ? 60 : 12, 0, 0, 0));
     }
@@ -4910,8 +4938,7 @@ public final class ViewportPane extends StackPane {
                     hint(h, ws.replaceProperty().get() ? "Stop replacing" : "Replace mode", Keybinds.Action.REPLACE_MODE);
                     hint(h, ws.shuffleProperty().get() ? "Stop shuffling" : "Shuffle hotbar", Keybinds.Action.SHUFFLE);
                     hint(h, "Symmetry", Keybinds.Action.SYMMETRY);
-                    h.add(KeyHints.Hint.of("Hotbar slot", "Wheel"));
-                    h.add(KeyHints.Hint.of("Zoom", "Alt", "Wheel"));
+                    h.add(KeyHints.Hint.of("Hotbar slot", "Alt", "Wheel"));
                     h.add(KeyHints.Hint.of("Turn layer", "Shift", "Wheel"));
                     // The nine slots as "1-9" while they are on the number keys, else the first slot's key.
                     boolean digits = keys != null && java.util.stream.IntStream.range(0, 9).allMatch(i ->
