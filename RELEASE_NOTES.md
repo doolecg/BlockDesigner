@@ -1,3 +1,27 @@
+# BlockDesigner 0.4.8
+
+A fix for updating from 0.4.6 and earlier. Those versions couldn't install 0.4.7 by themselves, and sent you to this page instead. Now they update as usual, and afterwards BlockDesigner offers the move to `C:\Program Files`.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.8.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.8.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.8-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Fixed
+- **Updating from 0.4.6 and earlier works again.** Releases include the classic setup `.exe` again, which those versions' updater installs in place.
+
+## New
+- **Move to Program Files:** a copy installed in AppData (by 0.4.6 or earlier, or by their updater) now offers **Move BlockDesigner to Program Files** in the update window. It closes, installs for all users with the `.msi` (Windows asks for admin), and opens the new copy. That copy then removes the one in AppData. Your settings are kept.
+
+---
+
 # BlockDesigner 0.4.7
 
 BlockDesigner now installs into `C:\Program Files`. Your settings are backed up automatically and can be saved, loaded or reset. The tools are on the number keys. You can always see which mode you're in, and the brush has a proper options bar.

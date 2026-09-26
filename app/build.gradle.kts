@@ -62,6 +62,7 @@ application {
 // ./gradlew :app:installer  -> dist/BlockDesigner-<v>.msi (installs for all users in C:\Program Files\BlockDesigner, asks
 //                              for admin; Start menu + desktop shortcut, .bdproj association). Settings, plugins and
 //                              caches live in %APPDATA% / temp, never in the install folder, so updates keep them.
+//                              Also dist/BlockDesigner-<v>.exe: the per-user setup that updaters before 0.4.7 install.
 //                              Needs the WiX Toolset: unzip WiX 3.14 binaries into tools/wix3, or have WiX on PATH.
 
 val jdkBin = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(26) }
@@ -249,30 +250,52 @@ val installerImage = tasks.register<Exec>("installerImage") {
     doLast { signAppImage(imagesDir.get().dir("BlockDesigner").asFile) }
 }
 
-tasks.register<Exec>("installer") {
-    group = "distribution"
-    description = "Builds the Windows installer .msi in dist/ (needs WiX)."
-    dependsOn(installerImage)
+/** The jpackage arguments both installers share. */
+fun installerArgs(type: String) = listOf(
+    jpackageExe.get(), "--type", type, "--dest", distDir.asFile.absolutePath,
+    "--app-image", imagesDir.get().dir("BlockDesigner").asFile.absolutePath,
+    "--name", "BlockDesigner", "--app-version", packageVersion, "--vendor", "BlockDesigner",
+    "--icon", iconFile.absolutePath,
+    "--file-associations", rootProject.file("packaging/windows/bdproj.properties").absolutePath,
+    "--win-menu", "--win-menu-group", "BlockDesigner", "--win-shortcut", "--win-shortcut-prompt", "--win-dir-chooser",
+    // Fixed so newer installers upgrade older ones in place.
+    "--win-upgrade-uuid", "3f0f6a4e-5b1c-4f3e-9d7a-2b8e6c1d4a90",
+)
+
+fun Exec.useLocalWix() {
     workingDir = rootProject.projectDir
     // Use a local WiX 3 (tools/wix3, git-ignored) when present; otherwise WiX must be on PATH.
     val localWix = rootProject.file("tools/wix3")
     if (localWix.isDirectory) environment("PATH", localWix.absolutePath + File.pathSeparator + System.getenv("PATH"))
-    commandLine(
-        // An .msi, not a setup .exe: updaters before 0.4.7 only look for an .exe, and would pass it their per-user
-        // AppData folder as the install location. With no .exe they send people to the download page instead.
-        jpackageExe.get(), "--type", "msi", "--dest", distDir.asFile.absolutePath,
-        "--app-image", imagesDir.get().dir("BlockDesigner").asFile.absolutePath,
-        "--name", "BlockDesigner", "--app-version", packageVersion, "--vendor", "BlockDesigner",
-        "--icon", iconFile.absolutePath,
-        "--file-associations", rootProject.file("packaging/windows/bdproj.properties").absolutePath,
-        "--win-menu", "--win-menu-group", "BlockDesigner", "--win-shortcut", "--win-shortcut-prompt",
-        // Installed for all users in Program Files (no --win-per-user-install).
-        "--win-dir-chooser",
-        // Fixed so newer installers upgrade older ones in place.
-        "--win-upgrade-uuid", "3f0f6a4e-5b1c-4f3e-9d7a-2b8e6c1d4a90",
-    )
+}
+
+// The installer: an .msi that installs for all users in Program Files. Updaters from 0.4.7 on pick it.
+val installerMsi = tasks.register<Exec>("installerMsi") {
+    group = "distribution"
+    description = "Builds dist/BlockDesigner-<v>.msi, the all-users installer (needs WiX)."
+    dependsOn(installerImage)
+    useLocalWix()
+    commandLine(installerArgs("msi"))
     // The app inside is signed by installerImage; this signs the installer itself (what SmartScreen checks first).
     doLast { signFiles(listOf(distDir.file("BlockDesigner-$packageVersion.msi").asFile)) }
+}
+
+// The per-user setup .exe of 0.4.6 and earlier, still built for their updaters: they only recognise an .exe, and pass
+// it their AppData folder. It updates those copies in place; the new version then offers the move to Program Files.
+val installerExe = tasks.register<Exec>("installerExe") {
+    group = "distribution"
+    description = "Builds dist/BlockDesigner-<v>.exe, the per-user setup older updaters install (needs WiX)."
+    dependsOn(installerImage)
+    mustRunAfter(installerMsi)
+    useLocalWix()
+    commandLine(installerArgs("exe") + "--win-per-user-install")
+    doLast { signFiles(listOf(distDir.file("BlockDesigner-$packageVersion.exe").asFile)) }
+}
+
+tasks.register("installer") {
+    group = "distribution"
+    description = "Builds both installers in dist/: the .msi (all users, Program Files) and the per-user .exe for older updaters."
+    dependsOn(installerMsi, installerExe)
 }
 
 // PluginManagerTest loads the example plugins' jars (hello-plugin for API 1, palette-tools for API 2).

@@ -39,6 +39,9 @@ final class UpdateDialog extends Dialog<Void> {
      * @param quit        closes BlockDesigner once the installer is waiting for it
      * @param skip        remembers that the user doesn't want this version
      */
+    /** Same version or newer, from a per-user AppData install: the move to Program Files. */
+    private final boolean move;
+
     UpdateDialog(Window owner, boolean dark, Updater updater, Updater.Release release, BooleanSupplier readyToQuit,
                  Runnable quit, Consumer<String> skip, Consumer<String> browser) {
         initOwner(owner);
@@ -48,13 +51,19 @@ final class UpdateDialog extends Dialog<Void> {
         dp.getStylesheets().add(UpdateDialog.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
         dp.getStyleClass().addAll("app-root", dark ? "dark" : "light");
 
-        Label title = new Label("BlockDesigner " + release.version() + " is available", new FontIcon(Feather.DOWNLOAD_CLOUD));
+        this.move = Updater.offersMove(release);
+        boolean sameVersion = Updater.compareVersions(release.version(), Updater.currentVersion()) <= 0;
+        Label title = new Label(move && sameVersion ? "Move BlockDesigner to Program Files" : "BlockDesigner " + release.version() + " is available",
+                new FontIcon(Feather.DOWNLOAD_CLOUD));
         title.getStyleClass().add("export-title");
         title.setGraphicTextGap(12);
         Updater.Mode mode = Updater.mode();
         Updater.Asset asset = release.assetFor(mode);
         Label sub = new Label("You have " + Updater.currentVersion() + ". " + switch (mode) {
-            case INSTALLED -> "BlockDesigner will close, install the update and open again.";
+            case INSTALLED -> move
+                    ? "BlockDesigner now installs for all users in C:\\Program Files. It will close, install there (Windows asks for admin) "
+                    + "and open again; the old copy in AppData is removed and your settings are kept."
+                    : "BlockDesigner will close, install the update and open again.";
             case PORTABLE -> "BlockDesigner will close, replace this folder's files (your data folder is kept) and open again.";
             case DEV -> "This copy isn't an installed build, so it can't update itself.";
         });

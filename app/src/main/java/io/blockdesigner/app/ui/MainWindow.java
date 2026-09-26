@@ -722,7 +722,9 @@ public final class MainWindow {
         Thread.ofVirtual().name("update-check").start(() -> {
             try {
                 var release = updater.latest();
-                boolean newer = Updater.compareVersions(release.version(), Updater.currentVersion()) > 0;
+                // A per-user AppData copy is also offered the move to Program Files at the same version.
+                boolean newer = Updater.compareVersions(release.version(), Updater.currentVersion()) > 0
+                        || (Updater.offersMove(release) && Updater.compareVersions(release.version(), Updater.currentVersion()) >= 0);
                 Platform.runLater(() -> {
                     if (newer && (manual || !release.version().equals(ws.settings().skippedVersion))) {
                         showUpdate(release);

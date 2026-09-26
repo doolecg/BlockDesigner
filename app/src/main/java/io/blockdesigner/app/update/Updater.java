@@ -87,6 +87,21 @@ public final class Updater {
         return dataDir != null && !dataDir.isBlank() ? Mode.PORTABLE : Mode.INSTALLED;
     }
 
+    /**
+     * Whether this is a per-user install in AppData (the setup .exe of 0.4.6 and earlier, and the one older updaters
+     * still install): those offer to move to the all-users .msi install in Program Files.
+     */
+    public static boolean isPerUserInstall() {
+        Path root = appRoot();
+        String local = System.getenv("LOCALAPPDATA");
+        return mode() == Mode.INSTALLED && root != null && local != null && root.toAbsolutePath().startsWith(Path.of(local));
+    }
+
+    /** Whether a release is the move to Program Files for this copy: a per-user install, and the release has an .msi. */
+    public static boolean offersMove(Release r) {
+        return isPerUserInstall() && r.installer() != null && r.installer().name().toLowerCase(java.util.Locale.ROOT).endsWith(".msi");
+    }
+
     /** The folder holding BlockDesigner.exe (the install or portable folder); null when not run from jpackage. */
     public static Path appRoot() {
         String exe = System.getProperty("jpackage.app-path");
@@ -319,6 +334,8 @@ public final class Updater {
         boolean keepFolder = local == null || !root.toAbsolutePath().startsWith(Path.of(local));
         String args = "/i \"" + msi + "\" /passive" + (keepFolder ? " INSTALLDIR=\"" + root + "\"" : "");
         vars.put("ARGS", ps(args));
+        // Moving from AppData: open the new Program Files copy (it then removes the AppData one).
+        if (!keepFolder) vars.put("EXE", "(Join-Path $env:ProgramFiles 'BlockDesigner\\BlockDesigner.exe')");
         vars.put("TIMEOUT", Integer.toString(SETUP_TIMEOUT_MS));
         return """
                 Wait-Process -Id {PID} -ErrorAction SilentlyContinue

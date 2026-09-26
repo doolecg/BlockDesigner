@@ -103,6 +103,17 @@ class UpdaterTest {
     }
 
     @Test
+    void movingFromAppDataOpensTheProgramFilesCopy() {
+        String local = System.getenv("LOCALAPPDATA");
+        org.junit.jupiter.api.Assumptions.assumeTrue(local != null, "Windows only");
+        Path root = Path.of(local, "BlockDesigner");
+        String script = Updater.installScript(Updater.Mode.INSTALLED, Path.of("C:\\Temp\\x\\BlockDesigner-9.9.9.msi"), root);
+        // The all-users install goes to Program Files (no INSTALLDIR pointing into AppData), and that copy opens.
+        assertThat(script).doesNotContain("INSTALLDIR");
+        assertThat(script).contains("Start-Process -FilePath (Join-Path $env:ProgramFiles 'BlockDesigner\\BlockDesigner.exe')");
+    }
+
+    @Test
     void onlyOtherBlockDesignerInstallsAreLeftovers(@TempDir Path dir) throws IOException {
         Path current = Files.createDirectories(dir.resolve("Program Files/BlockDesigner"));
         Path old = Files.createDirectories(dir.resolve("AppData/Local/BlockDesigner"));
