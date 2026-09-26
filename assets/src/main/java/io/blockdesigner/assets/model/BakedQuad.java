@@ -14,8 +14,14 @@ import io.blockdesigner.assets.TextureAtlas;
  * @param tint   RGB multiplier (0xFFFFFF = none)
  * @param shade  apply directional shading
  * @param sprite the texture this quad samples
+ * @param glow   drawn at full brightness, unlit (a mob's glowing eyes: Minecraft's "eyes" render type)
  */
-public record BakedQuad(float[] pos, float[] uv, float[] normal, Dir face, Dir cull, int tint, RenderLayer layer, boolean shade, TextureAtlas.Sprite sprite) {
+public record BakedQuad(float[] pos, float[] uv, float[] normal, Dir face, Dir cull, int tint, RenderLayer layer, boolean shade, TextureAtlas.Sprite sprite,
+                        boolean glow) {
+
+    public BakedQuad(float[] pos, float[] uv, float[] normal, Dir face, Dir cull, int tint, RenderLayer layer, boolean shade, TextureAtlas.Sprite sprite) {
+        this(pos, uv, normal, face, cull, tint, layer, shade, sprite, false);
+    }
 
     public float x(int v) {
         return pos[v * 3];

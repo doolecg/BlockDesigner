@@ -50,22 +50,27 @@ final class EntityModels {
         }
     }
 
-    /** A part: its cubes, pose (pivot in pixels, rotations in radians) and children. */
-    record Part(List<Cube> cubes, float px, float py, float pz, float xRot, float yRot, float zRot, List<Part> children) {
+    /** A part: its cubes, pose (pivot in pixels, rotations in radians, then scale) and children. */
+    record Part(List<Cube> cubes, float px, float py, float pz, float xRot, float yRot, float zRot, List<Part> children,
+                float sx, float sy, float sz) {
+        Part(List<Cube> cubes, float px, float py, float pz, float xRot, float yRot, float zRot, List<Part> children) {
+            this(cubes, px, py, pz, xRot, yRot, zRot, children, 1, 1, 1);
+        }
+
         static Part of(Cube... cubes) {
             return new Part(List.of(cubes), 0, 0, 0, 0, 0, 0, List.of());
         }
 
         Part at(float x, float y, float z) {
-            return new Part(cubes, x, y, z, xRot, yRot, zRot, children);
+            return new Part(cubes, x, y, z, xRot, yRot, zRot, children, sx, sy, sz);
         }
 
         Part rotated(float x, float y, float z) {
-            return new Part(cubes, px, py, pz, x, y, z, children);
+            return new Part(cubes, px, py, pz, x, y, z, children, sx, sy, sz);
         }
 
         Part with(Part... kids) {
-            return new Part(cubes, px, py, pz, xRot, yRot, zRot, List.of(kids));
+            return new Part(cubes, px, py, pz, xRot, yRot, zRot, List.of(kids), sx, sy, sz);
         }
     }
 
@@ -431,6 +436,7 @@ final class EntityModels {
     static void emit(Part part, Mat parent, int tw, int th, TextureAtlas.Sprite sprite, List<BakedQuad> out) {
         Mat m = parent.translate(part.px / 16, part.py / 16, part.pz / 16);
         if (part.xRot != 0 || part.yRot != 0 || part.zRot != 0) m = m.rotateZ(part.zRot).rotateY(part.yRot).rotateX(part.xRot);
+        if (part.sx != 1 || part.sy != 1 || part.sz != 1) m = m.scale(part.sx, part.sy, part.sz);
         for (Cube c : part.cubes) cube(c, m, tw, th, sprite, out);
         for (Part child : part.children) emit(child, m, tw, th, sprite, out);
     }

@@ -39,11 +39,23 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * Select mode's "By type" panel: tick the block types (or exact states) you want, then either select them or replace
- * them with another block. The list shows what the chosen layers actually contain, with counts; where to look and
- * property filters sit under "More options".
+ * Select mode's "By type" panel: tick the block types (or exact states) and mob types you want, then either select
+ * them or replace the blocks with another block (air removes mobs too). The list shows what the chosen layers actually
+ * contain, with counts; where to look and property filters sit under "More options".
  */
 public final class SelectByTypePanel extends VBox {
+
+    /** List keys for mob types start with this ("entity:minecraft:pig"); block keys are ids or states. */
+    public static final String ENTITY = "entity:";
+
+    /** The list key for a mob type. */
+    public static String entityKey(String entityId) {
+        return ENTITY + io.blockdesigner.core.model.EntityTypes.kind(entityId).id();
+    }
+
+    public static boolean isEntityKey(String key) {
+        return key.startsWith(ENTITY);
+    }
 
     public enum Scope {
         ACTIVE("Active layer"), SELECTED("Selected layers"), VISIBLE("All visible layers"), SELECTION("Within the current selection");
@@ -77,7 +89,8 @@ public final class SelectByTypePanel extends VBox {
 
     /**
      * What to count: blocks in {@code scope} whose world-facing state has every property in {@code properties}
-     * (values may list alternatives, {@code a|b}), keyed by block id or, when {@code exact}, the full state.
+     * (values may list alternatives, {@code a|b}), keyed by block id or, when {@code exact}, the full state; and mobs,
+     * keyed by {@link #entityKey} (left out when properties are asked for, as mobs have none).
      */
     public record Query(Scope scope, boolean exact, Map<String, Set<String>> properties, boolean slice) {
         /** The key a state is listed under. */
@@ -132,12 +145,13 @@ public final class SelectByTypePanel extends VBox {
     private final Label targetName = new Label();
 
     /**
-     * @param counter   counts the matching blocks per key for a query
-     * @param preselect the block to start with ticked (world-facing), or null
-     * @param held      the block in hand, offered as the replacement (or null)
+     * @param counter          counts the matching blocks and mobs per key for a query
+     * @param preselect        the block to start with ticked (world-facing), or null
+     * @param preselectEntity  the mob type (entity id) to start with ticked, or null
+     * @param held             the block in hand, offered as the replacement (or null)
      */
     public SelectByTypePanel(BlockAssets assets, Scope defaultScope, boolean hasSelection, boolean sliceActive,
-                             BlockState preselect, BlockState held, Function<Query, Map<String, Long>> counter,
+                             BlockState preselect, String preselectEntity, BlockState held, Function<Query, Map<String, Long>> counter,
                              java.util.function.Consumer<Options> onSelect, java.util.function.Consumer<Replace> onReplace,
                              Runnable onClose) {
         this.assets = assets;
@@ -162,7 +176,7 @@ public final class SelectByTypePanel extends VBox {
         });
         HBox action = new HBox(0, selectAction, replaceAction);
 
-        Label step1 = step("1", "Tick the blocks to find");
+        Label step1 = step("1", "Tick the blocks and mobs to find");
 
         // Scope and filters (under More options)
         ComboBox<Scope> scope = new ComboBox<>();
@@ -217,7 +231,7 @@ public final class SelectByTypePanel extends VBox {
         ListView<Row> list = new ListView<>(shown);
         list.setCellFactory(v -> new RowCell());
         list.setPrefHeight(260);
-        list.setPlaceholder(new Label("None of these blocks here. Try another place to look under More options."));
+        list.setPlaceholder(new Label("None of these blocks or mobs here. Try another place to look under More options."));
         list.setOnKeyPressed(e -> {
             Row r = list.getSelectionModel().getSelectedItem();
             if (e.getCode() == javafx.scene.input.KeyCode.SPACE && r != null) {
@@ -341,7 +355,7 @@ public final class SelectByTypePanel extends VBox {
         useHeld.setOnAction(e -> setTarget(held));
         Button useAir = new Button("Air", new FontIcon(Feather.TRASH_2));
         useAir.getStyleClass().addAll("small", "flat");
-        useAir.setTooltip(new javafx.scene.control.Tooltip("Remove the ticked blocks"));
+        useAir.setTooltip(new javafx.scene.control.Tooltip("Remove the ticked blocks and mobs"));
         useAir.setOnAction(e -> setTarget(BlockState.AIR));
         Region tgrow = new Region();
         HBox.setHgrow(tgrow, Priority.ALWAYS);
@@ -374,7 +388,7 @@ public final class SelectByTypePanel extends VBox {
 
         Runnable refresh = () -> {
             Map<String, Set<String>> filter = parseProperties(props.getText());
-            propsHint.setText(filter.isEmpty() ? "Blank matches every block" : "Blocks without these properties are skipped");
+            propsHint.setText(filter.isEmpty() ? "Blank matches every block" : "Blocks without these properties, and mobs, are skipped");
             moreTitle.run();
             refresh(new Query(scope.getValue(), byState.isSelected(), filter, slice.isSelected()));
         };
@@ -386,7 +400,11 @@ public final class SelectByTypePanel extends VBox {
 
         refresh.run();
         if (preselect != null) {
-            for (Row r : rows) if (r.state.name().equals(preselect.name())) r.checked.set(true);
+            for (Row r : rows) if (r.state != null && r.state.name().equals(preselect.name())) r.checked.set(true);
+        }
+        if (preselectEntity != null) {
+            String key = entityKey(preselectEntity);
+            for (Row r : rows) if (r.key.equals(key)) r.checked.set(true);
         }
         updateSummary();
 
@@ -435,7 +453,7 @@ public final class SelectByTypePanel extends VBox {
         Set<String> checkedTypes = new HashSet<>(), checkedStates = new HashSet<>();
         for (Row r : rows) {
             if (!r.checked.get()) continue;
-            checkedTypes.add(r.state.name());
+            checkedTypes.add(r.type());
             if (query != null && query.exact()) checkedStates.add(r.key);
         }
         boolean wasExact = query != null && query.exact();
@@ -443,8 +461,8 @@ public final class SelectByTypePanel extends VBox {
         Map<String, Long> counts = counter.apply(q);
         List<Row> fresh = new java.util.ArrayList<>();
         counts.forEach((key, n) -> {
-            Row r = new Row(key, q.exact() ? BlockState.parse(key) : BlockState.of(key), n);
-            boolean on = q.exact() && wasExact ? checkedStates.contains(key) : checkedTypes.contains(r.state.name());
+            Row r = isEntityKey(key) ? new Row(key, null, n) : new Row(key, q.exact() ? BlockState.parse(key) : BlockState.of(key), n);
+            boolean on = q.exact() && wasExact ? checkedStates.contains(key) : checkedTypes.contains(r.type());
             r.checked.set(on);
             r.checked.addListener((o, a, b) -> updateSummary());
             fresh.add(r);
@@ -461,20 +479,31 @@ public final class SelectByTypePanel extends VBox {
     }
 
     private void updateSummary() {
-        long blocks = 0, types = 0;
+        long blocks = 0, mobs = 0, types = 0;
         for (Row r : rows) {
             if (!r.checked.get()) continue;
-            blocks += r.count;
+            if (r.state == null) mobs += r.count;
+            else blocks += r.count;
             types++;
         }
         anyChecked.set(types > 0);
-        String count = String.format("%,d block%s", blocks, blocks == 1 ? "" : "s");
+        boolean removing = replacing.get() && target != null && target.isAir();
+        // A block can't stand in for a mob: replacing with a block leaves the ticked mobs alone.
+        boolean mobsCount = !replacing.get() || removing;
+        String count = count(blocks, mobsCount ? mobs : 0);
+        long acted = blocks + (mobsCount ? mobs : 0);
         ok.setText(types == 0 ? (replacing.get() ? "Replace" : "Select")
-                : replacing.get() ? (target != null && target.isAir() ? "Remove " : "Replace ") + count : "Select " + count);
-        ok.setDisable(types == 0 || (replacing.get() && target == null));
-        summary.setText(rows.isEmpty() ? "No matching blocks"
-                : String.format("%,d block%s in %d of %d %s", blocks, blocks == 1 ? "" : "s", types, rows.size(),
-                query.exact() ? "states" : "types"));
+                : replacing.get() ? (removing ? "Remove " : "Replace ") + count : "Select " + count);
+        ok.setDisable(acted == 0 || (replacing.get() && target == null));
+        String note = replacing.get() && !removing && mobs > 0 ? " (mobs are left alone)" : "";
+        summary.setText(rows.isEmpty() ? "Nothing matches"
+                : String.format("%s in %d of %d %s%s", count(blocks, mobs), types, rows.size(), query.exact() ? "states" : "types", note));
+    }
+
+    /** "12 blocks", "3 mobs" or "12 blocks and 3 mobs". */
+    private static String count(long blocks, long mobs) {
+        String b = String.format("%,d block%s", blocks, blocks == 1 ? "" : "s"), m = String.format("%,d mob%s", mobs, mobs == 1 ? "" : "s");
+        return mobs == 0 ? b : blocks == 0 ? m : b + " and " + m;
     }
 
     /** {@code key=value, key=a|b}; malformed parts are ignored. */
@@ -500,6 +529,7 @@ public final class SelectByTypePanel extends VBox {
         });
     }
 
+    /** A block type or state, or (with a null state) a mob type. */
     private final class Row {
         final String key;
         final BlockState state;
@@ -511,7 +541,17 @@ public final class SelectByTypePanel extends VBox {
             this.key = key;
             this.state = state;
             this.count = count;
-            this.title = BlockInfoHud.name(assets, state);
+            this.title = state == null ? io.blockdesigner.core.model.EntityTypes.kind(entityId()).name() : BlockInfoHud.name(assets, state);
+        }
+
+        /** The entity id of a mob row. */
+        String entityId() {
+            return key.substring(ENTITY.length());
+        }
+
+        /** What stays ticked when the list switches between types and exact states: the block id, or the mob's key. */
+        String type() {
+            return state == null ? key : state.name();
         }
     }
 
@@ -551,10 +591,14 @@ public final class SelectByTypePanel extends VBox {
                 return;
             }
             box.selectedProperty().bindBidirectional(r.checked);
-            iv.setImage(icon(r.state));
+            iv.setImage(r.state == null ? EntityIcons.icon(assets, r.entityId()) : icon(r.state));
             name.setText(r.title);
-            String props = r.state.properties().isEmpty() ? "" : r.state.toString().substring(r.state.name().length());
-            meta.setText(r.state.name() + props);
+            if (r.state == null) {
+                meta.setText("Mob · " + r.entityId());
+            } else {
+                String props = r.state.properties().isEmpty() ? "" : r.state.toString().substring(r.state.name().length());
+                meta.setText(r.state.name() + props);
+            }
             count.setText(String.format("%,d", r.count));
             setGraphic(root);
         }

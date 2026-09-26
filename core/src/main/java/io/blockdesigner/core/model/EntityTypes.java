@@ -57,6 +57,7 @@ public final class EntityTypes {
         add("camel", "Camel", 1.7, 2.375, 0xFCC369, FARM);
         add("bee", "Bee", 0.7, 0.6, 0xEDC343, FARM);
         add("turtle", "Turtle", 1.2, 0.4, 0xE7E7E7, FARM);
+        add("happy_ghast", "Happy Ghast", 4, 4, 0xF9F9F9, FARM);
 
         add("villager", "Villager", 0.6, 1.95, 0x563C33, VILLAGE);
         add("wandering_trader", "Wandering Trader", 0.6, 1.95, 0x456296, VILLAGE);
@@ -67,6 +68,7 @@ public final class EntityTypes {
         add("cat", "Cat", 0.6, 0.7, 0xEFC88E, VILLAGE);
         add("wolf", "Wolf", 0.6, 0.85, 0xD7D3D3, VILLAGE);
         add("parrot", "Parrot", 0.5, 0.9, 0x0DA70B, VILLAGE);
+        add("copper_golem", "Copper Golem", 0.49, 0.98, 0xC56E4F, VILLAGE);
 
         add("fox", "Fox", 0.6, 0.7, 0xD5B69F, WILD);
         add("ocelot", "Ocelot", 0.6, 0.7, 0xEFDE7D, WILD);
@@ -77,6 +79,8 @@ public final class EntityTypes {
         add("sniffer", "Sniffer", 1.9, 1.75, 0x871E09, WILD);
         add("bat", "Bat", 0.5, 0.9, 0x4C3E30, WILD);
         add("strider", "Strider", 0.9, 1.7, 0x9C3436, WILD);
+        add("skeleton_horse", "Skeleton Horse", 1.3964844, 1.6, 0x68684F, WILD);
+        add("zombie_horse", "Zombie Horse", 1.3964844, 1.6, 0x315234, WILD);
 
         add("axolotl", "Axolotl", 0.75, 0.42, 0xFBC1E3, WATER);
         add("cod", "Cod", 0.5, 0.3, 0xC1A76A, WATER);
@@ -86,6 +90,9 @@ public final class EntityTypes {
         add("squid", "Squid", 0.8, 0.8, 0x223B4D, WATER);
         add("glow_squid", "Glow Squid", 0.8, 0.8, 0x095656, WATER);
         add("dolphin", "Dolphin", 0.9, 0.6, 0x223B4D, WATER);
+        add("tadpole", "Tadpole", 0.4, 0.3, 0x6D533D, WATER);
+        add("nautilus", "Nautilus", 0.875, 0.95, 0x6B5B4B, WATER);
+        add("elder_guardian", "Elder Guardian", 1.9975, 1.9975, 0xCECCBA, WATER);
 
         add("zombie", "Zombie", 0.6, 1.95, 0x00AFAF, HOSTILE);
         add("husk", "Husk", 0.6, 1.95, 0x797061, HOSTILE);
@@ -103,6 +110,32 @@ public final class EntityTypes {
         add("blaze", "Blaze", 0.6, 1.8, 0xF6B201, HOSTILE);
         add("piglin", "Piglin", 0.6, 1.95, 0x995F40, HOSTILE);
         add("guardian", "Guardian", 0.85, 0.85, 0x5A8272, HOSTILE);
+        add("zombie_villager", "Zombie Villager", 0.6, 1.95, 0x563C33, HOSTILE);
+        add("zombified_piglin", "Zombified Piglin", 0.6, 1.95, 0xEA9393, HOSTILE);
+        add("piglin_brute", "Piglin Brute", 0.6, 1.95, 0x592A10, HOSTILE);
+        add("hoglin", "Hoglin", 1.3964844, 1.4, 0xC66E55, HOSTILE);
+        add("zoglin", "Zoglin", 1.3964844, 1.4, 0xC66E55, HOSTILE);
+        add("evoker", "Evoker", 0.6, 1.95, 0x959B9B, HOSTILE);
+        add("illusioner", "Illusioner", 0.6, 1.95, 0x135A97, HOSTILE);
+        add("ravager", "Ravager", 1.95, 2.2, 0x757470, HOSTILE);
+        add("vex", "Vex", 0.4, 0.8, 0x7A90A4, HOSTILE);
+        add("cave_spider", "Cave Spider", 0.7, 0.5, 0x0C424E, HOSTILE);
+        add("silverfish", "Silverfish", 0.4, 0.3, 0x6E6E6E, HOSTILE);
+        add("endermite", "Endermite", 0.4, 0.3, 0x161616, HOSTILE);
+        add("magma_cube", "Magma Cube", 1.04, 1.04, 0x340000, HOSTILE);
+        add("ghast", "Ghast", 4, 4, 0xF9F9F9, HOSTILE);
+        add("phantom", "Phantom", 0.9, 0.5, 0x43518A, HOSTILE);
+        add("shulker", "Shulker", 1, 1, 0x946794, HOSTILE);
+        add("breeze", "Breeze", 0.6, 1.77, 0xAF94DF, HOSTILE);
+        add("bogged", "Bogged", 0.6, 1.99, 0x8A9E5B, HOSTILE);
+        add("parched", "Parched", 0.6, 1.99, 0xC9B78C, HOSTILE);
+        add("creaking", "Creaking", 0.9, 2.7, 0x5F5F5F, HOSTILE);
+        add("camel_husk", "Camel Husk", 1.7, 2.375, 0x8F7F5E, HOSTILE);
+        add("zombie_nautilus", "Zombie Nautilus", 0.875, 0.95, 0x3E5E4B, HOSTILE);
+        add("warden", "Warden", 0.9, 2.9, 0x0F4649, HOSTILE);
+        add("wither", "Wither", 0.9, 3.5, 0x141414, HOSTILE);
+        add("ender_dragon", "Ender Dragon", 16, 8, 0x1C1C1C, HOSTILE);
+        add("giant", "Giant", 3.6, 12, 0x00AFAF, HOSTILE);
 
         add("armor_stand", "Armor Stand", 0.5, 1.975, 0xB2946A, DECOR, false);
         add("item_frame", "Item Frame", 0.75, 0.75, 0xA07E4F, DECOR, false);
@@ -200,12 +233,19 @@ public final class EntityTypes {
             };
         }
         double scale = baby(e.nbt()) ? 0.5 : 1;
+        // A slime's or magma cube's box is its size times 0.52 (the catalog's is size 2's).
+        if (path.equals("slime") || path.equals("magma_cube")) scale = slimeSize(e.nbt()) / 2.0;
         double hw = k.width() * scale / 2, h = k.height() * scale;
         if (path.equals("armor_stand") && e.nbt().getBoolean("Small")) {
             hw /= 2;
             h /= 2;
         }
         return new double[]{e.x() - hw, e.y(), e.z() - hw, e.x() + hw, e.y() + h, e.z() + hw};
+    }
+
+    /** A slime's or magma cube's size: {@code Size} + 1 (1, 2 or 4 in the game), 2 when it has none. */
+    public static int slimeSize(CompoundTag nbt) {
+        return nbt.contains("Size") ? Math.max(1, nbt.getInt("Size") + 1) : 2;
     }
 
     /** A baby mob (Age below zero, or IsBaby for zombies and piglins). */

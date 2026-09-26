@@ -265,6 +265,9 @@ public final class ViewportPane extends StackPane {
     private final BlockSounds sounds = new BlockSounds();
     private final BreakParticles particles = new BreakParticles();
     private boolean particlesDrawn;
+    /** The last frame showed animated textures (fire, lava…): redraw each game tick to play them. */
+    private boolean animatedOnScreen;
+    private long animatedTick;
     private final Vector3f flyVel = new Vector3f();
     private Gizmo.Handle gizmoHot;
     private GizmoDrag gizmoDrag;
@@ -570,6 +573,13 @@ public final class ViewportPane extends StackPane {
         holdStep();
         strokeStep();
         lidStep(dt);
+        if (animatedOnScreen) {
+            long tick = ViewportRenderer.tick();
+            if (tick != animatedTick) {
+                animatedTick = tick;
+                redraw.set(true);
+            }
+        }
         if (sceneRenderer != null) sceneRenderer.sync();
         if (previewRenderer != null) previewRenderer.sync();
         checkSelection();
@@ -591,6 +601,7 @@ public final class ViewportPane extends StackPane {
 
         ViewportRenderer.Frame f = latest.getAndSet(null);
         if (f != null) {
+            animatedOnScreen = f.animated();
             if (f.width() == pbW && f.height() == pbH) {
                 IntBuffer dst = pixels.getBuffer();
                 dst.clear();
@@ -2205,9 +2216,15 @@ public final class ViewportPane extends StackPane {
         if (hoverEntity != null) {
             EntityHit eh = hoverEntity;
             String name = io.blockdesigner.core.model.EntityTypes.displayName(eh.entity());
+            javafx.scene.control.Menu mobType = new javafx.scene.control.Menu("Select by type");
+            String typeName = io.blockdesigner.core.model.EntityTypes.kind(eh.entity().id()).name();
+            mobType.getItems().addAll(
+                    item("All " + typeName + " in visible layers", null, () -> quickSelectEntityType(eh.entity().id())),
+                    item("Select or remove…", keyOrNull(Keybinds.Action.SELECT_BY_TYPE), () -> openSelectByType(null, eh.entity().id())));
             contextMenu.getItems().addAll(
                     item("Hold " + name + " to place more", "Middle-click", this::pickBlock),
                     item("Remove " + name, null, () -> removeEntity(eh, null)),
+                    mobType,
                     new javafx.scene.control.SeparatorMenuItem());
         }
         if (!entitySel.isEmpty()) {
@@ -3628,7 +3645,7 @@ public final class ViewportPane extends StackPane {
             case ACTIVE -> active == null ? List.of() : List.of(active);
             case SELECTED -> ws.selectedLayers().isEmpty() && active != null ? List.of(active) : List.copyOf(ws.selectedLayers());
             case VISIBLE -> ws.scene().layers();
-            case SELECTION -> ws.scene().layers().stream().filter(l -> blockSel.containsKey(l.id())).toList();
+            case SELECTION -> ws.scene().layers().stream().filter(l -> blockSel.containsKey(l.id()) || entitySel.containsKey(l.id())).toList();
         };
         return from.stream().filter(l -> l.visible() && !l.locked() && !placing.contains(l)).toList();
     }
@@ -3663,24 +3680,54 @@ public final class ViewportPane extends StackPane {
                 q.slice() ? sliceMin() : Integer.MIN_VALUE, q.slice() ? sliceMax() : Integer.MAX_VALUE, v);
     }
 
+    /**
+     * Visits the mobs a query looks at: in its layers (only selected ones for "within the current selection"), standing
+     * inside the slice when asked. None when the query filters by block properties, which mobs don't have.
+     */
+    private void forEachEntityCandidate(SelectByTypePanel.Query q, java.util.function.BiConsumer<Layer, io.blockdesigner.core.model.StructureEntity> v) {
+        if (!q.properties().isEmpty()) return;
+        int lo = q.slice() ? sliceMin() : Integer.MIN_VALUE, hi = q.slice() ? sliceMax() : Integer.MAX_VALUE;
+        boolean within = q.scope() == SelectByTypePanel.Scope.SELECTION;
+        for (Layer l : typeLayers(q.scope())) {
+            java.util.Collection<io.blockdesigner.core.model.StructureEntity> from = within
+                    ? entitySel.getOrDefault(l.id(), java.util.Set.of()) : l.structure().entities();
+            for (var e : List.copyOf(from)) {
+                double y = worldEntity(l, e).y();
+                if (Math.floor(y) < lo || Math.floor(y) > hi) continue;
+                v.accept(l, e);
+            }
+        }
+    }
+
     /** Alt+T: Select by type, starting from the block under the cursor. */
     public void openSelectByTypeAtAim() {
+        if (hoverEntity != null) {
+            openSelectByType(null, hoverEntity.entity().id());
+            return;
+        }
         Layer hl = hover != null ? hover.layer() : null;
         openSelectByType(hl == null ? null : BlockTransformer.defaults().apply(hl.structure().get(hover.local()), hl.transform()));
     }
 
     /** Opens the Select by type dialog (Alt+T), with {@code preselect}'s block (world-facing) ticked if given. */
     public void openSelectByType(BlockState preselect) {
+        openSelectByType(preselect, null);
+    }
+
+    /** As {@link #openSelectByType(BlockState)}, or with a mob type ({@code preselectEntity}, an entity id) ticked. */
+    public void openSelectByType(BlockState preselect, String preselectEntity) {
         if (!placing.isEmpty()) return;
         setFly(false);
         ws.toolProperty().set(ToolKind.SELECT);
         SelectByTypePanel.Scope scope = ws.selectedLayers().size() > 1 ? SelectByTypePanel.Scope.SELECTED : SelectByTypePanel.Scope.VISIBLE;
         if (selectByTypePopover != null && selectByTypePopover.isShowing()) selectByTypePopover.hide();
-        SelectByTypePanel panel = new SelectByTypePanel(ws.assets(), scope, !blockSel.isEmpty(), sliceY != null, preselect, ws.blockToPlace(), q -> {
+        SelectByTypePanel panel = new SelectByTypePanel(ws.assets(), scope, !blockSel.isEmpty() || !entitySel.isEmpty(), sliceY != null,
+                preselect, preselectEntity, ws.blockToPlace(), q -> {
             java.util.Map<String, Long> counts = new java.util.HashMap<>();
             forEachTypeCandidate(q, (l, packed, st) -> {
                 if (q.matches(st)) counts.merge(q.key(st), 1L, Long::sum);
             });
+            forEachEntityCandidate(q, (l, e) -> counts.merge(SelectByTypePanel.entityKey(e.id()), 1L, Long::sum));
             return counts;
         }, this::applySelectByType, this::applyReplaceByType, () -> {
             if (selectByTypePopover != null) selectByTypePopover.hide();
@@ -3696,7 +3743,16 @@ public final class ViewportPane extends StackPane {
         forEachTypeCandidate(q, (l, packed, st) -> {
             if (q.matches(st) && o.keys().contains(q.key(st))) found.computeIfAbsent(l.id(), k -> new java.util.HashSet<>()).add(packed);
         });
-        applyTypeSelection(found, o.mode());
+        applyTypeSelection(found, typeEntities(q, o.keys()), o.mode());
+    }
+
+    /** The mobs a query finds whose type is among {@code keys}, by layer id. */
+    private java.util.Map<String, java.util.Set<io.blockdesigner.core.model.StructureEntity>> typeEntities(SelectByTypePanel.Query q, java.util.Set<String> keys) {
+        java.util.Map<String, java.util.Set<io.blockdesigner.core.model.StructureEntity>> out = new java.util.LinkedHashMap<>();
+        forEachEntityCandidate(q, (l, e) -> {
+            if (keys.contains(SelectByTypePanel.entityKey(e.id()))) out.computeIfAbsent(l.id(), k -> new java.util.LinkedHashSet<>()).add(e);
+        });
+        return out;
     }
 
     /** Replaces every ticked block with the chosen one (keeping facing and the like when asked) as one undo step. */
@@ -3708,20 +3764,35 @@ public final class ViewportPane extends StackPane {
             if (q.matches(st) && r.keys().contains(q.key(st)))
                 changes.put(l.toWorld(BlockPos.unpack(packed)), results.computeIfAbsent(st, f -> r.result(f, ws.assets())));
         });
-        if (changes.isEmpty()) return;
-        int[] n = {0};
+        // Air removes the ticked mobs too; a block can't replace a mob, so they're left alone otherwise.
+        var mobs = r.target().isAir() ? typeEntities(q, r.keys()) : java.util.Map.<String, java.util.Set<io.blockdesigner.core.model.StructureEntity>>of();
+        if (changes.isEmpty() && mobs.isEmpty()) return;
+        int[] n = {0, 0};
         String what = r.target().isAir() ? "Remove by type" : "Replace by type";
-        boolean ok = editWorld(what, world -> changes.forEach((p, st) -> {
-            if (!world.get(p).equals(st)) {
-                world.set(p, st);
-                n[0]++;
-            }
-        }));
+        boolean ok = editWorld(what, world -> {
+            changes.forEach((p, st) -> {
+                if (!world.get(p).equals(st)) {
+                    world.set(p, st);
+                    n[0]++;
+                }
+            });
+            mobs.forEach((id, gone) -> ws.scene().find(id).ifPresent(l -> {
+                n[1] += gone.size();
+                ws.editor().editEntities(l, what, null, list -> list.removeAll(gone));
+                var sel = entitySel.get(id);
+                if (sel != null) {
+                    sel.removeAll(gone);
+                    if (sel.isEmpty()) entitySel.remove(id);
+                }
+            }));
+        });
         if (!ok) return;
         String name = r.target().isAir() ? null : BlockInfoHud.name(ws.assets(), r.target());
-        showToast(n[0] == 0 ? "Nothing changed: those blocks already match"
-                : name == null ? String.format("Removed %,d block%s", n[0], n[0] == 1 ? "" : "s")
+        String mobText = n[1] == 0 ? "" : String.format("%s%d mob%s", n[0] == 0 ? "" : " and ", n[1], n[1] == 1 ? "" : "s");
+        showToast(n[0] == 0 && n[1] == 0 ? "Nothing changed: those blocks already match"
+                : name == null ? "Removed " + (n[0] == 0 ? "" : String.format("%,d block%s", n[0], n[0] == 1 ? "" : "s")) + mobText
                 : String.format("Replaced %,d block%s with %s", n[0], n[0] == 1 ? "" : "s", name));
+        requestRedraw();
     }
 
     /** Selects every block with {@code type}'s id (or exactly its state) in the layers, replacing the selection. */
@@ -3731,24 +3802,49 @@ public final class ViewportPane extends StackPane {
                 sliceMin(), sliceMax(), (l, packed, st) -> {
                     if (exact ? st == type : st.name().equals(type.name())) found.computeIfAbsent(l.id(), k -> new java.util.HashSet<>()).add(packed);
                 });
-        applyTypeSelection(found, SelectByTypePanel.Mode.REPLACE);
+        applyTypeSelection(found, java.util.Map.of(), SelectByTypePanel.Mode.REPLACE);
     }
 
-    private void applyTypeSelection(java.util.Map<String, java.util.Set<Long>> found, SelectByTypePanel.Mode mode) {
+    /** Selects every mob of {@code entityId}'s type in the visible layers (within the slice), replacing the selection. */
+    private void quickSelectEntityType(String entityId) {
+        String key = SelectByTypePanel.entityKey(entityId);
+        var q = new SelectByTypePanel.Query(SelectByTypePanel.Scope.VISIBLE, false, java.util.Map.of(), sliceY != null);
+        var mobs = typeEntities(q, java.util.Set.of(key));
+        applyTypeSelection(java.util.Map.of(), mobs, SelectByTypePanel.Mode.REPLACE);
+        int n = mobs.values().stream().mapToInt(java.util.Set::size).sum();
+        showToast(String.format("Selected %d %s", n, io.blockdesigner.core.model.EntityTypes.kind(entityId).name()));
+    }
+
+    /** Applies found blocks and mobs to the selection: a new selection, added to it, or taken out of it. */
+    private void applyTypeSelection(java.util.Map<String, java.util.Set<Long>> found,
+                                    java.util.Map<String, java.util.Set<io.blockdesigner.core.model.StructureEntity>> mobs, SelectByTypePanel.Mode mode) {
         switch (mode) {
             case REPLACE -> {
                 blockSel.clear();
                 blockSel.putAll(found);
+                entitySel.clear();
+                mobs.forEach((id, set) -> entitySel.put(id, new java.util.LinkedHashSet<>(set)));
             }
-            case ADD -> found.forEach((id, set) -> blockSel.computeIfAbsent(id, k -> new java.util.HashSet<>()).addAll(set));
-            case REMOVE -> found.forEach((id, set) -> {
-                java.util.Set<Long> cur = blockSel.get(id);
-                if (cur == null) return;
-                cur.removeAll(set);
-                if (cur.isEmpty()) blockSel.remove(id);
-            });
+            case ADD -> {
+                found.forEach((id, set) -> blockSel.computeIfAbsent(id, k -> new java.util.HashSet<>()).addAll(set));
+                mobs.forEach((id, set) -> entitySel.computeIfAbsent(id, k -> new java.util.LinkedHashSet<>()).addAll(set));
+            }
+            case REMOVE -> {
+                found.forEach((id, set) -> {
+                    java.util.Set<Long> cur = blockSel.get(id);
+                    if (cur == null) return;
+                    cur.removeAll(set);
+                    if (cur.isEmpty()) blockSel.remove(id);
+                });
+                mobs.forEach((id, set) -> {
+                    var cur = entitySel.get(id);
+                    if (cur == null) return;
+                    cur.removeAll(set);
+                    if (cur.isEmpty()) entitySel.remove(id);
+                });
+            }
         }
-        List<Layer> touched = ws.scene().layers().stream().filter(l -> blockSel.containsKey(l.id())).toList();
+        List<Layer> touched = ws.scene().layers().stream().filter(l -> blockSel.containsKey(l.id()) || entitySel.containsKey(l.id())).toList();
         if (!touched.isEmpty()) {
             ws.selectedLayers().setAll(touched);
             Layer active = ws.activeLayerProperty().get();

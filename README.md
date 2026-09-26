@@ -91,10 +91,6 @@ Both include their own Java runtime, so there is nothing else to install.
   <img src="docs/images/viewport-brush-symmetry.png" alt="Viewport settings, brush and symmetry panels" width="760">
 </p>
 
-### Coming soon
-
-- The **Resource Tracker**: the materials a build needs, what you have gathered and what is left.
-
 ## Controls and keybinds
 
 These are the default keys. **Every keyboard shortcut can be rebound in Settings › Keybinds**, and the app always shows your current keys: press **F1** (or Alt+K), or click the ⌘ button in the viewport, for the list. Single-letter keys don't fire while you're typing in a text box, and while flying W A S D, Space, Shift and Ctrl belong to flight.
@@ -280,6 +276,7 @@ Each plugin lives in its own repository and is released there, separately from B
 | Plugin | What it does | Needs |
 |---|---|---|
 | **[Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes)** | Reference images in the scene, like Blender's: move, rotate and scale them, pick the views they show in, set opacity and UV. Listed in Layers as REFERENCE | 0.4.12 |
+| **[Resource Tracker](https://github.com/doolecg/BlockDesigner-ResourceTracker)** | The materials a build needs as items (stacks and shulker boxes), what you have gathered and what is left, saved with each project | 0.4.17 |
 | **[Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools)** | Weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool | 0.4.4 |
 
 Download a plugin's `.jar` from its releases page, then install it with **Plugins › Manage plugins… › Install…**.

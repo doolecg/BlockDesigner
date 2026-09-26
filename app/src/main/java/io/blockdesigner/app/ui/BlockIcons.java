@@ -208,7 +208,7 @@ public final class BlockIcons {
                     sy[v] = (0.5f - p[1]) * n;
                     sz[v] = p[2];
                 }
-                float shade = q.shade() ? t.light(q.face()) : 1f;
+                float shade = q.shade() && !q.glow() ? t.light(q.face()) : 1f;
                 triangle(atlas, q, sx, sy, sz, 0, 1, 2, shade, translucent, n, depth, color);
                 triangle(atlas, q, sx, sy, sz, 0, 2, 3, shade, translucent, n, depth, color);
             }

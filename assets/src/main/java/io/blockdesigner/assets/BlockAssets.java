@@ -31,6 +31,15 @@ import java.util.regex.Pattern;
 public final class BlockAssets implements Closeable {
     private static final Pattern BLOCKSTATE_PATH = Pattern.compile("assets/([a-z0-9_.-]+)/blockstates/([a-z0-9_./-]+)\\.json");
     private static final Set<String> HIDDEN = Set.of("minecraft:air", "minecraft:cave_air", "minecraft:void_air", "minecraft:moving_piston");
+    /**
+     * Blocks whose default state in the game differs from the first variant of their blockstate file (defaults live
+     * in the game's code, not its assets): a placed campfire or redstone torch is lit.
+     */
+    private static final Map<String, Map<String, String>> GAME_DEFAULTS = Map.of(
+            "minecraft:campfire", Map.of("lit", "true"),
+            "minecraft:soul_campfire", Map.of("lit", "true"),
+            "minecraft:redstone_torch", Map.of("lit", "true"),
+            "minecraft:redstone_wall_torch", Map.of("lit", "true"));
 
     private final McVersion version;
     private final AssetStack stack;
@@ -103,7 +112,11 @@ public final class BlockAssets implements Closeable {
             if (HIDDEN.contains(id)) return;
             Map<String, List<String>> props = new LinkedHashMap<>();
             d.properties().forEach((k, v) -> props.put(k, List.copyOf(v)));
-            infos.put(id, new BlockRegistry.BlockInfo(id, props, BlockState.of(id, d.defaultProperties()), langName(id, lang)));
+            Map<String, String> defaults = new LinkedHashMap<>(d.defaultProperties());
+            GAME_DEFAULTS.getOrDefault(id, Map.of()).forEach((k, v) -> {
+                if (props.getOrDefault(k, List.of()).contains(v)) defaults.put(k, v);
+            });
+            infos.put(id, new BlockRegistry.BlockInfo(id, props, BlockState.of(id, defaults), langName(id, lang)));
         });
 
         log.accept("Resolving " + defs.size() + " block models…");
@@ -265,7 +278,7 @@ public final class BlockAssets implements Closeable {
      * or frame, or a box the size of its hitbox for everything else.
      */
     public List<io.blockdesigner.assets.model.BakedQuad> entityQuads(io.blockdesigner.core.model.StructureEntity entity) {
-        return MobModels.bake(entity, atlas);
+        return MobModels.bake(entity, atlas, this::model);
     }
 
     /** Baked model for a state; never null (falls back to approximations or a missing-texture cube). */

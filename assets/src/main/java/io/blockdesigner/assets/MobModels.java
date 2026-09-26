@@ -28,6 +28,7 @@ final class MobModels {
     private static final List<String> VILLAGER_TYPES = List.of("plains", "desert", "jungle", "savanna", "snow", "swamp", "taiga");
     private static final List<String> PROFESSIONS = List.of("armorer", "butcher", "cartographer", "cleric", "farmer", "fisherman",
             "fletcher", "leatherworker", "librarian", "mason", "nitwit", "shepherd", "toolsmith", "weaponsmith");
+    private static final List<String> RABBITS = List.of("brown", "white", "black", "white_splotched", "gold", "salt");
     private static final List<String> WOLVES = List.of("ashen", "black", "chestnut", "rusty", "snowy", "spotted", "striped", "woods");
 
     /** Entity textures to stitch into the atlas; names differ between versions, so every known spelling is listed. */
@@ -40,19 +41,35 @@ final class MobModels {
                 "entity/wolf/wolf", "entity/villager/villager", "entity/wandering_trader",
                 "entity/zombie/zombie", "entity/zombie/husk", "entity/zombie/drowned",
                 "entity/skeleton/skeleton", "entity/skeleton/stray", "entity/skeleton/stray_overlay", "entity/skeleton/wither_skeleton",
-                "entity/creeper/creeper", "entity/armorstand/wood", "entity/iron_golem/iron_golem",
+                "entity/creeper/creeper", "entity/armorstand/wood", "entity/armorstand/armorstand", "entity/iron_golem/iron_golem",
+                "entity/wandering_trader/wandering_trader",
                 "painting/back", "block/item_frame", "block/glow_item_frame"));
         for (String t : VILLAGER_TYPES) out.add("entity/villager/type/" + t);
         for (String p : PROFESSIONS) out.add("entity/villager/profession/" + p);
         for (String w : WOLVES) out.add("entity/wolf/wolf_" + w);
-        return out.stream().map(t -> "minecraft:" + t).toList();
+        for (String r : RABBITS) out.add("entity/rabbit/" + r);
+        out.add("entity/rabbit/caerbannog");
+        List<String> all = new ArrayList<>(out.stream().map(t -> "minecraft:" + t).toList());
+        all.addAll(GameMobs.textures());
+        return all;
     }
 
-    /** One textured pass over a model: the base skin, or an overlay (wool, a villager's biome clothes). */
-    private record Skin(List<Part> parts, TextureAtlas.Sprite sprite, int texWidth, int tint) {
+    /**
+     * One textured pass over a model: the base skin, or an overlay (wool, a villager's biome clothes). A texture
+     * height of 0 takes it from the texture's shape.
+     */
+    private record Skin(List<Part> parts, TextureAtlas.Sprite sprite, int texWidth, int texHeight, int tint, boolean glow) {
+        Skin(List<Part> parts, TextureAtlas.Sprite sprite, int texWidth, int tint) {
+            this(parts, sprite, texWidth, 0, tint, false);
+        }
     }
 
     static List<BakedQuad> bake(StructureEntity e, TextureAtlas atlas) {
+        return bake(e, atlas, s -> null);
+    }
+
+    /** As {@link #bake(StructureEntity, TextureAtlas)}, with block models for what mobs carry (a snow golem's pumpkin). */
+    static List<BakedQuad> bake(StructureEntity e, TextureAtlas atlas, java.util.function.Function<io.blockdesigner.core.model.BlockState, io.blockdesigner.assets.model.BakedModel> blocks) {
         EntityTypes.Kind k = EntityTypes.kind(e.id());
         String path = k.id().startsWith("minecraft:") ? k.id().substring(10) : "";
         CompoundTag nbt = e.nbt();
@@ -68,6 +85,16 @@ final class MobModels {
         }
         List<Skin> skins = new ArrayList<>();
         float scale = 1;
+        // The game's own model layers (GameMobs) first; the hand-made models below cover versions they don't.
+        GameMobs.Look look = GameMobs.look(path, nbt, atlas);
+        GameMobs.Frame frame = look == null ? GameMobs.Frame.LIVING : look.frame();
+        float[] offset = look == null ? new float[3] : look.offset();
+        if (look != null) {
+            for (GameMobs.Pass p : look.passes()) skins.add(new Skin(p.parts(), p.sprite(), p.texWidth(), p.texHeight(), p.tint(), p.glow()));
+            // GameMobs has already sized babies (their own model, or the adult at half size).
+            scale = look.scale() / (EntityTypes.baby(nbt) ? 0.5f : 1);
+            path = "";
+        }
         switch (path) {
             case "pig" -> skin(skins, pig(), atlas, 64, -1, "entity/pig/pig", "entity/pig/temperate_pig");
             case "cow" -> skin(skins, cow(), atlas, 64, -1, "entity/cow/cow", "entity/cow/temperate_cow");
@@ -96,7 +123,7 @@ final class MobModels {
             }
             case "wandering_trader" -> {
                 scale = 0.9375f;
-                skin(skins, villager(), atlas, 64, -1, "entity/wandering_trader");
+                skin(skins, villager(), atlas, 64, -1, "entity/wandering_trader/wandering_trader", "entity/wandering_trader");
             }
             case "zombie", "drowned" -> skin(skins, humanoid(true), atlas, 64, -1, "entity/zombie/" + path);
             case "husk" -> {
@@ -115,9 +142,19 @@ final class MobModels {
             case "creeper" -> skin(skins, creeper(), atlas, 64, -1, "entity/creeper/creeper");
             case "armor_stand" -> {
                 if (nbt.getBoolean("Small")) scale = 0.5f;
-                skin(skins, armorStand(nbt), atlas, 64, -1, "entity/armorstand/wood");
+                skin(skins, armorStand(nbt), atlas, 64, -1, "entity/armorstand/armorstand", "entity/armorstand/wood");
             }
             case "iron_golem" -> skin(skins, ironGolem(), atlas, 128, -1, "entity/iron_golem/iron_golem");
+            // Before 26.1 rabbits and magma cubes had other models, with 64x32 textures.
+            case "rabbit" -> {
+                int t = nbt.getInt("RabbitType");
+                String v = t == 99 ? "caerbannog" : t >= 0 && t < RABBITS.size() ? RABBITS.get(t) : "brown";
+                skin(skins, rabbit(), atlas, 64, -1, "entity/rabbit/" + v);
+            }
+            case "magma_cube" -> {
+                skin(skins, magmaCube(), atlas, 64, -1, "entity/slime/magmacube");
+                scale = EntityTypes.slimeSize(nbt);
+            }
             default -> {
             }
         }
@@ -127,16 +164,65 @@ final class MobModels {
         }
         if (EntityTypes.baby(nbt)) scale *= 0.5f;
         // LivingEntityRenderer: turn to the body's yaw, flip into model space (y down), scale, and stand on the ground.
-        Mat root = Mat.identity().rotateY(Math.toRadians(180 - e.yaw())).scale(-scale, -scale, scale).translate(0, -1.501, 0);
+        double yaw = Math.toRadians(180 - e.yaw());
+        Mat root = switch (frame) {
+            case LIVING -> Mat.identity().rotateY(yaw).scale(-scale, -scale, scale)
+                    .translate(offset[0] / 16, offset[1] / 16, offset[2] / 16).translate(0, -1.501, 0);
+            // BoatRenderer / MinecartRenderer: raised 6 pixels, turned, flipped; boats face along their length.
+            case BOAT -> Mat.identity().translate(0, 0.375, 0).rotateY(yaw).scale(-1, -1, 1).rotateY(Math.PI / 2);
+            case MINECART -> Mat.identity().translate(0, 0.375, 0).rotateY(yaw).scale(-1, -1, 1);
+            // EndCrystalRenderer: twice the size, half a block down, not flipped (the base plate sits around the block below).
+            case CRYSTAL -> Mat.identity().scale(2, 2, 2).translate(0, -0.5, 0);
+            // EnderDragonRenderer: turned by -yaw (the dragon faces away from its rotation), a block forward, flipped.
+            case DRAGON -> Mat.identity().rotateY(Math.toRadians(-e.yaw())).translate(0, 0, 1).scale(-1, -1, 1).translate(0, -1.501, 0);
+        };
         for (Skin s : skins) {
-            int th = Math.max(1, Math.round((float) s.texWidth * s.sprite.height() / s.sprite.width()));
+            int th = s.texHeight > 0 ? s.texHeight : Math.max(1, Math.round((float) s.texWidth * s.sprite.height() / s.sprite.width()));
             List<BakedQuad> quads = new ArrayList<>();
             for (Part p : s.parts) EntityModels.emit(p, root, s.texWidth, th, s.sprite, quads);
             for (BakedQuad q : quads) {
-                out.add(s.tint == -1 ? q : new BakedQuad(q.pos(), q.uv(), q.normal(), q.face(), q.cull(), s.tint, q.layer(), q.shade(), q.sprite()));
+                out.add(s.tint == -1 && !s.glow ? q
+                        : new BakedQuad(q.pos(), q.uv(), q.normal(), q.face(), q.cull(), s.tint == -1 ? q.tint() : s.tint, q.layer(), q.shade(), q.sprite(), s.glow));
             }
         }
+        if (look != null) for (GameMobs.BlockOn b : look.blocks()) blockOn(b, root, blocks, out);
         return out;
+    }
+
+    /** A block model drawn on a model part the way SnowGolemHeadLayer draws the pumpkin (see {@link GameMobs.BlockOn}). */
+    private static void blockOn(GameMobs.BlockOn b, Mat root, java.util.function.Function<io.blockdesigner.core.model.BlockState,
+            io.blockdesigner.assets.model.BakedModel> blocks, List<BakedQuad> out) {
+        io.blockdesigner.assets.model.BakedModel model = blocks.apply(io.blockdesigner.core.model.BlockState.parse(b.block()));
+        if (model == null) return;
+        var chain = GameModels.chain(b.layer(), b.part());
+        if (chain.isEmpty()) return;
+        // ModelPart.translateAndRotate down to the part, then the layer's own moves.
+        Mat m = root;
+        for (float[] p : chain.get()) {
+            m = m.translate(p[0] / 16, p[1] / 16, p[2] / 16);
+            if (p[3] != 0 || p[4] != 0 || p[5] != 0) m = m.rotateZ(p[5]).rotateY(p[4]).rotateX(p[3]);
+            if (p[6] != 1 || p[7] != 1 || p[8] != 1) m = m.scale(p[6], p[7], p[8]);
+        }
+        m = m.translate(0, -0.34375, 0).rotateY(Math.PI).scale(0.625, -0.625, -0.625).translate(-0.5, -0.5, -0.5);
+        double[] o = m.point(0, 0, 0);
+        for (BakedQuad q : model.quads()) {
+            float[] pos = new float[12];
+            for (int v = 0; v < 4; v++) {
+                double[] w = m.point(q.x(v), q.y(v), q.z(v));
+                pos[v * 3] = (float) w[0];
+                pos[v * 3 + 1] = (float) w[1];
+                pos[v * 3 + 2] = (float) w[2];
+            }
+            double[] n = m.point(q.normal()[0], q.normal()[1], q.normal()[2]);
+            float nx = (float) (n[0] - o[0]), ny = (float) (n[1] - o[1]), nz = (float) (n[2] - o[2]);
+            float len = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
+            if (len > 0) {
+                nx /= len;
+                ny /= len;
+                nz /= len;
+            }
+            out.add(new BakedQuad(pos, q.uv(), new float[]{nx, ny, nz}, Dir.nearest(nx, ny, nz), null, q.tint(), q.layer(), q.shade(), q.sprite()));
+        }
     }
 
     private static String strip(String id) {
@@ -304,6 +390,39 @@ final class MobModels {
                 Part.of(Cube.of(60, 58, 9, -2.5f, -3, 4, 30, 6)).at(0, -7, 0),
                 Part.of(Cube.of(37, 0, -3.5f, -3, -3, 6, 16, 5)).at(-4, 11, 0),
                 Part.of(new Cube(60, 0, -3.5f, -3, -3, 6, 16, 5, 0, true)).at(5, 11, 0));
+    }
+
+    /**
+     * RabbitModel before 26.1. Its renderToBuffer drew the adult at 0.6 size, raised a block first: a root part at
+     * (0, 9.6, 0) scaled by 0.6 does the same.
+     */
+    private static List<Part> rabbit() {
+        float haunch = -0.34906584f, leg = -0.17453292f;
+        List<Part> parts = List.of(
+                Part.of(Cube.of(26, 24, -1, 5.5f, -3.7f, 2, 1, 7)).at(3, 17.5f, 3.7f),
+                Part.of(Cube.of(8, 24, -1, 5.5f, -3.7f, 2, 1, 7)).at(-3, 17.5f, 3.7f),
+                Part.of(Cube.of(30, 15, -1, 0, 0, 2, 4, 5)).at(3, 17.5f, 3.7f).rotated(haunch, 0, 0),
+                Part.of(Cube.of(16, 15, -1, 0, 0, 2, 4, 5)).at(-3, 17.5f, 3.7f).rotated(haunch, 0, 0),
+                Part.of(Cube.of(0, 0, -3, -2, -10, 6, 5, 10)).at(0, 19, 8).rotated(haunch, 0, 0),
+                Part.of(Cube.of(8, 15, -1, 0, -1, 2, 7, 2)).at(3, 17, -1).rotated(leg, 0, 0),
+                Part.of(Cube.of(0, 15, -1, 0, -1, 2, 7, 2)).at(-3, 17, -1).rotated(leg, 0, 0),
+                Part.of(Cube.of(32, 0, -2.5f, -4, -5, 5, 4, 5)).at(0, 16, -1),
+                Part.of(Cube.of(52, 0, -2.5f, -9, -1, 2, 5, 1)).at(0, 16, -1).rotated(0, -0.2617994f, 0),
+                Part.of(Cube.of(58, 0, 0.5f, -9, -1, 2, 5, 1)).at(0, 16, -1).rotated(0, 0.2617994f, 0),
+                Part.of(Cube.of(52, 6, -1.5f, -1.5f, 0, 3, 3, 2)).at(0, 20, 7).rotated(-0.3490659f, 0, 0),
+                Part.of(Cube.of(32, 9, -0.5f, -2.5f, -5.5f, 1, 1, 1)).at(0, 16, -1));
+        return List.of(new Part(List.of(), 0, 9.6f, 0, 0, 0, 0, parts, 0.6f, 0.6f, 0.6f));
+    }
+
+    /** MagmaCubeModel before 26.1: eight 1-pixel slices around a core. */
+    private static List<Part> magmaCube() {
+        List<Part> out = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            int u = i == 2 || i == 3 ? 24 : 0, v = i == 2 ? 10 : i == 3 ? 19 : i;
+            out.add(Part.of(Cube.of(u, v, -4, 16 + i, -4, 8, 1, 8)));
+        }
+        out.add(Part.of(Cube.of(0, 16, -2, 18, -2, 4, 4, 4)));
+        return out;
     }
 
     /** The same parts with every cube grown a little (for overlay skins). */

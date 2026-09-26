@@ -26,11 +26,16 @@ public final class TextureAtlas {
     public static final String MISSING = "blockdesigner:missing";
     /** Plain white, for flat tinted shapes (placeholder boxes). */
     public static final String WHITE = "blockdesigner:white";
-    private static final int PAD = 4;
+    /** Border replicated around each sprite; animation updates rewrite it with each frame. */
+    public static final int PAD = 4;
     private static final int MAX_SIZE = 16384;
 
-    /** A placed texture. UVs are the inner (unpadded) rectangle in 0..1 atlas space. */
-    public record Sprite(String id, float u0, float v0, float u1, float v1, int width, int height, RenderLayer layer, int averageRgb, boolean missing) {
+    /**
+     * A placed texture. UVs are the inner (unpadded) rectangle in 0..1 atlas space. {@code animated}: its
+     * {@code .mcmeta} makes it an animation (fire, lava, sea lanterns), whose frames {@link #animations()} holds.
+     */
+    public record Sprite(String id, float u0, float v0, float u1, float v1, int width, int height, RenderLayer layer, int averageRgb, boolean missing,
+                         boolean animated) {
         /** Atlas U for a model UV in 0..16 texture pixels. */
         public float u(float px) {
             return u0 + (u1 - u0) * px / 16f;
@@ -45,13 +50,77 @@ public final class TextureAtlas {
     private final int[] argb;
     private final Map<String, Sprite> sprites;
     private final Sprite missing;
+    private final List<Animation> animations;
 
-    private TextureAtlas(int width, int height, int[] argb, Map<String, Sprite> sprites) {
+    private TextureAtlas(int width, int height, int[] argb, Map<String, Sprite> sprites, List<Animation> animations) {
         this.width = width;
         this.height = height;
         this.argb = argb;
         this.sprites = Collections.unmodifiableMap(sprites);
         this.missing = sprites.get(MISSING);
+        this.animations = List.copyOf(animations);
+    }
+
+    /**
+     * An animated sprite, played the way Minecraft plays it: {@code sequence[i]} shows for {@code times[i]} game ticks
+     * (20 a second), then the next, looping; with {@code interpolate} each frame fades into the next.
+     *
+     * @param x      left of the sprite's inner rectangle in atlas pixels
+     * @param y      top of the sprite's inner rectangle in atlas pixels
+     * @param frames each frame's ARGB pixels, {@code width x height}, row-major
+     */
+    public record Animation(String id, int x, int y, int width, int height, int[][] frames, int[] sequence, int[] times, boolean interpolate) {
+        /** Length of one loop in ticks. */
+        public int loopTicks() {
+            int n = 0;
+            for (int t : times) n += t;
+            return Math.max(1, n);
+        }
+
+        /** Something that changes whenever the picture at {@code tick} does (for skipping unchanged uploads). */
+        public long key(long tick) {
+            if (interpolate) return Math.floorMod(tick, loopTicks());
+            return sequence[step(tick)];
+        }
+
+        /** Index into {@link #sequence} shown at {@code tick}. */
+        private int step(long tick) {
+            long t = Math.floorMod(tick, loopTicks());
+            for (int i = 0; i < times.length; i++) {
+                if (t < times[i]) return i;
+                t -= times[i];
+            }
+            return 0;
+        }
+
+        /** The picture at {@code tick} ({@code width x height} ARGB), blended between frames when interpolated. */
+        public int[] pixels(long tick) {
+            int i = step(tick);
+            int[] cur = frames[sequence[i]];
+            if (!interpolate || times[i] <= 1) return cur;
+            long into = Math.floorMod(tick, loopTicks());
+            for (int k = 0; k < i; k++) into -= times[k];
+            float f = into / (float) times[i];
+            if (f <= 0) return cur;
+            int[] next = frames[sequence[(i + 1) % sequence.length]];
+            int[] out = new int[cur.length];
+            // As the game does: colour mixes toward the next frame, alpha stays the current frame's.
+            for (int p = 0; p < out.length; p++) {
+                int a = cur[p], b = next[p];
+                int r = mix(a >> 16 & 255, b >> 16 & 255, f), g = mix(a >> 8 & 255, b >> 8 & 255, f), bl = mix(a & 255, b & 255, f);
+                out[p] = (a & 0xFF000000) | r << 16 | g << 8 | bl;
+            }
+            return out;
+        }
+
+        private static int mix(int a, int b, float f) {
+            return Math.round(a + (b - a) * f);
+        }
+    }
+
+    /** The animated sprites (empty when there are none). */
+    public List<Animation> animations() {
+        return animations;
     }
 
     public int width() {
@@ -100,7 +169,14 @@ public final class TextureAtlas {
         return id.indexOf(':') < 0 ? "minecraft:" + id : id;
     }
 
-    private record Loaded(String id, int w, int h, int[] px, RenderLayer layer, int avg, boolean missing) {
+    /** A texture read for packing; {@code anim} holds its animation (frames and timing), or is null. */
+    private record Loaded(String id, int w, int h, int[] px, RenderLayer layer, int avg, boolean missing, Anim anim) {
+        Loaded(String id, int w, int h, int[] px, RenderLayer layer, int avg, boolean missing) {
+            this(id, w, h, px, layer, avg, missing, null);
+        }
+    }
+
+    private record Anim(int[][] frames, int[] sequence, int[] times, boolean interpolate) {
     }
 
     public static TextureAtlas build(AssetStack assets, Collection<String> textureIds) {
@@ -120,9 +196,12 @@ public final class TextureAtlas {
                 BufferedImage img = ImageIO.read(new ByteArrayInputStream(bytes.get()));
                 if (img == null) continue;
                 int w = img.getWidth();
-                int h = frameHeight(img, assets.read(path + ".mcmeta"), json);
+                Optional<byte[]> mcmeta = assets.read(path + ".mcmeta");
+                int h = frameHeight(img, mcmeta, json);
                 int[] px = img.getRGB(0, 0, w, h, null, 0, w);
-                loaded.add(analyse(id, w, h, px));
+                Loaded l = analyse(id, w, h, px);
+                Anim anim = animation(img, w, h, mcmeta, json);
+                loaded.add(anim == null ? l : new Loaded(l.id, w, h, px, l.layer, l.avg, false, anim));
             } catch (IOException | RuntimeException e) {
                 // corrupt texture: leave it to fall back to the missing sprite
             }
@@ -130,7 +209,7 @@ public final class TextureAtlas {
         return pack(loaded);
     }
 
-    /** Height of the first animation frame (square by default). */
+    /** Height of the first animation frame (square by default), or the whole height for a still texture. */
     private static int frameHeight(BufferedImage img, Optional<byte[]> mcmeta, ObjectMapper json) {
         int w = img.getWidth(), h = img.getHeight();
         if (mcmeta.isPresent()) {
@@ -146,7 +225,42 @@ public final class TextureAtlas {
                 // fall through
             }
         }
-        return h > w && h % w == 0 ? w : h;
+        // Without an .mcmeta a texture is a still picture, whatever its shape (64x128 witch and strider skins).
+        return h;
+    }
+
+    /**
+     * The animation a {@code .mcmeta} describes for a strip of {@code w x h} frames stacked downwards, or null when
+     * the texture doesn't animate. Frames are indices or {@code {"index", "time"}}; the default time is
+     * {@code frametime} (1 tick); without a list the frames play top to bottom.
+     */
+    private static Anim animation(BufferedImage img, int w, int h, Optional<byte[]> mcmeta, ObjectMapper json) {
+        if (mcmeta.isEmpty() || h <= 0) return null;
+        JsonNode anim;
+        try {
+            anim = json.readTree(mcmeta.get()).path("animation");
+        } catch (IOException e) {
+            return null;
+        }
+        if (anim.isMissingNode()) return null;
+        int count = img.getHeight() / h;
+        if (count < 2) return null;
+        int[][] frames = new int[count][];
+        for (int i = 0; i < count; i++) frames[i] = img.getRGB(0, i * h, w, h, null, 0, w);
+        int frametime = Math.max(1, anim.path("frametime").asInt(1));
+        List<int[]> seq = new ArrayList<>();
+        if (anim.path("frames").isArray()) {
+            for (JsonNode f : anim.path("frames")) {
+                int index = f.isObject() ? f.path("index").asInt(-1) : f.asInt(-1);
+                int time = f.isObject() ? Math.max(1, f.path("time").asInt(frametime)) : frametime;
+                if (index >= 0 && index < count) seq.add(new int[]{index, time});
+            }
+        } else {
+            for (int i = 0; i < count; i++) seq.add(new int[]{i, frametime});
+        }
+        if (seq.size() < 2) return null;
+        int[] sequence = seq.stream().mapToInt(a -> a[0]).toArray(), times = seq.stream().mapToInt(a -> a[1]).toArray();
+        return new Anim(frames, sequence, times, anim.path("interpolate").asBoolean(false));
     }
 
     private static Loaded analyse(String id, int w, int h, int[] px) {
@@ -212,6 +326,7 @@ public final class TextureAtlas {
     private static TextureAtlas assemble(List<Loaded> order, int[][] pos, int w, int h) {
         int[] atlas = new int[w * h];
         Map<String, Sprite> sprites = new HashMap<>();
+        List<Animation> animations = new ArrayList<>();
         for (int i = 0; i < order.size(); i++) {
             Loaded t = order.get(i);
             int ox = pos[i][0] + PAD, oy = pos[i][1] + PAD;
@@ -223,8 +338,11 @@ public final class TextureAtlas {
                 }
             }
             sprites.put(t.id, new Sprite(t.id, ox / (float) w, oy / (float) h, (ox + t.w) / (float) w, (oy + t.h) / (float) h,
-                    t.w, t.h, t.layer, t.avg, t.missing));
+                    t.w, t.h, t.layer, t.avg, t.missing, t.anim != null));
+            if (t.anim != null) {
+                animations.add(new Animation(t.id, ox, oy, t.w, t.h, t.anim.frames(), t.anim.sequence(), t.anim.times(), t.anim.interpolate()));
+            }
         }
-        return new TextureAtlas(w, h, atlas, sprites);
+        return new TextureAtlas(w, h, atlas, sprites, animations);
     }
 }

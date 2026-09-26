@@ -83,7 +83,6 @@ public final class MainWindow {
     private McInstallLocator.Result scan;
     private final BorderPane rightPanel = new BorderPane();
     private final javafx.scene.control.TabPane sideTabs = new javafx.scene.control.TabPane();
-    private final javafx.scene.control.Tab resourcesTab = new javafx.scene.control.Tab("Resource Tracker");
     /** Thin bar on the right edge listing closed side tabs; click one to reopen it. */
     private final javafx.scene.layout.VBox closedTabsBar = new javafx.scene.layout.VBox(4);
     private SplitPane mainSplit, leftSplit;
@@ -598,15 +597,12 @@ public final class MainWindow {
         };
     }
 
-    /** Right-hand panel: the Resource Tracker tab. */
+    /** Right-hand panel: a tab for each plugin. */
     public void setRightPanel() {
         // Tabs can be closed; closed tabs wait in the bar on the right edge. With none open the panel folds away.
-        resourcesTab.setContent(ComingSoonPanel.resourceTracker());
-        resourcesTab.setGraphic(new FontIcon(Feather.PACKAGE));
         sideTabs.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.ALL_TABS);
         sideTabs.getStyleClass().add("side-tabs");
         rightPanel.setCenter(sideTabs);
-        if (ws.settings().showResources) sideTabs.getTabs().add(resourcesTab);
         sideTabs.getTabs().addListener((javafx.collections.ListChangeListener<javafx.scene.control.Tab>) c -> sideTabsChanged());
         sideTabsChanged();
         syncPluginPanels();
@@ -621,8 +617,6 @@ public final class MainWindow {
 
     /** Syncs settings, the closed-tabs bar and whether the right panel is shown at all. */
     private void sideTabsChanged() {
-        boolean resources = sideTabs.getTabs().contains(resourcesTab);
-        ws.settings().showResources = resources;
         if (!syncingPanels) {
             // Remember which plugin tabs the user closed, so they stay closed next time.
             for (var e : homeTabs.entrySet()) {
@@ -634,7 +628,6 @@ public final class MainWindow {
         }
 
         closedTabsBar.getChildren().clear();
-        if (!resources) closedTabsBar.getChildren().add(closedTabButton(resourcesTab, resourcesTab.getText(), new FontIcon(Feather.PACKAGE)));
         for (PluginHomeTab home : homeTabs.values()) {
             if (!sideTabs.getTabs().contains(home.tab)) {
                 closedTabsBar.getChildren().add(closedTabButton(home.tab, home.plugin.info().name(), ToolIcons.plugin(home.icon(), 14)));

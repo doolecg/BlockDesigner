@@ -3,6 +3,7 @@ in vec2 vUv;
 in vec4 vColor;
 in vec3 vNormal;
 in vec3 vWorld;
+in float vGlow;
 
 uniform sampler2D uAtlas;
 uniform float uAlphaCutoff;   // > 0 for cutout pass
@@ -23,6 +24,8 @@ void main() {
     float mcShade = abs(n.x) * 0.6 + abs(n.z) * 0.8 + (n.y > 0.0 ? 1.0 : 0.5) * abs(n.y);
     float sun = 0.62 + 0.38 * max(dot(n, normalize(uSunDir)), 0.0);
     float light = mix(mcShade, sun, 0.45);
+    // Glowing quads (eyes) ignore the light, as Minecraft's "eyes" render type does.
+    light = mix(light, 1.0, clamp(vGlow, 0.0, 1.0));
     vec3 rgb = tex.rgb * vColor.rgb * light;
     rgb = mix(rgb, uTint.rgb, uTint.a);
     float dist = length(vWorld - uEye);

@@ -36,8 +36,18 @@ import static org.lwjgl.system.MemoryUtil.NULL;
  * finished frames back as ARGB pixel buffers (top row first). All GL objects live and die on that thread.
  */
 public final class ViewportRenderer implements AutoCloseable {
-    /** A finished frame. Pixels are premultiplied ARGB ints, top row first; return it with {@link #recycle}. */
-    public record Frame(IntBuffer pixels, int width, int height, long sequence) {
+    /**
+     * A finished frame. Pixels are premultiplied ARGB ints, top row first; return it with {@link #recycle}.
+     * {@code animated}: it shows animated textures, so a new frame each game tick ({@link #tick()}) keeps them moving.
+     */
+    public record Frame(IntBuffer pixels, int width, int height, long sequence, boolean animated) {
+    }
+
+    private static final long START = System.nanoTime();
+
+    /** The game tick (20 a second) animated textures are at now. */
+    public static long tick() {
+        return (System.nanoTime() - START) / 50_000_000L;
     }
 
     private static final int SAMPLES = 4;
@@ -69,6 +79,10 @@ public final class ViewportRenderer implements AutoCloseable {
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final Matrix4f cullVp = new Matrix4f(), cullModel = new Matrix4f(), cullMvp = new Matrix4f();
     private int sectionsDrawn, sectionsTotal;
+    private AtlasAnimator animator;
+    private long animatedTick = Long.MIN_VALUE;
+    /** A section drawn this frame shows an animated texture. */
+    private boolean drewAnimated;
 
     private static final class GpuSection {
         final int[] vao = new int[3], vbo = new int[3], quads = new int[3];
@@ -76,6 +90,7 @@ public final class ViewportRenderer implements AutoCloseable {
         /** Half size of the box culled against the view (8 for a 16³ section). */
         float hx = 8, hy = 8, hz = 8;
         float sortKey;
+        boolean animated;
     }
 
     public ViewportRenderer(TextureAtlas atlas, Consumer<Frame> onFrame) {
@@ -225,6 +240,7 @@ public final class ViewportRenderer implements AutoCloseable {
         if (GL.getCapabilities().GL_EXT_texture_filter_anisotropic) {
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8f, glGetFloat(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
         }
+        animator = new AtlasAnimator(atlas);
 
         gridVao = glGenVertexArrays();
         gridVbo = glGenBuffers();
@@ -295,6 +311,7 @@ public final class ViewportRenderer implements AutoCloseable {
         s.hx = hx;
         s.hy = hy;
         s.hz = hz;
+        s.animated = data.animated();
         for (RenderLayer rl : RenderLayer.values()) {
             int quads = data.quadCount(rl);
             if (quads == 0) continue;
@@ -321,7 +338,8 @@ public final class ViewportRenderer implements AutoCloseable {
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, true, MeshData.STRIDE, 20);
             glEnableVertexAttribArray(3);
-            glVertexAttribPointer(3, 3, GL_BYTE, true, MeshData.STRIDE, 24);
+            // Normal xyz, and w: glow (1 for unlit, full-brightness quads).
+            glVertexAttribPointer(3, 4, GL_BYTE, true, MeshData.STRIDE, 24);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
         }
         glBindVertexArray(0);
@@ -419,6 +437,8 @@ public final class ViewportRenderer implements AutoCloseable {
         // Frustum-cull each draw's sections once; every pass below reuses the result.
         Map<FrameRequest.LayerDraw, List<GpuSection>> visible = new java.util.IdentityHashMap<>();
         sectionsDrawn = sectionsTotal = 0;
+        drewAnimated = false;
+        animate();
         cullVp.set(vp);
         for (FrameRequest.LayerDraw ld : r.layers()) visible.put(ld, visibleSections(ld));
 
@@ -513,7 +533,7 @@ public final class ViewportRenderer implements AutoCloseable {
         tmp.clear();
         out.clear();
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        return new Frame(out, w, h, r.sequence());
+        return new Frame(out, w, h, r.sequence(), drewAnimated);
     }
 
     private IntBuffer takeBuffer(int size, boolean pooled) {
@@ -542,11 +562,34 @@ public final class ViewportRenderer implements AutoCloseable {
         frustum.set(cullMvp, false);
         List<GpuSection> out = new ArrayList<>(m.size());
         for (GpuSection s : m.values()) {
-            if (frustum.testAab(s.cx - s.hx, s.cy - s.hy, s.cz - s.hz, s.cx + s.hx, s.cy + s.hy, s.cz + s.hz)) out.add(s);
+            if (!frustum.testAab(s.cx - s.hx, s.cy - s.hy, s.cz - s.hz, s.cx + s.hx, s.cy + s.hy, s.cz + s.hz)) continue;
+            out.add(s);
+            if (s.animated) drewAnimated = true;
         }
         sectionsTotal += m.size();
         sectionsDrawn += out.size();
         return out;
+    }
+
+    /** Brings the atlas's animated sprites up to the current game tick (only the rectangles that changed). */
+    private void animate() {
+        long tick = tick();
+        if (animator == null || animator.isEmpty() || tick == animatedTick) return;
+        animatedTick = tick;
+        List<AtlasAnimator.Update> updates = animator.step(tick);
+        if (updates.isEmpty()) return;
+        glBindTexture(GL_TEXTURE_2D, atlasTex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        for (AtlasAnimator.Update u : updates) {
+            ByteBuffer rgba = MemoryUtil.memAlloc(u.argb().length * 4);
+            try {
+                for (int p : u.argb()) rgba.put((byte) (p >> 16)).put((byte) (p >> 8)).put((byte) p).put((byte) (p >>> 24));
+                rgba.flip();
+                glTexSubImage2D(GL_TEXTURE_2D, u.level(), u.x(), u.y(), u.w(), u.h(), GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+            } finally {
+                MemoryUtil.memFree(rgba);
+            }
+        }
     }
 
     /** Sections drawn / held in the last frame (after frustum culling). Render thread value; for diagnostics. */

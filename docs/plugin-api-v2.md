@@ -105,7 +105,7 @@ previewed is exactly what is applied. The last options and seed are remembered, 
 `PluginPanel` (`id`, `title`, `icon`, `dock`, `create(PanelContext)`, `dispose`) and `PanelContext` (`plugin`,
 `isShowing`, `onShown`, `setBadge`, `reveal`). The only JavaFX in the API; `plugin-api` has JavaFX as `compileOnly`.
 
-Panels become tabs in MainWindow's right-hand `sideTabs`, next to the Resource Tracker, using the same closable-tab
+Panels become tabs in MainWindow's right-hand `sideTabs`, using the same closable-tab
 logic: closed ones wait in the bar on the right edge, and the panel folds away when every tab is closed. Content is
 created on first show; a failing `create` shows an error in the tab and is logged. Closed plugin panels are remembered
 (`closedPluginPanels`). Tabs follow plugins being enabled and disabled; `dispose` runs on unload. PLUGINS.md lists the

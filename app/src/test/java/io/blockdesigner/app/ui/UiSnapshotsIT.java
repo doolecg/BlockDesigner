@@ -457,9 +457,10 @@ class UiSnapshotsIT {
         save(kbox.snapshot(null, null), dir.resolve("key-hints" + suffix + ".png"));
 
         // Select / replace by type, switched to Replace with oak stairs ticked.
-        java.util.Map<String, Long> counts = java.util.Map.of("minecraft:oak_stairs", 120L, "minecraft:stone_bricks", 2400L, "minecraft:oak_planks", 640L);
+        java.util.Map<String, Long> counts = java.util.Map.of("minecraft:oak_stairs", 120L, "minecraft:stone_bricks", 2400L, "minecraft:oak_planks", 640L,
+                SelectByTypePanel.entityKey("minecraft:villager"), 4L, SelectByTypePanel.entityKey("minecraft:iron_golem"), 1L);
         SelectByTypePanel byType = new SelectByTypePanel(ws.assets(), SelectByTypePanel.Scope.VISIBLE, false, false,
-                BlockState.of("minecraft:oak_stairs"), BlockState.of("minecraft:stone_brick_stairs"), q -> counts, o -> {
+                BlockState.of("minecraft:oak_stairs"), "minecraft:villager", BlockState.of("minecraft:stone_brick_stairs"), q -> counts, o -> {
         }, r -> {
         }, () -> {
         });

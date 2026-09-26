@@ -75,6 +75,7 @@ public final class SectionMesher {
                     if (extra != null || open > 0) model = assets.blockEntityModel(state, extra, open);
                     for (BakedQuad q : model.quads()) {
                         if (q.cull() != null && culled(cells, c, state, model, q)) continue;
+                        if (q.sprite().animated()) out.animated = true;
                         emit(out.layers[q.layer().ordinal()], cells, model, q, x, y, z, ox, oy, oz);
                     }
                 }
@@ -93,12 +94,13 @@ public final class SectionMesher {
             if (e.y() < yMin || e.y() >= (long) yMax + 1) continue;
             float ex = (float) e.x(), ey = (float) e.y(), ez = (float) e.z();
             for (BakedQuad q : assets.entityQuads(e)) {
+                if (q.sprite().animated()) out.animated = true;
                 MeshData.Builder b = out.layers[q.layer().ordinal()];
                 float[] n = q.normal();
                 int tr = (q.tint() >> 16) & 255, tg = (q.tint() >> 8) & 255, tb = q.tint() & 255;
                 int rgba = (tr << 24) | (tg << 16) | (tb << 8) | 0xFF;
                 for (int v = 0; v < 4; v++) {
-                    b.vertex(ex + q.x(v), ey + q.y(v), ez + q.z(v), q.uv()[v * 2], q.uv()[v * 2 + 1], rgba, n[0], n[1], n[2]);
+                    b.vertex(ex + q.x(v), ey + q.y(v), ez + q.z(v), q.uv()[v * 2], q.uv()[v * 2 + 1], rgba, n[0], n[1], n[2], q.glow());
                 }
                 b.quads++;
             }

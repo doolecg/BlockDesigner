@@ -1,5 +1,7 @@
 package io.blockdesigner.app.ui;
 
+import io.blockdesigner.assets.model.BakedModel;
+import io.blockdesigner.assets.model.BakedQuad;
 import io.blockdesigner.core.model.EntityTypes;
 import io.blockdesigner.core.model.StructureEntity;
 import io.blockdesigner.core.nbt.CompoundTag;
@@ -12,8 +14,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Icons and one-line descriptions for entities: a spawn egg drawn in the type's colour with darker spots (the look of
- * Minecraft's eggs), so every mob, vanilla or modded, has a recognisable tile without rendering a model.
+ * Icons and one-line descriptions for entities: the mob's own model when the loaded game has one, else a spawn egg
+ * drawn in the type's colour with darker spots (the look of Minecraft's eggs), so every mob, vanilla or modded, has a
+ * recognisable tile.
  */
 final class EntityIcons {
     private EntityIcons() {
@@ -26,69 +29,61 @@ final class EntityIcons {
         return CACHE.computeIfAbsent(id, EntityIcons::draw);
     }
 
+    private static final Map<String, Image> MODEL_CACHE = new ConcurrentHashMap<>();
+    private static io.blockdesigner.assets.BlockAssets modelAssets;
+
     /**
-     * Where each modelled mob's face is on its texture: texture, texture width in model pixels, then the head's front
-     * rectangle (x, y, w, h) — the north face of the head cube, where the model looks.
+     * The mob's own model, drawn like an inventory block (from the front, three-quarters, lit from above) and fitted
+     * to the tile; its egg when the loaded game has no model for it.
      */
-    private record Face(String texture, int texWidth, int x, int y, int w, int h) {
-    }
-
-    private static final Map<String, List<Face>> FACES = Map.ofEntries(
-            Map.entry("minecraft:pig", List.of(new Face("entity/pig/pig", 64, 8, 8, 8, 8), new Face("entity/pig/temperate_pig", 64, 8, 8, 8, 8))),
-            Map.entry("minecraft:cow", List.of(new Face("entity/cow/cow", 64, 6, 6, 8, 8), new Face("entity/cow/temperate_cow", 64, 6, 6, 8, 8))),
-            Map.entry("minecraft:mooshroom", List.of(new Face("entity/cow/red_mooshroom", 64, 6, 6, 8, 8))),
-            Map.entry("minecraft:sheep", List.of(new Face("entity/sheep/sheep", 64, 8, 8, 6, 6))),
-            Map.entry("minecraft:chicken", List.of(new Face("entity/chicken", 64, 3, 3, 4, 6), new Face("entity/chicken/temperate_chicken", 64, 3, 3, 4, 6))),
-            Map.entry("minecraft:wolf", List.of(new Face("entity/wolf/wolf", 64, 4, 4, 6, 6))),
-            Map.entry("minecraft:villager", List.of(new Face("entity/villager/villager", 64, 8, 8, 8, 10))),
-            Map.entry("minecraft:wandering_trader", List.of(new Face("entity/wandering_trader", 64, 8, 8, 8, 10))),
-            Map.entry("minecraft:iron_golem", List.of(new Face("entity/iron_golem/iron_golem", 128, 8, 8, 8, 10))),
-            Map.entry("minecraft:zombie", List.of(new Face("entity/zombie/zombie", 64, 8, 8, 8, 8))),
-            Map.entry("minecraft:husk", List.of(new Face("entity/zombie/husk", 64, 8, 8, 8, 8))),
-            Map.entry("minecraft:drowned", List.of(new Face("entity/zombie/drowned", 64, 8, 8, 8, 8))),
-            Map.entry("minecraft:skeleton", List.of(new Face("entity/skeleton/skeleton", 64, 8, 8, 8, 8))),
-            Map.entry("minecraft:stray", List.of(new Face("entity/skeleton/stray", 64, 8, 8, 8, 8))),
-            Map.entry("minecraft:wither_skeleton", List.of(new Face("entity/skeleton/wither_skeleton", 64, 8, 8, 8, 8))),
-            Map.entry("minecraft:creeper", List.of(new Face("entity/creeper/creeper", 64, 8, 8, 8, 8))));
-    private static final Map<String, Image> FACE_CACHE = new ConcurrentHashMap<>();
-    private static io.blockdesigner.assets.BlockAssets faceAssets;
-
-    /** The mob's face from its texture when the loaded game has it (as the palette tile), else its egg. */
     static Image icon(io.blockdesigner.assets.BlockAssets assets, String id) {
         if (assets == null) return icon(id);
-        synchronized (FACE_CACHE) {
-            if (faceAssets != assets) {
-                FACE_CACHE.clear();
-                faceAssets = assets;
+        synchronized (MODEL_CACHE) {
+            if (modelAssets != assets) {
+                MODEL_CACHE.clear();
+                modelAssets = assets;
             }
         }
         String full = EntityTypes.kind(id).id();
-        Image face = FACE_CACHE.computeIfAbsent(full, k -> {
-            for (Face f : FACES.getOrDefault(k, List.of())) {
-                var sprite = assets.atlas().sprite("minecraft:" + f.texture());
-                if (sprite.missing()) continue;
-                java.awt.image.BufferedImage tex = assets.atlas().spriteImage(sprite);
-                double scale = tex.getWidth() / (double) f.texWidth();
-                int x0 = (int) Math.round(f.x() * scale), y0 = (int) Math.round(f.y() * scale);
-                int w = Math.max(1, (int) Math.round(f.w() * scale)), h = Math.max(1, (int) Math.round(f.h() * scale));
-                if (x0 + w > tex.getWidth() || y0 + h > tex.getHeight()) continue;
-                // Square it up (villager faces are taller than wide), crisp nearest-neighbour pixels.
-                int side = Math.max(w, h), out = 32;
-                WritableImage img = new WritableImage(out, out);
-                var pw = img.getPixelWriter();
-                for (int y = 0; y < out; y++) {
-                    for (int x = 0; x < out; x++) {
-                        int sx = (int) ((x + 0.5) * side / out) - (side - w) / 2, sy = (int) ((y + 0.5) * side / out) - (side - h) / 2;
-                        if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue;
-                        int argb = tex.getRGB(x0 + sx, y0 + sy);
-                        if ((argb >>> 24) != 0) pw.setArgb(x, y, argb | 0xFF000000);
-                    }
-                }
-                return img;
-            }
-            return icon(k);
+        return MODEL_CACHE.computeIfAbsent(full, k -> {
+            int[] px = modelPixels(assets, k);
+            if (px == null) return icon(k);
+            WritableImage img = new WritableImage(BlockIcons.SIZE, BlockIcons.SIZE);
+            img.getPixelWriter().setPixels(0, 0, BlockIcons.SIZE, BlockIcons.SIZE, javafx.scene.image.PixelFormat.getIntArgbInstance(), px, 0, BlockIcons.SIZE);
+            return img;
         });
-        return face;
+    }
+
+    /** {@link #icon(io.blockdesigner.assets.BlockAssets, String)}'s model view as ARGB pixels, or null when there's no model. */
+    static int[] modelPixels(io.blockdesigner.assets.BlockAssets assets, String id) {
+        String k = EntityTypes.kind(id).id();
+        // Facing north, which the inventory view shows from the front (the dragon faces away from its rotation).
+        List<BakedQuad> quads = assets.entityQuads(EntityTypes.create(k, 0, 0, 0, k.equals("minecraft:ender_dragon") ? 0 : 180));
+        // One box is the placeholder: nothing to show but the egg.
+        if (quads.size() <= 6) return null;
+        float[] lo = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE}, hi = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+        for (BakedQuad q : quads) {
+            for (int v = 0; v < 4; v++) {
+                float[] p = {q.x(v), q.y(v), q.z(v)};
+                for (int a = 0; a < 3; a++) {
+                    lo[a] = Math.min(lo[a], p[a]);
+                    hi[a] = Math.max(hi[a], p[a]);
+                }
+            }
+        }
+        // Into the unit cube the block view expects, centred, keeping proportions.
+        float size = Math.max(hi[0] - lo[0], Math.max(hi[1] - lo[1], hi[2] - lo[2]));
+        if (size <= 0) return null;
+        List<BakedQuad> fitted = new ArrayList<>(quads.size());
+        for (BakedQuad q : quads) {
+            float[] pos = new float[12];
+            for (int v = 0; v < 4; v++) {
+                for (int a = 0; a < 3; a++) pos[v * 3 + a] = (q.pos()[v * 3 + a] - (lo[a] + hi[a]) / 2) / size + 0.5f;
+            }
+            fitted.add(new BakedQuad(pos, q.uv(), q.normal(), q.face(), q.cull(), q.tint(), q.layer(), q.shade(), q.sprite(), q.glow()));
+        }
+        BakedModel model = new BakedModel(fitted, new boolean[6], false, false);
+        return BlockIcons.isometricPixels(assets.atlas(), model, new float[]{30, 225, 0, 0, 0, 0, 0.66f, 0.66f, 0.66f});
     }
 
     private static Image draw(String id) {

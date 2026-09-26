@@ -39,8 +39,6 @@ public final class Settings {
     public boolean autoUpdatePlugins = true;
     /** A release version the user chose to skip; not offered again at startup. */
     public String skippedVersion;
-    /** Whether the Resource Tracker tab is open in the right panel. */
-    public boolean showResources = true;
     public boolean showGrid = true;
     public List<String> recentFiles = new ArrayList<>();
     public String author = System.getProperty("user.name", "");
