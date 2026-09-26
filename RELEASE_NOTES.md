@@ -1,3 +1,30 @@
+# BlockDesigner 0.4.19
+
+A console at the very bottom left: everything BlockDesigner says, the errors behind a problem, plugin logs and your WorldEdit commands, in one place you can search and copy from.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.19.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.19.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.19-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Console.** Click the terminal button at the very bottom left of the window (or press Ctrl+`, rebindable in Settings › Keybinds) to open it above the status bar.
+  - **What it shows:** status messages, warnings and errors (with the full error details), plugin log lines under the plugin's name, and every WorldEdit command with its result. Each line has its time and where it came from, coloured by how serious it is.
+  - **Find things:** show everything, only warnings and errors, or only errors, and filter by text. Select lines and press Ctrl+C, or use the copy button, to paste them into a bug report.
+  - **Run commands:** the line at the bottom runs WorldEdit commands like the command bar (the leading `/` is optional), plus `help`, `clear`, `copy`, `errors` and `all`. ↑ ↓ walk the history, Esc closes.
+  - **Error badge:** errors that come in while the console is closed show as a red count on its button.
+  - Drag its top edge to resize it; the height is remembered.
+  - Now and then it has opinions of its own. They're grey, rare, and mostly for programmers.
+
+---
+
 # BlockDesigner 0.4.18
 
 Every mob now looks the way it does in the game, fire and lava move, eyes glow, and Select or replace by type finds mobs too. The Resource Tracker tab is gone: it is now a plugin of its own.

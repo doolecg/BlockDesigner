@@ -205,6 +205,8 @@ public final class PluginManager {
         }
 
         private void log(String line) {
+            io.blockdesigner.app.ConsoleLog.add(line.contains("failed") || line.startsWith("Error") ? io.blockdesigner.app.ConsoleLog.Level.ERROR
+                    : io.blockdesigner.app.ConsoleLog.Level.INFO, info.name(), line);
             log.add(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")) + "  " + line);
             if (log.size() > 200) log.removeFirst();
         }

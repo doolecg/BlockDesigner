@@ -73,6 +73,113 @@
     -fx-font-size: 11.5px;
 }
 
+/* ---------- console (bottom left) ---------- */
+
+.console-button {
+    -fx-padding: 1 5 1 5;
+    -fx-background-radius: 5;
+}
+
+.console-button .ikonli-font-icon {
+    -fx-icon-size: 13px;
+    -fx-icon-color: -color-fg-muted;
+}
+
+.console-button:hover .ikonli-font-icon {
+    -fx-icon-color: -color-fg-default;
+}
+
+.status-bar .console-badge {
+    -fx-background-color: #E5484D;
+    -fx-background-radius: 7;
+    -fx-text-fill: white;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 4 0 4;
+}
+
+.console-panel {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default transparent transparent transparent;
+}
+
+.console-grip:hover {
+    -fx-background-color: -bd-accent;
+}
+
+.console-header {
+    -fx-padding: 2 8 6 10;
+}
+
+.console-title {
+    -fx-font-weight: bold;
+    -fx-graphic-text-gap: 6;
+}
+
+.console-count {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 11px;
+}
+
+.console-tool {
+    -fx-padding: 3 6 3 6;
+}
+
+.console-list {
+    -fx-background-color: -color-bg-inset;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+}
+
+.console-list .console-cell {
+    -fx-padding: 1 8 1 10;
+    -fx-background-color: transparent;
+}
+
+.console-list .console-cell:selected {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.console-mono {
+    -fx-font-family: "Consolas", "Cascadia Mono", monospace;
+    -fx-font-size: 12px;
+}
+
+.console-time {
+    -fx-fill: -color-fg-subtle;
+}
+
+.console-source {
+    -fx-fill: -color-fg-muted;
+}
+
+.console-text.debug {
+    -fx-fill: -color-fg-subtle;
+}
+
+.console-text.info {
+    -fx-fill: -color-fg-default;
+}
+
+.console-text.warn {
+    -fx-fill: #E0A030;
+}
+
+.console-text.error {
+    -fx-fill: #E5484D;
+}
+
+.console-input-row {
+    -fx-padding: 5 8 6 10;
+}
+
+.console-prompt {
+    -fx-font-family: "Consolas", "Cascadia Mono", monospace;
+    -fx-text-fill: -bd-accent;
+    -fx-font-weight: bold;
+}
+
 /* ---------- side panels ---------- */
 
 .side-panel {

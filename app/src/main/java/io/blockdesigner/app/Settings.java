@@ -33,6 +33,8 @@ public final class Settings {
     public boolean windowMaximized;
     /** Widths of the left (layers and palette) and right panels, and the layers / palette split, as last left. */
     public double leftPanelWidth, rightPanelWidth, leftSplit;
+    /** Height of the console (bottom left button) as last dragged. */
+    public double consoleHeight = 240;
     /** Look for a newer release on GitHub when the app opens. */
     public boolean checkForUpdates = true;
     /** Update plugins that link a release source by themselves, at startup. */

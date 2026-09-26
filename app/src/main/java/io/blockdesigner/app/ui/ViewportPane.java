@@ -4371,10 +4371,16 @@ public final class ViewportPane extends StackPane {
         commandBar.open();
     }
 
+    /** A command typed in the console: runs like one from the command bar. */
+    public void runConsoleCommand(String line) {
+        runCommand(line);
+    }
+
     /**
      * Runs a WorldEdit command (built-in or from a plugin) as one undo step, through {@link #editWorld}.
      */
     private void runCommand(String line) {
+        io.blockdesigner.app.ConsoleLog.info("command", line.strip());
         BlockAssets assets = ws.assets();
         java.util.function.Function<String, BlockState> resolve = name -> {
             try {
@@ -4394,8 +4400,12 @@ public final class ViewportPane extends StackPane {
         io.blockdesigner.core.worldedit.WorldEdit.Result[] result = {null};
         boolean ran = editWorld(line.strip(), world -> result[0] = worldEdit.run(line,
                 new io.blockdesigner.core.worldedit.WorldEdit.Context(world, look, aim, ws.selectedBlockProperty().get(), resolve)));
-        if (!ran || result[0] == null) return;
+        if (!ran || result[0] == null) {
+            io.blockdesigner.app.ConsoleLog.warn("command", "Not run: the active layer is locked");
+            return;
+        }
         var r = result[0];
+        io.blockdesigner.app.ConsoleLog.add(r.ok() ? io.blockdesigner.app.ConsoleLog.Level.INFO : io.blockdesigner.app.ConsoleLog.Level.WARN, "command", r.message());
         var undo = ws.editor().undoStack();
         switch (r.special()) {
             case UNDO -> undo.undo();

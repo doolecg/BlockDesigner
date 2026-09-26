@@ -8,6 +8,8 @@ public final class Main {
     }
 
     public static void main(String[] args) {
+        ConsoleLog.install();
+        ConsoleQuips.install();
         Application.launch(BlockDesignerApp.class, args);
     }
 }

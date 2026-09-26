@@ -143,6 +143,7 @@ public final class Keybinds {
 
         SHORTCUTS(Group.VIEW, "Shortcuts list", "F1", "Alt+K"),
         KEY_HINTS(Group.VIEW, "Key hints on / off", "Shift+F1"),
+        CONSOLE(Group.VIEW, "Console", "Shortcut+Back Quote"),
         VIEWPORT_SETTINGS(Group.VIEW, "Viewport settings", "N"),
         FRAME(Group.VIEW, "Focus: frame the selection (or else the active layer)", "F"),
         GRID(Group.VIEW, "Ground grid on / off", "Alt+G"),

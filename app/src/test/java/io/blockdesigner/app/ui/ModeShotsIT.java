@@ -120,6 +120,20 @@ class ModeShotsIT {
                 save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("plugin-tab-" + i + ".png"));
             }
         }
+        // The console, bottom left: a few lines of each kind, then open.
+        fx(() -> {
+            io.blockdesigner.app.ConsoleLog.install();
+            System.out.println("Hello from standard out");
+            io.blockdesigner.app.ConsoleLog.warn("assets", "No texture for create:belt, using the missing texture");
+            new IllegalStateException("Example failure").printStackTrace();
+            var f = MainWindow.class.getDeclaredField("console");
+            f.setAccessible(true);
+            ((ConsolePanel) f.get(window)).open();
+            window.viewport().runConsoleCommand("/help");
+            return null;
+        });
+        Thread.sleep(1500);
+        save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("console.png"));
         fx(() -> {
             window.stage().close();
             return null;

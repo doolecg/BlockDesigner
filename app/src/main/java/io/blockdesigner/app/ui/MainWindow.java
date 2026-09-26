@@ -93,6 +93,7 @@ public final class MainWindow {
     private final io.blockdesigner.app.plugins.PluginManager plugins;
     private final Updater updater = new Updater();
     private ToolDock toolDock;
+    private ConsolePanel console;
 
     public MainWindow(Stage stage, Workspace ws) {
         this.stage = stage;
@@ -159,7 +160,8 @@ public final class MainWindow {
         closedTabsBar.getStyleClass().add("closed-tabs-bar");
         closedTabsBar.setAlignment(Pos.TOP_CENTER);
         root.setRight(closedTabsBar);
-        root.setBottom(statusBar());
+        console = new ConsolePanel(ws.settings(), viewport::runConsoleCommand);
+        root.setBottom(new VBox(console, statusBar()));
         windowRoot.getStyleClass().add("app-root");
 
         startScreen = new StartScreen(ws.settings(), new StartScreen.Actions(this::newProject, this::openDialog, this::importDialog,
@@ -942,8 +944,8 @@ public final class MainWindow {
         pluginMenu.setOnShowing(e -> fillPluginMenu(pluginMenu));
         fillPluginMenu(pluginMenu);
 
-        Button undo = LayersPanel.iconButton(Feather.CORNER_UP_LEFT, Keybinds.tooltip("Undo", "Nothing to undo", Keybinds.Action.UNDO), () -> ws.editor().undoStack().undo());
-        Button redo = LayersPanel.iconButton(Feather.CORNER_UP_RIGHT, Keybinds.tooltip("Redo", "Nothing to redo", Keybinds.Action.REDO), () -> ws.editor().undoStack().redo());
+        Button undo = LayersPanel.iconButton(Feather.CORNER_UP_LEFT, Keybinds.tooltip("Undo", "Nothing to undo", Keybinds.Action.UNDO), this::undo);
+        Button redo = LayersPanel.iconButton(Feather.CORNER_UP_RIGHT, Keybinds.tooltip("Redo", "Nothing to redo", Keybinds.Action.REDO), this::redo);
         ws.editor().undoStack().addListener(() -> {
             undo.setDisable(!ws.editor().undoStack().canUndo());
             redo.setDisable(!ws.editor().undoStack().canRedo());
@@ -1034,10 +1036,40 @@ public final class MainWindow {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         statusLeft.textProperty().bind(ws.statusProperty());
-        HBox bar = new HBox(12, statusLeft, spacer, statusRight);
+        ws.statusProperty().addListener((o, a, b) -> io.blockdesigner.app.ConsoleLog.info("status", b));
+        HBox bar = new HBox(12, consoleButton(), statusLeft, spacer, statusRight);
         bar.getStyleClass().add("status-bar");
         bar.setAlignment(Pos.CENTER_LEFT);
         return bar;
+    }
+
+    /** The very bottom-left button: opens the console; shows how many errors came in while it was closed. */
+    private javafx.scene.Node consoleButton() {
+        Button b = new Button(null, new FontIcon(Feather.TERMINAL));
+        b.getStyleClass().addAll("flat", "console-button");
+        b.setFocusTraversable(false);
+        b.setTooltip(Keybinds.tooltip("Console", "App messages, errors, plugin logs and commands", Keybinds.Action.CONSOLE));
+        b.setOnAction(e -> console.toggle());
+        Label badge = new Label();
+        badge.getStyleClass().add("console-badge");
+        badge.setMouseTransparent(true);
+        badge.visibleProperty().bind(console.unseenErrorsProperty().greaterThan(0));
+        badge.textProperty().bind(javafx.beans.binding.Bindings.createStringBinding(() -> {
+            int n = console.unseenErrorsProperty().get();
+            return n > 99 ? "99+" : Integer.toString(n);
+        }, console.unseenErrorsProperty()));
+        StackPane host = new StackPane(b, badge);
+        StackPane.setAlignment(badge, Pos.TOP_RIGHT);
+        StackPane.setMargin(badge, new Insets(-3, -6, 0, 0));
+        return host;
+    }
+
+    private void undo() {
+        if (ws.editor().undoStack().undo()) io.blockdesigner.app.ConsoleQuips.event(io.blockdesigner.app.ConsoleQuips.Event.UNDO);
+    }
+
+    private void redo() {
+        if (ws.editor().undoStack().redo()) io.blockdesigner.app.ConsoleQuips.event(io.blockdesigner.app.ConsoleQuips.Event.REDO);
     }
 
     private boolean statusQueued;
@@ -1462,8 +1494,8 @@ public final class MainWindow {
         installedAccelerators.forEach(acc::remove);
         installedAccelerators.clear();
         Map<Keybinds.Action, Runnable> run = new java.util.EnumMap<>(Keybinds.Action.class);
-        run.put(Keybinds.Action.UNDO, () -> ws.editor().undoStack().undo());
-        run.put(Keybinds.Action.REDO, () -> ws.editor().undoStack().redo());
+        run.put(Keybinds.Action.UNDO, this::undo);
+        run.put(Keybinds.Action.REDO, this::redo);
         run.put(Keybinds.Action.SAVE, () -> save(false));
         run.put(Keybinds.Action.SAVE_AS, () -> save(true));
         run.put(Keybinds.Action.OPEN, this::openDialog);
@@ -1607,6 +1639,7 @@ public final class MainWindow {
                      ORBIT_LEFT, ORBIT_RIGHT, ORBIT_UP, ORBIT_DOWN, FRAME_ACTIVE -> () -> viewport.cameraKey(a);
                 case SHORTCUTS -> viewport::toggleShortcuts;
                 case KEY_HINTS -> viewport::toggleKeyHints;
+                case CONSOLE -> console::toggle;
                 case VIEWPORT_SETTINGS -> viewport::toggleSettings;
                 case FRAME -> viewport::frameSelectionOrLayer;
                 case GRID -> viewport::toggleGrid;
