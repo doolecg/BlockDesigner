@@ -120,15 +120,18 @@ public final class ViewportPane extends StackPane {
     private static final class ShapeDrag {
         final io.blockdesigner.core.place.ShapeTool.Shape shape;
         final BlockPos anchor;
+        /** Normal of the face the drag started on: shapes that follow the face grow along it. */
+        final BlockPos up;
         final boolean replace;
         BlockPos end;
         int height = 1;
         List<BlockPos> cells = List.of();
         boolean tooBig;
 
-        ShapeDrag(io.blockdesigner.core.place.ShapeTool.Shape shape, BlockPos anchor, boolean replace) {
+        ShapeDrag(io.blockdesigner.core.place.ShapeTool.Shape shape, BlockPos anchor, BlockPos up, boolean replace) {
             this.shape = shape;
             this.anchor = anchor;
+            this.up = up;
             this.replace = replace;
             this.end = anchor;
         }
@@ -184,6 +187,10 @@ public final class ViewportPane extends StackPane {
     private long lastPulse;
     private final List<Runnable> flyChanged = new ArrayList<>();
     private final BlockInfoHud hud = new BlockInfoHud();
+    /** Control prompts in the bottom-right corner for what you are doing now (Shift+F1 toggles). */
+    private final KeyHints keyHints = new KeyHints();
+    private final javafx.animation.Timeline keyHintsTick = new javafx.animation.Timeline(
+            new javafx.animation.KeyFrame(Duration.millis(200), e -> updateKeyHints()));
     private final StackPane crosshair = new StackPane();
 
     // Select mode: selected blocks per layer id (packed layer-local positions) and the marquee being dragged
@@ -242,7 +249,7 @@ public final class ViewportPane extends StackPane {
         sliceBadge.setMouseTransparent(true);
         sliceBadge.setVisible(false);
         StackPane.setAlignment(sliceBadge, Pos.TOP_RIGHT);
-        StackPane.setMargin(sliceBadge, new javafx.geometry.Insets(14, 176, 0, 0));
+        StackPane.setMargin(sliceBadge, new javafx.geometry.Insets(14, 150, 0, 0));
         settingsButton.getStyleClass().addAll("flat", "viewport-settings-button");
         settingsButton.setTooltip(new javafx.scene.control.Tooltip("Viewport settings (N): field of view, clipping, fog, overlays, controls"));
         settingsButton.setFocusTraversable(false);
@@ -256,7 +263,7 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(keysButton, Pos.TOP_RIGHT);
         StackPane.setMargin(keysButton, new javafx.geometry.Insets(52, 12, 0, 0));
         filterButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        filterButton.setTooltip(new javafx.scene.control.Tooltip("Select by type (Alt+T): select blocks by type, layer and properties"));
+        filterButton.setTooltip(new javafx.scene.control.Tooltip("By type (Alt+T): select or replace blocks by type"));
         filterButton.setFocusTraversable(false);
         filterButton.setOnAction(e -> openSelectByType(null));
         StackPane.setAlignment(filterButton, Pos.TOP_RIGHT);
@@ -325,8 +332,13 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(symmetryButton, Pos.TOP_RIGHT);
         StackPane.setMargin(symmetryButton, new javafx.geometry.Insets(178, 12, 0, 0));
         updateSymmetryButton();
+        StackPane.setAlignment(keyHints, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, 14, 0));
         getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, brushBar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar,
-                shapeInfo, symmetryButton, shapeRadial);
+                shapeInfo, symmetryButton, keyHints, shapeRadial);
+        keyHintsTick.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        keyHintsTick.play();
+        updateKeyHints();
         updateHotbarVisibility();
         applyViewSettings();
         toastFade.setFromValue(1);
@@ -355,14 +367,14 @@ public final class ViewportPane extends StackPane {
             showToast(switch (b) {
                 case BUILD -> ws.replaceProperty().get() ? "Build mode · Replace · left break · right replace · middle pick · R places again"
                         : shape() == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE
-                        ? "Build mode · left break · right place · middle pick · hold Alt for shapes · B to leave"
-                        : "Build mode · " + shape().label + " · right-drag to place · hold Alt to change shape · B to leave";
+                        ? "Build mode · left break · right place · middle pick · hold Alt for shapes" + keyNote(Keybinds.Action.TOOL_BUILD, "to leave")
+                        : "Build mode · " + shape().label + " · right-drag to place · hold Alt to change shape" + keyNote(Keybinds.Action.TOOL_BUILD, "to leave");
                 case SELECT -> "Select mode";
                 case VIEW -> "View mode";
-                case MOVE -> "Move · drag an arrow, square or the centre · G";
+                case MOVE -> "Move · drag an arrow, square or the centre" + (keyText(Keybinds.Action.TOOL_MOVE).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_MOVE));
                 case ROTATE -> "Rotate · drag a ring to turn 90° · E";
                 case BRUSH -> "Brush · drag to paint · right-drag smooths · Alt+1…0 modes · Shift+right-click settings · - / = size · , / . strength";
-                case ERASER -> "Eraser · drag to remove blocks · - / = size · X";
+                case ERASER -> "Eraser · drag to remove blocks · - / = size" + (keyText(Keybinds.Action.TOOL_ERASER).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_ERASER));
             });
         });
         ws.editor().undoStack().addListener(this::requestRedraw);
@@ -1286,15 +1298,6 @@ public final class ViewportPane extends StackPane {
                 setFly(false);
                 frameAll();
             }
-            case F -> {
-                // F frames the selected blocks if there are any, otherwise the active layer; Shift+F frames everything.
-                setFly(false);
-                Layer a = ws.activeLayerProperty().get();
-                if (e.isShiftDown()) frameAll();
-                else if (!blockSel.isEmpty()) frameBlockSelection();
-                else if (a != null) frameLayer(a);
-                else frameAll();
-            }
             case ENTER -> {
                 if (!placing.isEmpty()) commitPlacement();
                 else return;
@@ -1325,7 +1328,7 @@ public final class ViewportPane extends StackPane {
         if (enable) {
             requestFocus();
             recenterMouse();
-            showToast("Flying · WASD move (W/S follow the view) · Space/Shift up/down · Ctrl sprint · B toggles building · Esc exit");
+            showToast("Flying · WASD move (W/S follow the view) · Space/Shift up/down · Ctrl sprint" + keyNote(Keybinds.Action.TOOL_BUILD, "toggles building") + " · Esc exit");
         } else {
             showToast("Orbit camera");
         }
@@ -1872,13 +1875,20 @@ public final class ViewportPane extends StackPane {
             Layer hl = hover.layer();
             BlockState type = BlockTransformer.defaults().apply(hl.structure().get(hover.local()), hl.transform());
             String typeName = BlockInfoHud.name(ws.assets(), type);
-            javafx.scene.control.Menu byType = new javafx.scene.control.Menu("Select by type");
+            javafx.scene.control.Menu byType = new javafx.scene.control.Menu("Select or replace by type");
             byType.getItems().addAll(
                     item("All " + typeName + " in " + hl.name(), null, () -> quickSelectType(type, false, List.of(hl))),
                     item("All " + typeName + " in visible layers", null, () -> quickSelectType(type, false, typeLayers(SelectByTypePanel.Scope.VISIBLE))),
                     item("Same exact state in " + hl.name(), null, () -> quickSelectType(type, true, List.of(hl))),
-                    new javafx.scene.control.SeparatorMenuItem(),
-                    item("More options…", "Alt+T", () -> openSelectByType(type)));
+                    new javafx.scene.control.SeparatorMenuItem());
+            if (held != null && !held.name().equals(type.name())) {
+                // Straight to replacing: every block of this type in the visible layers becomes the held block, facing kept.
+                byType.getItems().add(item("Replace all " + typeName + " with " + BlockInfoHud.name(ws.assets(), held), null,
+                        () -> applyReplaceByType(new SelectByTypePanel.Replace(new SelectByTypePanel.Query(SelectByTypePanel.Scope.VISIBLE,
+                                false, java.util.Map.of(), sliceY != null), java.util.Set.of(type.name()), held, true))));
+            }
+            byType.getItems().addAll(
+                    item("Select or replace…", "Alt+T", () -> openSelectByType(type)));
             contextMenu.getItems().add(byType);
         }
         if (n > 0) {
@@ -1886,15 +1896,19 @@ public final class ViewportPane extends StackPane {
                     item(String.format("Delete %,d block%s", n, n == 1 ? "" : "s"), "Del", this::deleteSelectedBlocks),
                     item("Replace with " + (held == null ? "held block" : BlockInfoHud.name(ws.assets(), held)), null, this::replaceSelection),
                     item("Fix fence, wall, redstone and stair shapes", null, this::fixSelectionShapes),
-                    item("Copy to new layer", null, this::copySelectionToLayer),
+                    item("Copy to new layer", keyOrNull(Keybinds.Action.COPY_TO_LAYER), this::copySelectionToLayer),
+                    item("Move to new layer", keyOrNull(Keybinds.Action.MOVE_TO_LAYER), this::moveSelectionToNewLayer),
+                    item("Move to active layer" + (ws.activeLayerProperty().get() == null ? "" : " (" + ws.activeLayerProperty().get().name() + ")"),
+                            null, this::moveSelectionToActiveLayer),
+                    item("Move or rotate", keyOrNull(Keybinds.Action.TOOL_MOVE), () -> ws.toolProperty().set(ToolKind.MOVE)),
                     item("Clear selection", "Esc", this::clearBlockSelection));
         }
         if (layer != null) {
             if (!contextMenu.getItems().isEmpty()) contextMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
             contextMenu.getItems().addAll(
                     item("Select all in " + layer.name(), null, () -> selectAllIn(layer)),
-                    item("Select by type…", "Alt+T", () -> openSelectByType(null)),
-                    item("Frame " + layer.name(), "F", () -> frameLayer(layer)),
+                    item("Select or replace by type…", "Alt+T", () -> openSelectByType(null)),
+                    item("Frame " + layer.name(), null, () -> frameLayer(layer)),
                     item("Fix block shapes in " + layer.name(), null, () -> fixLayerShapes(layer)),
                     item("Hide " + layer.name(), null, () -> ws.editor().modifyLayer(layer, "Hide " + layer.name(), null, x -> x.setVisible(false))),
                     item(layer.locked() ? "Unlock " + layer.name() : "Lock " + layer.name(), null,
@@ -2218,6 +2232,10 @@ public final class ViewportPane extends StackPane {
         double lastAngle, angle;
         int turns;
         boolean changed;
+        /** Dragging a block selection: each floating layer and the layer its blocks came from (null for layers). */
+        java.util.Map<Layer, Layer> lifted;
+        /** The selection before the drag, restored on cancel. */
+        java.util.Map<String, java.util.Set<Long>> selBefore;
     }
 
     private boolean isGizmoTool() {
@@ -2248,21 +2266,23 @@ public final class ViewportPane extends StackPane {
         Vector3f pivot = null;
         if (mode != null) {
             // Rotation turns about a fixed point; a move carries the gizmo along with the layers.
-            pivot = gizmoDrag != null && mode == Gizmo.Mode.ROTATE ? gizmoDrag.pivot : boundsCenter(gizmoTargets());
+            pivot = gizmoDrag != null && mode == Gizmo.Mode.ROTATE ? gizmoDrag.pivot
+                    : gizmoDrag != null ? boundsCenter(gizmoDrag.layers)
+                    : movableSelection() ? selectionCenter() : boundsCenter(gizmoTargets());
         }
         gizmo.update(mode, pivot, camera, getWidth(), getHeight(), gizmoHot, gizmoDrag == null ? null : gizmoDrag.handle);
     }
 
     private void beginGizmoDrag(Gizmo.Handle h, double x, double y) {
-        List<Layer> layers = gizmoTargets();
-        Vector3f pivot = boundsCenter(layers);
+        boolean selection = movableSelection();
+        List<Layer> layers = selection ? List.of() : gizmoTargets();
+        Vector3f pivot = selection ? selectionCenter() : boundsCenter(layers);
         if (pivot == null) {
             showToast(ws.nudgeTargets().isEmpty() ? "Select a layer first" : "Layer is locked");
             return;
         }
         GizmoDrag d = new GizmoDrag();
         d.handle = h;
-        d.layers = layers;
         d.pivot = pivot;
         Vector3f[] r = ray(x, y);
         switch (h.kind()) {
@@ -2274,7 +2294,16 @@ public final class ViewportPane extends StackPane {
             case RING -> d.lastAngle = screenAngle(x, y);
         }
         gizmoDrag = d;
-        ws.editor().undoStack().beginGroup(h.kind() == Gizmo.Kind.RING ? "Rotate layers" : layers.size() == 1 ? "Move " + layers.getFirst().name() : "Move layers");
+        if (selection) {
+            // The selected blocks float in their own layers while dragged, and go back into their layers on release.
+            ws.editor().undoStack().beginGroup(h.kind() == Gizmo.Kind.RING ? "Rotate selection" : "Move selection");
+            d.selBefore = copySelection();
+            d.lifted = liftSelection();
+            d.layers = List.copyOf(d.lifted.keySet());
+        } else {
+            d.layers = layers;
+            ws.editor().undoStack().beginGroup(h.kind() == Gizmo.Kind.RING ? "Rotate layers" : layers.size() == 1 ? "Move " + layers.getFirst().name() : "Move layers");
+        }
         requestRedraw();
     }
 
@@ -2361,17 +2390,185 @@ public final class ViewportPane extends StackPane {
     }
 
     private void endGizmoDrag() {
+        GizmoDrag d = gizmoDrag;
         gizmoDrag = null;
+        if (d.lifted != null) dropSelection(d.lifted);
         ws.editor().undoStack().endGroup();
         requestRedraw();
     }
 
     private void cancelGizmoDrag() {
-        boolean changed = gizmoDrag.changed;
+        GizmoDrag d = gizmoDrag;
         gizmoDrag = null;
+        // A lifted selection always changed the layers, so it is always undone.
+        if (d.lifted != null) dropSelection(d.lifted);
         ws.editor().undoStack().endGroup();
-        if (changed) ws.editor().undoStack().undo();
+        if (d.changed || d.lifted != null) ws.editor().undoStack().undo();
+        if (d.selBefore != null) {
+            blockSel.clear();
+            blockSel.putAll(d.selBefore);
+        }
         showToast("Cancelled");
+        requestRedraw();
+    }
+
+    // ---- moving selected blocks --------------------------------------------------------------------------------
+
+    /** Whether the Move / Rotate gizmo works on the selected blocks (there are some, in unlocked, visible layers). */
+    private boolean movableSelection() {
+        for (String id : blockSel.keySet()) {
+            Layer l = ws.scene().find(id).orElse(null);
+            if (l != null && !l.locked() && l.visible() && !blockSel.get(id).isEmpty()) return true;
+        }
+        return false;
+    }
+
+    private java.util.Map<String, java.util.Set<Long>> copySelection() {
+        java.util.Map<String, java.util.Set<Long>> out = new java.util.LinkedHashMap<>();
+        blockSel.forEach((k, v) -> out.put(k, new java.util.HashSet<>(v)));
+        return out;
+    }
+
+    private List<Object> selCenterKey;
+    private Vector3f selCenter;
+
+    /** Centre of the selected blocks' world bounds, or null; cached while the selection and its layers stay put. */
+    private Vector3f selectionCenter() {
+        List<Object> key = new ArrayList<>();
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            key.add(List.of(e.getKey(), e.getValue().size(), System.identityHashCode(e.getValue()),
+                    l == null ? "" : l.offset(), l == null ? "" : l.transform(), l != null && l.locked(), l != null && l.visible()));
+        }
+        if (key.equals(selCenterKey)) return selCenter == null ? null : new Vector3f(selCenter);
+        selCenterKey = key;
+        selCenter = computeSelectionCenter();
+        return selCenter == null ? null : new Vector3f(selCenter);
+    }
+
+    private Vector3f computeSelectionCenter() {
+        int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l == null || l.locked() || !l.visible()) continue;
+            for (long packed : e.getValue()) {
+                BlockPos p = l.toWorld(BlockPos.unpack(packed));
+                x0 = Math.min(x0, p.x());
+                y0 = Math.min(y0, p.y());
+                z0 = Math.min(z0, p.z());
+                x1 = Math.max(x1, p.x());
+                y1 = Math.max(y1, p.y());
+                z1 = Math.max(z1, p.z());
+            }
+        }
+        if (x0 > x1) return null;
+        return new Vector3f((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f, (z0 + z1 + 1) / 2f);
+    }
+
+    /** Moves the selected blocks into {@code dest(source)} (see {@link SelectionTransfer}); returns the new selection. */
+    private java.util.Map<String, java.util.Set<Long>> transferSelection(java.util.function.Function<Layer, Layer> dest, String label) {
+        return SelectionTransfer.transfer(ws.editor(), blockSel, dest, label);
+    }
+
+    /** Lifts the selected blocks into a floating layer per source layer; returns floating layer → source. */
+    private java.util.Map<Layer, Layer> liftSelection() {
+        java.util.Map<Layer, Layer> lifted = new java.util.LinkedHashMap<>();
+        Layer active = ws.activeLayerProperty().get();
+        var sel = transferSelection(src -> {
+            if (!src.visible()) return null;
+            Layer f = new Layer(src.name() + " (moving)", new io.blockdesigner.core.model.Structure());
+            f.setOffset(src.offset());
+            f.setTransform(src.transform());
+            f.setColor(src.color());
+            ws.editor().addLayer(f, ws.scene().indexOf(src) + 1);
+            lifted.put(f, src);
+            return f;
+        }, "Lift selection");
+        // Only the floating blocks are selected (and so outlined) while they move.
+        blockSel.clear();
+        sel.forEach((id, cells) -> {
+            if (lifted.keySet().stream().anyMatch(f -> f.id().equals(id))) blockSel.put(id, cells);
+        });
+        if (active != null) ws.scene().setActive(active);
+        return lifted;
+    }
+
+    /** Puts lifted blocks back into the layers they came from, at their new place, and removes the floating layers. */
+    private void dropSelection(java.util.Map<Layer, Layer> lifted) {
+        blockSel.clear();
+        for (Layer f : lifted.keySet()) {
+            java.util.Set<Long> cells = new java.util.HashSet<>();
+            f.structure().forEachBlock((x, y, z, st) -> cells.add(BlockPos.pack(x, y, z)));
+            if (!cells.isEmpty()) blockSel.put(f.id(), cells);
+        }
+        var sel = transferSelection(lifted::get, "Place selection");
+        for (Layer f : lifted.keySet()) ws.editor().removeLayer(f);
+        blockSel.clear();
+        sel.forEach((id, cells) -> {
+            if (lifted.keySet().stream().noneMatch(f -> f.id().equals(id))) blockSel.put(id, cells);
+        });
+        Layer first = lifted.values().iterator().next();
+        if (ws.scene().indexOf(first) >= 0) ws.scene().setActive(first);
+        selectionChanged();
+    }
+
+    /** Ctrl+Shift+J: moves the selected blocks out of their layers into a new layer (one per layer) at the same place. */
+    public void moveSelectionToNewLayer() {
+        if (blockSel.isEmpty()) {
+            showToast("Select some blocks first (Select mode, Q)");
+            return;
+        }
+        List<Layer> made = new ArrayList<>();
+        ws.editor().undoStack().beginGroup("Move selection to new layer");
+        try {
+            var sel = transferSelection(src -> {
+                Layer l = new Layer(src.name() + " selection", new io.blockdesigner.core.model.Structure());
+                l.setOffset(src.offset());
+                l.setTransform(src.transform());
+                ws.editor().addLayer(l, ws.scene().indexOf(src) + 1);
+                made.add(l);
+                return l;
+            }, "Move selection to new layer");
+            blockSel.clear();
+            blockSel.putAll(sel);
+        } finally {
+            ws.editor().undoStack().endGroup();
+        }
+        if (made.isEmpty()) {
+            showToast("Those blocks are in locked layers");
+            return;
+        }
+        ws.scene().setActive(made.getLast());
+        ws.selectedLayers().setAll(made);
+        showToast(made.size() == 1 ? "Moved to " + made.getFirst().name() : "Moved to " + made.size() + " new layers");
+        requestRedraw();
+    }
+
+    /** Moves the selected blocks from other layers into the active layer, at the same place. */
+    public void moveSelectionToActiveLayer() {
+        Layer target = ws.activeLayerProperty().get();
+        if (blockSel.isEmpty()) {
+            showToast("Select some blocks first (Select mode, Q)");
+            return;
+        }
+        if (target == null || target.locked()) {
+            showToast(target == null ? "No active layer" : "The active layer is locked");
+            return;
+        }
+        long moving = blockSel.entrySet().stream().filter(e -> !e.getKey().equals(target.id())).mapToLong(e -> e.getValue().size()).sum();
+        if (moving == 0) {
+            showToast("Those blocks are already in " + target.name());
+            return;
+        }
+        ws.editor().undoStack().beginGroup("Move selection to " + target.name());
+        try {
+            var sel = transferSelection(src -> target, "Move selection to " + target.name());
+            blockSel.clear();
+            blockSel.putAll(sel);
+        } finally {
+            ws.editor().undoStack().endGroup();
+        }
+        showToast(String.format("Moved %,d block%s into %s", moving, moving == 1 ? "" : "s", target.name()));
         requestRedraw();
     }
 
@@ -2757,17 +2954,17 @@ public final class ViewportPane extends StackPane {
         ws.toolProperty().set(ToolKind.SELECT);
         SelectByTypePanel.Scope scope = ws.selectedLayers().size() > 1 ? SelectByTypePanel.Scope.SELECTED : SelectByTypePanel.Scope.VISIBLE;
         if (selectByTypePopover != null && selectByTypePopover.isShowing()) selectByTypePopover.hide();
-        SelectByTypePanel panel = new SelectByTypePanel(ws.assets(), scope, !blockSel.isEmpty(), sliceY != null, preselect, q -> {
+        SelectByTypePanel panel = new SelectByTypePanel(ws.assets(), scope, !blockSel.isEmpty(), sliceY != null, preselect, ws.blockToPlace(), q -> {
             java.util.Map<String, Long> counts = new java.util.HashMap<>();
             forEachTypeCandidate(q, (l, packed, st) -> {
                 if (q.matches(st)) counts.merge(q.key(st), 1L, Long::sum);
             });
             return counts;
-        }, this::applySelectByType, () -> {
+        }, this::applySelectByType, this::applyReplaceByType, () -> {
             if (selectByTypePopover != null) selectByTypePopover.hide();
             requestFocus();
         });
-        selectByTypePopover = SidePopover.create("Select by type", panel);
+        selectByTypePopover = SidePopover.create("Select or replace by type", panel);
         SidePopover.show(selectByTypePopover, filterButton);
     }
 
@@ -2778,6 +2975,31 @@ public final class ViewportPane extends StackPane {
             if (q.matches(st) && o.keys().contains(q.key(st))) found.computeIfAbsent(l.id(), k -> new java.util.HashSet<>()).add(packed);
         });
         applyTypeSelection(found, o.mode());
+    }
+
+    /** Replaces every ticked block with the chosen one (keeping facing and the like when asked) as one undo step. */
+    private void applyReplaceByType(SelectByTypePanel.Replace r) {
+        SelectByTypePanel.Query q = r.query();
+        java.util.Map<BlockPos, BlockState> changes = new java.util.LinkedHashMap<>();
+        java.util.Map<BlockState, BlockState> results = new java.util.HashMap<>();
+        forEachTypeCandidate(q, (l, packed, st) -> {
+            if (q.matches(st) && r.keys().contains(q.key(st)))
+                changes.put(l.toWorld(BlockPos.unpack(packed)), results.computeIfAbsent(st, f -> r.result(f, ws.assets())));
+        });
+        if (changes.isEmpty()) return;
+        int[] n = {0};
+        String what = r.target().isAir() ? "Remove by type" : "Replace by type";
+        boolean ok = editWorld(what, world -> changes.forEach((p, st) -> {
+            if (!world.get(p).equals(st)) {
+                world.set(p, st);
+                n[0]++;
+            }
+        }));
+        if (!ok) return;
+        String name = r.target().isAir() ? null : BlockInfoHud.name(ws.assets(), r.target());
+        showToast(n[0] == 0 ? "Nothing changed: those blocks already match"
+                : name == null ? String.format("Removed %,d block%s", n[0], n[0] == 1 ? "" : "s")
+                : String.format("Replaced %,d block%s with %s", n[0], n[0] == 1 ? "" : "s", name));
     }
 
     /** Selects every block with {@code type}'s id (or exactly its state) in the layers, replacing the selection. */
@@ -3542,7 +3764,9 @@ public final class ViewportPane extends StackPane {
         boolean replace = ws.replaceProperty().get();
         BlockPos start = replace ? (hover != null ? hover.world() : null) : hover != null ? hover.adjacentWorld() : hoverGround;
         if (start == null) return true;
-        shapeDrag = new ShapeDrag(s, start, replace);
+        // Started on a block, the shape grows out of the aimed face (up, down or sideways); on the ground it grows up.
+        BlockPos up = hover != null && hover.normal() != null ? hover.normal() : new BlockPos(0, 1, 0);
+        shapeDrag = new ShapeDrag(s, start, up, replace);
         refreshShape();
         return true;
     }
@@ -3566,11 +3790,18 @@ public final class ViewportPane extends StackPane {
         return switch (shapeDrag.shape.plane) {
             case NONE -> a;
             case HORIZONTAL -> {
-                if (Math.abs(d.y) < 1e-4f) yield null;
-                float t = (ay - o.y) / d.y;
+                // On the plane through the start across the face it grew from (the start's floor for upright shapes).
+                BlockPos n = shapeDrag.shape.followsFace() ? shapeDrag.up : new BlockPos(0, 1, 0);
+                int k = n.x() != 0 ? 0 : n.z() != 0 ? 2 : 1;
+                float[] os = {o.x, o.y, o.z}, ds = {d.x, d.y, d.z}, as = {ax, ay, az};
+                int[] ai = {a.x(), a.y(), a.z()};
+                if (Math.abs(ds[k]) < 1e-4f) yield null;
+                float t = (as[k] - os[k]) / ds[k];
                 if (t < 0) yield null;
-                yield new BlockPos(Math.clamp((int) Math.floor(o.x + d.x * t), a.x() - reach, a.x() + reach), a.y(),
-                        Math.clamp((int) Math.floor(o.z + d.z * t), a.z() - reach, a.z() + reach));
+                int[] c = new int[3];
+                for (int i = 0; i < 3; i++)
+                    c[i] = i == k ? ai[i] : Math.clamp((int) Math.floor(os[i] + ds[i] * t), ai[i] - reach, ai[i] + reach);
+                yield new BlockPos(c[0], c[1], c[2]);
             }
             case VERTICAL -> {
                 // The wall stands across the view: its plane faces the camera's main horizontal direction.
@@ -3613,9 +3844,9 @@ public final class ViewportPane extends StackPane {
     private void refreshShape() {
         ShapeDrag sd = shapeDrag;
         if (sd == null) return;
-        long est = io.blockdesigner.core.place.ShapeTool.estimate(sd.shape, sd.anchor, sd.end, sd.height);
+        long est = io.blockdesigner.core.place.ShapeTool.estimate(sd.shape, sd.anchor, sd.end, sd.height, sd.up);
         sd.tooBig = est > io.blockdesigner.core.place.ShapeTool.MAX_BLOCKS;
-        sd.cells = sd.tooBig ? List.of() : io.blockdesigner.core.place.ShapeTool.cells(sd.shape, sd.anchor, sd.end, sd.height);
+        sd.cells = sd.tooBig ? List.of() : io.blockdesigner.core.place.ShapeTool.cells(sd.shape, sd.anchor, sd.end, sd.height, sd.up);
         Box b = io.blockdesigner.core.place.ShapeTool.bounds(sd.cells);
         String size = b == null ? "" : " · " + b.sizeX() + " × " + b.sizeY() + " × " + b.sizeZ();
         String text = sd.tooBig ? sd.shape.label + " · too big (over " + String.format("%,d", io.blockdesigner.core.place.ShapeTool.MAX_BLOCKS) + " blocks)"
@@ -3725,7 +3956,8 @@ public final class ViewportPane extends StackPane {
         String blocks = n == 0 ? "" : String.format("%,d block%s", n, n == 1 ? "" : "s");
         String what = blocks.isEmpty() ? mobs : mobs.isEmpty() ? blocks : blocks + " and " + mobs;
         showToast(what.isEmpty() ? "Selection cleared"
-                : what + " selected" + box + (ne > 0 ? " · arrows move · Alt+scroll turns · Del removes" : " · T for commands") + " · Esc clears");
+                : what + " selected" + box + (ne > 0 ? " · arrows move · Alt+scroll turns · Del removes"
+                : keyNote(Keybinds.Action.TOOL_MOVE, "moves") + keyNote(Keybinds.Action.TOOL_ROTATE, "rotates") + keyNote(Keybinds.Action.COMMAND_BAR, "for commands")) + " · Esc clears");
         requestRedraw();
     }
 
@@ -3904,6 +4136,144 @@ public final class ViewportPane extends StackPane {
         if (brush) brushBar.show(t == ToolKind.ERASER);
         brushPopup.setEraser(t == ToolKind.ERASER);
         if (!brush) endStroke();
+    }
+
+    private Keybinds keys;
+
+    /** The user's key binds, so the key hints show the keys actually bound. */
+    void setKeybinds(Keybinds keys) {
+        this.keys = keys;
+    }
+
+    /** Frames the selected blocks if there are any, otherwise the active layer (or everything when there is none). */
+    public void frameSelectionOrLayer() {
+        setFly(false);
+        Layer a = ws.activeLayerProperty().get();
+        if (!blockSel.isEmpty()) frameBlockSelection();
+        else if (a != null) frameLayer(a);
+        else frameAll();
+    }
+
+    /** The key bound to an action as text ("Shift+Z"), or "" when it has none; for toasts and tooltips. */
+    public String keyText(Keybinds.Action a) {
+        if (keys == null) return "";
+        var k = keys.get(a);
+        return Keybinds.text(k[0] != null ? k[0] : k[1]);
+    }
+
+    private String keyOrNull(Keybinds.Action a) {
+        String k = keyText(a);
+        return k.isEmpty() ? null : k;
+    }
+
+    /** " · <key> <what>" for a toast, or "" when the action has no key. */
+    private String keyNote(Keybinds.Action a, String what) {
+        String k = keyText(a);
+        return k.isEmpty() ? "" : " · " + k + " " + what;
+    }
+
+    /** A key other than Alt went down (possibly with Alt): an Alt+key shortcut, so the shape wheel must not open. */
+    public void altComboPressed() {
+        if (altAlone || shapeRadial.isOpen()) cancelShapeRadial();
+    }
+
+    /** A hint for a rebindable action, showing its current main key (none when it is unbound). */
+    private void hint(List<KeyHints.Hint> h, String text, Keybinds.Action a) {
+        if (keys == null) return;
+        List<String> caps = keys.caps(a);
+        if (!caps.isEmpty()) h.add(new KeyHints.Hint(caps, text));
+    }
+
+    /** Shift+F1: shows or hides the key hints in the corner. */
+    public void toggleKeyHints() {
+        ws.settings().showKeyHints = !ws.settings().showKeyHints;
+        ws.settings().save();
+        updateKeyHints();
+        showToast(ws.settings().showKeyHints ? "Key hints on · Shift+F1 hides them" : "Key hints off · Shift+F1 shows them");
+    }
+
+    /** Picks the key hints for what is going on now: placing an import, dragging a shape, flying, or the tool. */
+    private void updateKeyHints() {
+        boolean on = ws.settings().showKeyHints;
+        keyHints.setVisible(on);
+        if (!on) return;
+        List<KeyHints.Hint> h = new ArrayList<>();
+        ToolKind tool = ws.toolProperty().get();
+        if (!placing.isEmpty()) {
+            h.add(KeyHints.Hint.of("Place", "LMB"));
+            h.add(KeyHints.Hint.of("Rotate", "R"));
+            h.add(KeyHints.Hint.of("Rotate", "Alt", "Wheel"));
+            h.add(KeyHints.Hint.of("Cancel", "Esc"));
+        } else if (shapeDrag != null) {
+            h.add(KeyHints.Hint.of("Place the " + shapeDrag.shape.label.toLowerCase(java.util.Locale.ROOT), "RMB"));
+            if (shapeDrag.shape.usesHeight()) h.add(KeyHints.Hint.of("Height", "Wheel"));
+            h.add(KeyHints.Hint.of("Cancel", "Esc"));
+        } else {
+            if (fly) {
+                h.add(KeyHints.Hint.of("Fly", "W", "A", "S", "D"));
+                h.add(KeyHints.Hint.of("Up / down", "Space", "Shift"));
+                h.add(KeyHints.Hint.of("Sprint", "Ctrl"));
+            }
+            switch (tool) {
+                case BUILD -> {
+                    var s = shape();
+                    boolean single = s == io.blockdesigner.core.place.ShapeTool.Shape.SINGLE;
+                    h.add(KeyHints.Hint.of("Break", "LMB"));
+                    h.add(KeyHints.Hint.of(ws.replaceProperty().get() ? "Replace block" : single ? "Place" : "Drag out " + s.label.toLowerCase(java.util.Locale.ROOT), "RMB"));
+                    h.add(KeyHints.Hint.of("Pick block", "MMB"));
+                    h.add(KeyHints.Hint.of(single ? "Shapes" : "Change shape", "Alt"));
+                    hint(h, ws.replaceProperty().get() ? "Stop replacing" : "Replace mode", Keybinds.Action.REPLACE_MODE);
+                    hint(h, ws.shuffleProperty().get() ? "Stop shuffling" : "Shuffle hotbar", Keybinds.Action.SHUFFLE);
+                    h.add(KeyHints.Hint.of("Symmetry", "M"));
+                    h.add(KeyHints.Hint.of("Hotbar", "1-9"));
+                }
+                case SELECT -> {
+                    h.add(KeyHints.Hint.of("Select area", "LMB"));
+                    h.add(KeyHints.Hint.of("Add / remove", "Shift", "Ctrl"));
+                    hint(h, "Select or replace by type", Keybinds.Action.SELECT_BY_TYPE);
+                    hint(h, "WorldEdit command", Keybinds.Action.COMMAND_BAR);
+                    if (!blockSel.isEmpty()) {
+                        hint(h, "Move / rotate them", Keybinds.Action.TOOL_MOVE);
+                        hint(h, "Move to new layer", Keybinds.Action.MOVE_TO_LAYER);
+                        h.add(KeyHints.Hint.of("Delete", "Del"));
+                        h.add(KeyHints.Hint.of("Clear selection", "Esc"));
+                    }
+                }
+                case MOVE -> {
+                    h.add(KeyHints.Hint.of(movableSelection() ? "Move the selected blocks" : "Drag arrow / square", "LMB"));
+                    h.add(KeyHints.Hint.of("Nudge", "Ctrl", "Wheel"));
+                    hint(h, "Rotate tool", Keybinds.Action.TOOL_ROTATE);
+                }
+                case ROTATE -> {
+                    h.add(KeyHints.Hint.of(movableSelection() ? "Turn the selected blocks" : "Drag a ring", "LMB"));
+                    hint(h, "Move tool", Keybinds.Action.TOOL_MOVE);
+                }
+                case BRUSH -> {
+                    h.add(KeyHints.Hint.of("Paint", "LMB"));
+                    h.add(KeyHints.Hint.of("Smooth", "RMB"));
+                    hint(h, "Smaller brush", Keybinds.Action.BRUSH_SMALLER);
+                    hint(h, "Bigger brush", Keybinds.Action.BRUSH_BIGGER);
+                    hint(h, "Weaker / stronger", Keybinds.Action.BRUSH_WEAKER);
+                    h.add(KeyHints.Hint.of("Brush modes", "Alt", "1-0"));
+                }
+                case ERASER -> {
+                    h.add(KeyHints.Hint.of("Erase", "LMB"));
+                    hint(h, "Smaller eraser", Keybinds.Action.BRUSH_SMALLER);
+                    hint(h, "Bigger eraser", Keybinds.Action.BRUSH_BIGGER);
+                }
+                case VIEW -> {
+                }
+            }
+            if (!fly) {
+                h.add(KeyHints.Hint.of("Orbit", "MMB"));
+                h.add(KeyHints.Hint.of("Pan", "Shift", "MMB"));
+                h.add(KeyHints.Hint.of("Fly", "C"));
+            } else {
+                h.add(KeyHints.Hint.of("Stop flying", "C"));
+            }
+        }
+        hint(h, "All shortcuts", Keybinds.Action.SHORTCUTS);
+        keyHints.show(h);
     }
 
     /** Alt+K: the keyboard shortcuts card over the viewport. */

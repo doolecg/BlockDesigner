@@ -23,7 +23,19 @@ final class ToolIcons {
                 "M9 11.5 C9 15.5 8.5 18 9.7 20.6 C10.2 21.7 11.1 23 12 23 C12.9 23 13.8 21.7 14.3 20.6 C15.5 18 15 15.5 15 11.5");
     }
 
-    /** An eraser: a tilted block with its rubber end split off, resting on a line. */
+    /** Build mode: a block drawn as a little cube, with a hammer coming down on it from the top left. */
+    static Node build(double size) {
+        return glyph(size, 0,
+                // the cube: top face, then the two side faces
+                "M13 12.5 L19 15.5 L13 18.5 L7 15.5 Z",
+                "M7 15.5 V20.5 L13 23.5 L19 20.5 V15.5",
+                "M13 18.5 V23.5",
+                // the hammer: head across the handle, handle running up to the right
+                "M4 6 L6.5 3.5 L11 8 L8.5 10.5 Z",
+                "M8.75 5.75 L13.5 1");
+    }
+
+    /** An eraser:a tilted block with its rubber end split off, resting on a line. */
     static Node eraser(double size) {
         return glyph(size, 0,
                 "M8.5 20.5 L3.5 15.5 L13.5 5.5 L20 12 L11.5 20.5 Z",

@@ -15,7 +15,7 @@ import javafx.scene.layout.StackPane;
 
 /**
  * Minecraft-style nine-slot hotbar along the bottom of the viewport. It records middle-click picks and blocks dragged
- * in from the block palette; click a slot (or press 1–9) to hold its block, Alt+C clears it.
+ * in from the block palette; click a slot (or press 1–9) to hold its block, Shift+C clears it.
  */
 final class Hotbar extends HBox {
     /** Drag-and-drop payload prefix for block states dragged from the palette. */

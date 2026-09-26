@@ -1,3 +1,51 @@
+# BlockDesigner 0.4.1
+
+A polish release. The block palette now looks and sorts like Minecraft's creative menu, shapes grow out of whichever face you start them on, and Select by type can replace blocks as well.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.1.exe** | You want a normal install. Installing over 0.4.0 upgrades it in place. |
+| **BlockDesigner-0.4.1-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.0 offers this update by itself when it opens.
+
+## New
+- **Replace by type:** the Select by type panel (Alt+T) is now "Select or replace by type".
+  - Tick the blocks to find, then choose **Select** or **Replace**.
+  - To replace, pick the new block by searching, use the held block, or pick **Air** to remove them. Facing, half and other properties the new block shares are kept, so oak stairs become stone brick stairs facing the same way. It is one undo step.
+  - Where to look and the property filters are under **More options**.
+  - Shift+right-click a block in Select mode for **Replace all … with the held block**.
+- **Move and rotate selected blocks:** with blocks selected, the Move (W) and Rotate (E) tools move or turn just those blocks inside their layer, instead of the whole layer. They keep their facing and data (chest contents, sign text), replace what they land on, and the whole drag is one undo step. Right-click or Esc during the drag cancels it.
+- **Move the selection to another layer:** **Ctrl+Shift+J** moves the selected blocks into a new layer (Ctrl+J still copies). Shift+right-click › **Move to active layer** moves them into the active layer. Either way they stay where they are in the world.
+- **Keybinds editor:** Settings › **Keybinds** lists every keyboard shortcut by group, with a search. Click a key and press a new one; each action can have a second key. Keys used by two actions show in red, and each action (or everything) can go back to its default. The key hints in the corner show your keys.
+- **New default keys** (all changeable in Settings › Keybinds):
+
+  | Action | Was | Now |
+  |---|---|---|
+  | Build mode | B | **G** |
+  | Move tool | G | **W** |
+  | Paint brush | U | **B** |
+  | Eraser | X | **F** |
+  | Shuffle mode | Z | **Shift+Z** |
+  | Replace mode | R | **Shift+X** |
+  | Clear the hotbar | Alt+C | **Shift+C** |
+  | Frame the selection or active layer | F | **Shift+F** (Home still frames everything) |
+- **Settings opens on General** instead of Appearance.
+- **Key hints:** the bottom-right corner shows the keys for what you are doing now, as keycaps and a mouse with the button lit. They change with the tool, flying, dragging a shape and placing an import. Turn them off or on with **Shift+F1**, or under Overlays in the viewport settings.
+- **The version** is shown on the welcome screen.
+- **The layout is remembered:** the window's size, position and maximised state, the widths of the side panels, and the split between layers and palette come back as you left them.
+
+## Changed
+- **Shapes grow from the face you start on.** Start a sphere, box, cylinder, dome or other shape on the underside of a block and it hangs down. Start it on a side and it grows sideways out of the wall, with the scroll wheel setting its depth. Floor, Wall and Line work as before.
+- **Block icons look like Minecraft's:** each block is drawn from its item model with the inventory's angle, size and lighting. Stairs face the right way, and fences, walls and buttons use their inventory models.
+- **The palette is laid out like the creative menu:** icon tabs for Building, Colored, Natural, Functional and Redstone blocks (plus All and Recently used), with blocks in the creative menu's order. Modded blocks are sorted into the tab that fits their name.
+- **Build mode's icon** is a block with a hammer.
+- **The view cube is smaller**, so it covers less of the viewport.
+
+---
+
 # BlockDesigner 0.4.0
 
 This release adds mobs: place pigs, villagers, iron golems, armour stands, paintings and more as stand-ins in your builds, drawn with Minecraft's own models and saved and exported with the schematic, as Litematica does. It also clears most of 0.3.0's known issues. From this version on, BlockDesigner updates itself.

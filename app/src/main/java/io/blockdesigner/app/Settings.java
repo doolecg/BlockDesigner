@@ -28,6 +28,11 @@ public final class Settings {
     public String themeMode;
     /** Show the start screen (recent projects, new, jar, download sites) when the app opens. */
     public boolean showStartScreen = true;
+    /** The window as it was last closed: normal (not maximised) bounds x, y, width, height, or null the first time. */
+    public double[] windowBounds;
+    public boolean windowMaximized;
+    /** Widths of the left (layers and palette) and right panels, and the layers / palette split, as last left. */
+    public double leftPanelWidth, rightPanelWidth, leftSplit;
     /** Look for a newer release on GitHub when the app opens. */
     public boolean checkForUpdates = true;
     /** A release version the user chose to skip; not offered again at startup. */
@@ -101,6 +106,10 @@ public final class Settings {
     public double zoomSpeed = 1;
     public boolean showOutlines = true;
     public boolean showHud = true;
+    /** Control prompts in the viewport's bottom-right corner (Shift+F1). */
+    public boolean showKeyHints = true;
+    /** Changed key binds by action name: "main|alternative" key combinations ("" for none); see Keybinds. */
+    public java.util.Map<String, String> keybinds = new java.util.LinkedHashMap<>();
 
     /** Puts every viewport setting (view, overlays and controls) back to its default. */
     public void resetViewport() {
@@ -124,6 +133,7 @@ public final class Settings {
         zoomSpeed = d.zoomSpeed;
         showOutlines = d.showOutlines;
         showHud = d.showHud;
+        showKeyHints = d.showKeyHints;
     }
 
     /**

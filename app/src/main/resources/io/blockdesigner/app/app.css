@@ -202,6 +202,44 @@
     -fx-text-fill: white;
 }
 
+.palette-category {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 6 6 2 2;
+    -fx-border-color: transparent transparent -color-border-default transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-min-width: 34;
+    -fx-min-height: 32;
+    -fx-pref-width: 34;
+    -fx-pref-height: 32;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+.palette-category:hover {
+    -fx-background-color: -bd-accent-soft;
+}
+
+.palette-category:selected {
+    -fx-background-color: -bd-accent-soft;
+    -fx-border-color: transparent transparent -bd-accent transparent;
+}
+
+.palette-category .ikonli-font-icon {
+    -fx-icon-size: 16;
+    -fx-icon-color: -color-fg-muted;
+}
+
+.palette-category:selected .ikonli-font-icon {
+    -fx-icon-color: -bd-accent;
+}
+
+.palette-category-title {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+    -fx-padding: 0 0 0 2;
+}
+
 .block-tiles {
     -fx-background-color: transparent;
 }
@@ -499,6 +537,15 @@
 .start-title .ikonli-font-icon {
     -fx-icon-size: 22;
     -fx-icon-color: -bd-accent;
+}
+
+.start-version {
+    -fx-background-color: -bd-accent-soft;
+    -fx-background-radius: 999;
+    -fx-padding: 1 7 1 7;
+    -fx-font-size: 11px;
+    -fx-text-fill: -bd-accent;
+    -fx-font-weight: bold;
 }
 
 .start-sub, .start-muted {
@@ -870,4 +917,123 @@
 .symmetry-axis-z:selected {
     -fx-background-color: #3E9BFF;
     -fx-text-fill: white;
+}
+
+/* ---------- select / replace by type ---------- */
+.by-type-step {
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+    -fx-graphic-text-gap: 7;
+}
+
+.by-type-step-num {
+    -fx-background-color: -color-accent-emphasis;
+    -fx-background-radius: 999;
+    -fx-text-fill: white;
+    -fx-font-size: 10px;
+    -fx-min-width: 18;
+    -fx-min-height: 18;
+    -fx-alignment: center;
+}
+
+.by-type-target {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8;
+    -fx-padding: 5 10 5 6;
+}
+
+/* ---------- key hints (bottom-right, Shift+F1) ---------- */
+.key-hints {
+    -fx-background-color: -bd-glass;
+    -fx-background-radius: 10;
+    -fx-border-color: -bd-glass-border;
+    -fx-border-radius: 10;
+    -fx-padding: 8 10 8 12;
+}
+
+.key-hint-text {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.key-hint-plus {
+    -fx-font-size: 10px;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.keycap {
+    -fx-background-color: -color-bg-default, -color-bg-subtle;
+    -fx-background-insets: 0, 0 0 2 0;
+    -fx-background-radius: 5;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 5;
+    -fx-padding: 1 6 3 6;
+    -fx-min-width: 22;
+    -fx-alignment: center;
+    -fx-font-size: 10.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
+}
+
+.keycap-mouse {
+    -fx-padding: 1 5 1 5;
+}
+
+.key-mouse {
+    -fx-fill: transparent;
+    -fx-stroke: -color-fg-muted;
+    -fx-stroke-width: 1.2;
+}
+
+.key-mouse-lit {
+    -fx-fill: -bd-accent;
+}
+
+/* ---------- view cube (top right of the viewport) ---------- */
+.view-cube-name {
+    -fx-font-size: 10px;
+    -fx-text-fill: rgba(255, 255, 255, 0.8);
+}
+
+.view-cube-toggle {
+    -fx-font-size: 9.5px;
+    -fx-padding: 1 6 1 6;
+}
+
+/* ---------- settings: keybinds ---------- */
+.keybind-row {
+    -fx-padding: 3 6 3 8;
+    -fx-background-radius: 6;
+}
+
+.keybind-row:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.keybind-key {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 3 10 5 10;
+    -fx-background-color: -color-border-default, -color-bg-default;
+    -fx-background-insets: 0, 1 1 3 1;
+    -fx-background-radius: 6, 5;
+}
+
+.keybind-key.keybind-empty {
+    -fx-font-weight: normal;
+    -fx-text-fill: -color-fg-subtle;
+}
+
+.keybind-key.keybind-clash {
+    -fx-text-fill: -color-danger-fg;
+}
+
+.keybind-key.keybind-listening {
+    -fx-background-color: -color-accent-emphasis, -color-accent-subtle;
+    -fx-text-fill: -color-fg-default;
+}
+
+.keybind-clear {
+    -fx-padding: 2 4 2 4;
+    -fx-opacity: 0.6;
 }

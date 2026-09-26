@@ -27,13 +27,14 @@ public final class ToolDock extends VBox {
         setMaxHeight(USE_PREF_SIZE);
         setMaxWidth(USE_PREF_SIZE);
         ToggleGroup group = new ToggleGroup();
-        add(ws, group, ToolKind.VIEW, Feather.EYE, "View mode (V): look around, no editing");
-        add(ws, group, ToolKind.SELECT, Feather.MOUSE_POINTER, "Select mode (Q): click to select layers, drag to slide them");
-        add(ws, group, ToolKind.BUILD, Feather.TOOL, "Build mode (B toggles, also while flying): left break, right place, middle pick");
-        add(ws, group, ToolKind.MOVE, Feather.MOVE, "Move (G): drag an arrow, a plane square or the centre to move the selected layers");
-        add(ws, group, ToolKind.ROTATE, Feather.ROTATE_CW, "Rotate (E): drag a ring to turn the selected layers in 90° steps");
-        add(ws, group, ToolKind.BRUSH, ToolIcons.brush(17), "Paint brush (U): drag to add blocks with the held block (right-drag erases); - / = size");
-        add(ws, group, ToolKind.ERASER, ToolIcons.eraser(17), "Eraser (X): drag to remove blocks; - / = size");
+        this.viewport = viewport;
+        add(ws, group, ToolKind.VIEW, Feather.EYE, "View mode", Keybinds.Action.TOOL_VIEW, "look around, no editing");
+        add(ws, group, ToolKind.SELECT, Feather.MOUSE_POINTER, "Select mode", Keybinds.Action.TOOL_SELECT, "click to select layers, drag to slide them");
+        add(ws, group, ToolKind.BUILD, ToolIcons.build(17), "Build mode", Keybinds.Action.TOOL_BUILD, "left break, right place, middle pick (the key toggles it, also while flying)");
+        add(ws, group, ToolKind.MOVE, Feather.MOVE, "Move", Keybinds.Action.TOOL_MOVE, "drag an arrow, a plane square or the centre to move the selected layers (or the selected blocks)");
+        add(ws, group, ToolKind.ROTATE, Feather.ROTATE_CW, "Rotate", Keybinds.Action.TOOL_ROTATE, "drag a ring to turn the selected layers (or blocks) in 90° steps");
+        add(ws, group, ToolKind.BRUSH, ToolIcons.brush(17), "Paint brush", Keybinds.Action.TOOL_BRUSH, "drag to add blocks with the held block (right-drag smooths); - / = size");
+        add(ws, group, ToolKind.ERASER, ToolIcons.eraser(17), "Eraser", Keybinds.Action.TOOL_ERASER, "drag to remove blocks; - / = size");
         getChildren().add(new Separator());
         flyToggle.getStyleClass().addAll("flat", "tool-button");
         flyToggle.setTooltip(new Tooltip("Creative flight (C): WASD, Space/Shift, mouse look"));
@@ -44,15 +45,23 @@ public final class ToolDock extends VBox {
         buttons.get(ws.toolProperty().get()).setSelected(true);
     }
 
-    private void add(Workspace ws, ToggleGroup g, ToolKind kind, Feather icon, String tip) {
-        add(ws, g, kind, new FontIcon(icon), tip);
+    private ViewportPane viewport;
+
+    private void add(Workspace ws, ToggleGroup g, ToolKind kind, Feather icon, String name, Keybinds.Action key, String tip) {
+        add(ws, g, kind, new FontIcon(icon), name, key, tip);
     }
 
-    private void add(Workspace ws, ToggleGroup g, ToolKind kind, javafx.scene.Node icon, String tip) {
+    private void add(Workspace ws, ToggleGroup g, ToolKind kind, javafx.scene.Node icon, String name, Keybinds.Action key, String tip) {
         ToggleButton b = new ToggleButton(null, icon);
         b.getStyleClass().addAll("flat", "tool-button");
         b.setToggleGroup(g);
-        b.setTooltip(new Tooltip(tip));
+        // The key is looked up each time the tooltip shows, so it follows Settings › Keybinds.
+        Tooltip t = new Tooltip();
+        t.setOnShowing(e -> {
+            String k = viewport.keyText(key);
+            t.setText(name + (k.isEmpty() ? "" : " (" + k + ")") + ": " + tip);
+        });
+        b.setTooltip(t);
         b.setOnAction(e -> {
             if (!b.isSelected()) b.setSelected(true);
             ws.toolProperty().set(kind);

@@ -58,6 +58,7 @@ final class ViewportSettings {
         rows.check("Ground grid", () -> s.showGrid, v -> s.showGrid = v);
         rows.check("Layer outlines", () -> s.showOutlines, v -> s.showOutlines = v);
         rows.check("Block info", () -> s.showHud, v -> s.showHud = v);
+        rows.check("Key hints (Shift+F1)", () -> s.showKeyHints, v -> s.showKeyHints = v);
 
         rows.section("Navigation");
         rows.slider("Orbit sensitivity", 0.2, 3, () -> s.orbitSensitivity, v -> s.orbitSensitivity = v, v -> String.format("%.2f×", v));

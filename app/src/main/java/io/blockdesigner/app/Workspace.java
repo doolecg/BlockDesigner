@@ -251,7 +251,7 @@ public final class Workspace {
         return selectedBlock.get();
     }
 
-    /** Alt+C: empties every slot (the held block stays selected). */
+    /** Shift+C (by default): empties every slot (the held block stays selected). */
     public void clearHotbar() {
         for (int i = 0; i < HOTBAR_SIZE; i++) hotbar.set(i, null);
         hotbarSlot.set(-1);

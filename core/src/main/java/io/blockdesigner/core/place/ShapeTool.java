@@ -46,12 +46,69 @@ public final class ShapeTool {
         public boolean usesHeight() {
             return this == BOX || this == HOLLOW_BOX || this == WALLS || this == CYLINDER;
         }
+
+        /**
+         * Shapes that grow out of the face the drag started on: up from a top face, down from an underside and
+         * sideways from a side. Floor stays flat and horizontal whatever face it starts on.
+         */
+        public boolean followsFace() {
+            return plane == Plane.HORIZONTAL && this != FLOOR;
+        }
     }
 
     /** How the drag end is picked: along an axis, on a vertical plane, or on the start's horizontal plane. */
     public enum Plane { NONE, AXIS, VERTICAL, HORIZONTAL }
 
     private ShapeTool() {
+    }
+
+    /**
+     * The cells of a shape growing along {@code up}, the unit normal of the face the drag started on (null or +Y is
+     * the usual upwards shape). The shape is built upright around {@code a} and turned so its up is {@code up};
+     * {@code b} is expected on the plane through {@code a} across {@code up}.
+     */
+    public static List<BlockPos> cells(Shape shape, BlockPos a, BlockPos b, int height, BlockPos up) {
+        if (upright(shape, up)) return cells(shape, a, b, height);
+        List<BlockPos> local = cells(shape, a, toLocal(a, b, up), height);
+        List<BlockPos> out = new ArrayList<>(local.size());
+        for (BlockPos p : local) out.add(toWorld(a, p, up));
+        return out;
+    }
+
+    /** {@link #estimate(Shape, BlockPos, BlockPos, int)} for a shape growing along {@code up}. */
+    public static long estimate(Shape shape, BlockPos a, BlockPos b, int height, BlockPos up) {
+        return estimate(shape, a, upright(shape, up) ? b : toLocal(a, b, up), height);
+    }
+
+    private static boolean upright(Shape shape, BlockPos up) {
+        return up == null || !shape.followsFace() || (up.x() == 0 && up.y() > 0 && up.z() == 0);
+    }
+
+    /** The axis (0 x, 1 y, 2 z) of a unit normal. */
+    private static int axis(BlockPos n) {
+        return n.x() != 0 ? 0 : n.z() != 0 ? 2 : 1;
+    }
+
+    /** {@code p} in the shape's upright frame around {@code a}: the up axis is swapped into Y, flipped when negative. */
+    private static BlockPos toLocal(BlockPos a, BlockPos p, BlockPos up) {
+        int[] v = {p.x() - a.x(), p.y() - a.y(), p.z() - a.z()};
+        int k = axis(up), s = up.x() + up.y() + up.z() < 0 ? -1 : 1;
+        int t = v[1];
+        v[1] = v[k];
+        v[k] = t;
+        v[1] *= s;
+        return new BlockPos(a.x() + v[0], a.y() + v[1], a.z() + v[2]);
+    }
+
+    /** The inverse of {@link #toLocal}. */
+    private static BlockPos toWorld(BlockPos a, BlockPos p, BlockPos up) {
+        int[] v = {p.x() - a.x(), p.y() - a.y(), p.z() - a.z()};
+        int k = axis(up), s = up.x() + up.y() + up.z() < 0 ? -1 : 1;
+        v[1] *= s;
+        int t = v[1];
+        v[1] = v[k];
+        v[k] = t;
+        return new BlockPos(a.x() + v[0], a.y() + v[1], a.z() + v[2]);
     }
 
     /**

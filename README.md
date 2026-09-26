@@ -56,9 +56,9 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 |---|---|
 | V | View mode: look around only |
 | Q | Select mode |
-| B | Build mode on / off (also while flying) |
-| G / E | Move / Rotate tool (gizmos for the selected layers) |
-| U / X | Brush / Eraser |
+| G | Build mode on / off (also while flying) |
+| W / E | Move / Rotate tool (gizmos for the selected layers, or the selected blocks) |
+| B / F | Brush / Eraser |
 | Esc | Cancel a drag or placement, clear the selection, stop flying, then back to Select |
 
 ### Camera
@@ -69,7 +69,7 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 | Shift+middle-drag | Pan |
 | Alt+middle-drag | Swing to the next orthographic view in that direction |
 | Wheel | Zoom |
-| F | Frame the selected blocks, or else the active layer |
+| Shift+F | Frame the selected blocks, or else the active layer |
 | Shift+F / Home | Frame everything |
 | C | Creative flight on / off |
 | P / O | Perspective / orthographic |
@@ -95,11 +95,11 @@ The same list is in the app: press **Alt+K** or **F1**, or click the ⌘ button 
 | Left-click | Break (hold to repeat) |
 | Right-click | Place (hold to repeat), oriented like Minecraft |
 | Middle-click | Pick the block into the hotbar |
-| R | Replace mode: right-click swaps the aimed block and keeps its facing |
-| Z | Shuffle mode: place random blocks from the hotbar |
+| Shift+X | Replace mode: right-click swaps the aimed block and keeps its facing |
+| Shift+Z | Shuffle mode: place random blocks from the hotbar |
 | 1 – 9 | Hold a hotbar slot |
 | Delete | Empty the held hotbar slot |
-| Alt+C | Clear the hotbar |
+| Shift+C | Clear the hotbar |
 
 ### Brush and Eraser
 

@@ -62,10 +62,21 @@ class UiSnapshotsIT {
                         ws.themeProperty().set(t.name());
                         ws.darkProperty().set(dark);
                         String n = t.name().toLowerCase() + (dark ? "-dark" : "-light");
-                        snapshotDialog(new SettingsDialog(null, ws, () -> {
+                        SettingsDialog sd = new SettingsDialog(null, ws, new Keybinds(settings), () -> {
                         }, () -> {
                         }, () -> {
-                        }), dir.resolve("settings-" + n + ".png"));
+                        }, () -> {
+                        });
+                        // General opens first; the theme cards are on Appearance, and Keybinds is checked once.
+                        if (t == AppTheme.values()[0]) {
+                            settings.keybinds.put("SHUFFLE", "Alt+X|R");
+                            navTo(sd, "General");
+                            snapshotDialog(sd, dir.resolve("settings-general" + (dark ? "-dark" : "-light") + ".png"));
+                            navTo(sd, "Keybinds");
+                            snapshotDialog(sd, dir.resolve("settings-keybinds" + (dark ? "-dark" : "-light") + ".png"));
+                        }
+                        navTo(sd, "Appearance");
+                        snapshotDialog(sd, dir.resolve("settings-" + n + ".png"));
                         Structure s = new Structure();
                         for (int x = 0; x < 6; x++) for (int z = 0; z < 6; z++) s.set(x, 0, z, BlockState.of("stone"));
                         ws.scene().add(new Layer("House", s));
@@ -243,6 +254,9 @@ class UiSnapshotsIT {
         pbox.setPrefSize(330, 620);
         new javafx.scene.Scene(pbox);
         pbox.applyCss();
+        pbox.layout();
+        // The blocks tab first, its creative-style category tabs showing block icons.
+        save(pbox.snapshot(null, null), dir.resolve("palette-blocks" + suffix + ".png"));
         pbox.lookupAll(".palette-tab").stream()
                 .filter(n -> n instanceof javafx.scene.control.ToggleButton tb && "Mobs".equals(tb.getText()))
                 .findFirst().ifPresent(n -> ((javafx.scene.control.ToggleButton) n).fire());
@@ -255,7 +269,7 @@ class UiSnapshotsIT {
         save(pbox.snapshot(null, null), dir.resolve("palette-mobs" + suffix + ".png"));
 
         // The tool dock with the brush selected, then the eraser.
-        for (var tool : new Workspace.ToolKind[]{Workspace.ToolKind.BRUSH, Workspace.ToolKind.ERASER}) {
+        for (var tool : new Workspace.ToolKind[]{Workspace.ToolKind.BUILD, Workspace.ToolKind.BRUSH, Workspace.ToolKind.ERASER}) {
             javafx.scene.layout.HBox strip = new javafx.scene.layout.HBox(8);
             strip.setStyle("-fx-padding: 10;");
             javafx.scene.layout.StackPane dbox = new javafx.scene.layout.StackPane(strip);
@@ -263,12 +277,17 @@ class UiSnapshotsIT {
             dbox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
             new javafx.scene.Scene(dbox);
             ws.toolProperty().set(tool);
-            javafx.scene.control.ToggleButton on = new javafx.scene.control.ToggleButton(null, tool == Workspace.ToolKind.BRUSH ? ToolIcons.brush(17) : ToolIcons.eraser(17));
+            java.util.function.DoubleFunction<javafx.scene.Node> glyph = switch (tool) {
+                case BUILD -> ToolIcons::build;
+                case BRUSH -> ToolIcons::brush;
+                default -> ToolIcons::eraser;
+            };
+            javafx.scene.control.ToggleButton on = new javafx.scene.control.ToggleButton(null, glyph.apply(17));
             on.getStyleClass().addAll("flat", "tool-button");
-            javafx.scene.control.ToggleButton off = new javafx.scene.control.ToggleButton(null, tool == Workspace.ToolKind.BRUSH ? ToolIcons.brush(17) : ToolIcons.eraser(17));
+            javafx.scene.control.ToggleButton off = new javafx.scene.control.ToggleButton(null, glyph.apply(17));
             off.getStyleClass().addAll("flat", "tool-button");
             on.setSelected(true);
-            javafx.scene.control.ToggleButton big = new javafx.scene.control.ToggleButton(null, tool == Workspace.ToolKind.BRUSH ? ToolIcons.brush(64) : ToolIcons.eraser(64));
+            javafx.scene.control.ToggleButton big = new javafx.scene.control.ToggleButton(null, glyph.apply(64));
             big.getStyleClass().addAll("flat");
             javafx.scene.control.ToggleButton ref = new javafx.scene.control.ToggleButton(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.MOVE));
             ref.getStyleClass().addAll("flat", "tool-button");
@@ -292,6 +311,64 @@ class UiSnapshotsIT {
         hbox.applyCss();
         hbox.layout();
         save(hbox.snapshot(null, null), dir.resolve("hud-entity" + suffix + ".png"));
+
+        // The view cube at its default angle.
+        ViewCube cube = new ViewCube(v -> {
+        }, (x, y) -> {
+        }, () -> {
+        });
+        cube.update(new io.blockdesigner.render.Camera());
+        javafx.scene.layout.StackPane cbox = new javafx.scene.layout.StackPane(cube);
+        cbox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        cbox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+        cbox.setStyle("-fx-background-color: #6d8fb8; -fx-padding: 10;");
+        new javafx.scene.Scene(cbox);
+        cbox.applyCss();
+        cbox.layout();
+        save(cbox.snapshot(null, null), dir.resolve("view-cube" + suffix + ".png"));
+
+        // Key hints for Build mode, over a viewport-coloured backdrop.
+        KeyHints hints = new KeyHints();
+        hints.show(List.of(KeyHints.Hint.of("Break", "LMB"), KeyHints.Hint.of("Place", "RMB"), KeyHints.Hint.of("Pick block", "MMB"),
+                KeyHints.Hint.of("Shapes", "Alt"), KeyHints.Hint.of("Select or replace by type", "Alt", "T"),
+                KeyHints.Hint.of("Up / down", "Space", "Shift"), KeyHints.Hint.of("All shortcuts", "F1")));
+        javafx.scene.layout.StackPane kbox = new javafx.scene.layout.StackPane(hints);
+        kbox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        kbox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+        kbox.setStyle("-fx-background-color: #6d8fb8; -fx-padding: 14;");
+        new javafx.scene.Scene(kbox);
+        kbox.applyCss();
+        kbox.layout();
+        save(kbox.snapshot(null, null), dir.resolve("key-hints" + suffix + ".png"));
+
+        // Select / replace by type, switched to Replace with oak stairs ticked.
+        java.util.Map<String, Long> counts = java.util.Map.of("minecraft:oak_stairs", 120L, "minecraft:stone_bricks", 2400L, "minecraft:oak_planks", 640L);
+        SelectByTypePanel byType = new SelectByTypePanel(ws.assets(), SelectByTypePanel.Scope.VISIBLE, false, false,
+                BlockState.of("minecraft:oak_stairs"), BlockState.of("minecraft:stone_brick_stairs"), q -> counts, o -> {
+        }, r -> {
+        }, () -> {
+        });
+        javafx.scene.layout.StackPane tbox = new javafx.scene.layout.StackPane(byType);
+        tbox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        tbox.getStylesheets().add(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+        tbox.setStyle("-fx-background-color: -color-bg-default; -fx-padding: 12;");
+        new javafx.scene.Scene(tbox, 530, 720);
+        tbox.applyCss();
+        tbox.layout();
+        save(tbox.snapshot(null, null), dir.resolve("by-type-select" + suffix + ".png"));
+        tbox.lookupAll(".right-pill").stream().filter(n -> n instanceof javafx.scene.control.ToggleButton tb && "Replace".equals(tb.getText()))
+                .findFirst().ifPresent(n -> ((javafx.scene.control.ToggleButton) n).fire());
+        tbox.applyCss();
+        tbox.layout();
+        save(tbox.snapshot(null, null), dir.resolve("by-type-replace" + suffix + ".png"));
+    }
+
+    /** Clicks a Settings page in the side bar. */
+    private static void navTo(SettingsDialog d, String page) {
+        d.getDialogPane().applyCss();
+        d.getDialogPane().lookupAll(".settings-nav-item").stream()
+                .filter(n -> n instanceof javafx.scene.control.ToggleButton tb && page.equals(tb.getText()))
+                .findFirst().ifPresent(n -> ((javafx.scene.control.ToggleButton) n).fire());
     }
 
     private static void snapshotDialog(Dialog<?> d, Path out) throws Exception {

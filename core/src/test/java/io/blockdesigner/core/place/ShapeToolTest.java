@@ -60,6 +60,25 @@ class ShapeToolTest {
     }
 
     @Test
+    void shapesGrowOutOfTheStartFace() {
+        // A sphere started on an underside hangs below the start; on an east face it grows east.
+        Box down = ShapeTool.bounds(ShapeTool.cells(Shape.SPHERE, O, new BlockPos(3, 64, 0), 1, new BlockPos(0, -1, 0)));
+        assertThat(down.maxY()).isEqualTo(64);
+        assertThat(down.minY()).isEqualTo(58);
+        Box east = ShapeTool.bounds(ShapeTool.cells(Shape.SPHERE, O, new BlockPos(0, 67, 0), 1, new BlockPos(1, 0, 0)));
+        assertThat(east.minX()).isZero();
+        assertThat(east.maxX()).isEqualTo(6);
+        assertThat(east.sizeY()).isEqualTo(7);
+        // A box started on a north face is 4 deep towards north, its footprint on the face spanning the drag.
+        Box north = ShapeTool.bounds(ShapeTool.cells(Shape.BOX, O, new BlockPos(2, 66, 0), 4, new BlockPos(0, 0, -1)));
+        assertThat(north).isEqualTo(new Box(0, 64, -3, 2, 66, 0));
+        // Upwards is unchanged, and Floor always stays flat.
+        assertThat(ShapeTool.cells(Shape.DOME, O, new BlockPos(2, 64, 0), 1, new BlockPos(0, 1, 0)))
+                .isEqualTo(ShapeTool.cells(Shape.DOME, O, new BlockPos(2, 64, 0), 1));
+        assertThat(ShapeTool.cells(Shape.FLOOR, O, new BlockPos(2, 64, 2), 1, new BlockPos(1, 0, 0))).allMatch(p -> p.y() == 64);
+    }
+
+    @Test
     void hugeShapesAreRefused() {
         assertThat(ShapeTool.cells(Shape.BOX, O, new BlockPos(1000, 64, 1000), 10)).isEmpty();
         assertThat(ShapeTool.estimate(Shape.BOX, O, new BlockPos(1000, 64, 1000), 10)).isGreaterThan(ShapeTool.MAX_BLOCKS);

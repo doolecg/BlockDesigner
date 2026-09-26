@@ -77,7 +77,11 @@ final class StartScreen extends StackPane {
         Button x = new Button(null, new FontIcon(Feather.X));
         x.getStyleClass().add("flat");
         x.setOnAction(e -> close());
-        VBox titles = new VBox(2, title, sub);
+        Label version = new Label("v" + io.blockdesigner.app.update.Updater.currentVersion());
+        version.getStyleClass().add("start-version");
+        HBox titleRow = new HBox(8, title, version);
+        titleRow.setAlignment(Pos.BASELINE_LEFT);
+        VBox titles = new VBox(2, titleRow, sub);
         titles.setAlignment(Pos.CENTER_LEFT);
         HBox brand = new HBox(12, logo, titles);
         brand.setAlignment(Pos.CENTER_LEFT);

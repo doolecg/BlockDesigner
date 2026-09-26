@@ -20,16 +20,16 @@ final class ShortcutsPanel extends VBox {
             {{"Modes"},
                     {"V", "View mode: look around only"},
                     {"Q", "Select mode"},
-                    {"B", "Build mode on / off (also while flying)"},
-                    {"G / E", "Move / Rotate tool (gizmos for the selected layers)"},
-                    {"U / X", "Paint brush / Eraser"},
+                    {"G", "Build mode on / off (also while flying)"},
+                    {"W / E", "Move / Rotate tool (gizmos for the selected layers)"},
+                    {"B / F", "Paint brush / Eraser"},
                     {"Esc", "Clear selection, then back to Select"}},
             {{"Camera"},
                     {"Middle-drag", "Orbit around the point under the mouse"},
                     {"Shift+middle-drag", "Pan"},
                     {"Middle-click", "Pick block (no drag)"},
                     {"Wheel", "Zoom"},
-                    {"F / Shift+F", "Frame the selected blocks (or else the active layer) / everything"},
+                    {"Shift+F / Home", "Frame the selected blocks (or else the active layer) / everything"},
                     {"C", "Fly (creative flight) on / off"},
                     {"View cube", "Click a face for that view (again: opposite side), drag to orbit"},
                     {"Numpad 1 / 3 / 7", "Front / right / top (Ctrl: back / left / bottom)"},
@@ -50,7 +50,7 @@ final class ShortcutsPanel extends VBox {
                     {"Left-click", "Break (hold to repeat)"},
                     {"Right-click", "Place (hold to repeat); stairs, slabs, logs, doors, torches… orient like Minecraft"},
                     {"Middle-click", "Pick block into the hotbar"},
-                    {"R", "Replace mode: right-click swaps the aimed block, keeping its facing (drag to paint)"},
+                    {"Shift+X", "Replace mode: right-click swaps the aimed block, keeping its facing (drag to paint)"},
                     {"Hold Alt", "Shape wheel: point at a shape (line, wall, floor, box, room, walls, circle, ring, cylinder, sphere, dome, pyramid) and let go; None is single blocks"},
                     {"Right-drag", "With a shape: drag it out, release to place (one undo step); fills only empty cells, or everything in Replace mode"},
                     {"Wheel (dragging)", "Height of boxes, rooms, walls and cylinders"},
@@ -69,9 +69,12 @@ final class ShortcutsPanel extends VBox {
                     {"Click / right-click", "pos1 / pos2: the WorldEdit region box (its blocks get selected)"},
                     {"Drag", "Marquee select"},
                     {"Shift / Ctrl", "Add to / remove from the selection"},
-                    {"Alt+T", "Select by type, with layer and property filters"},
+                    {"Alt+T", "Select or replace blocks by type"},
                     {"Ctrl+A / Alt+A", "Select every block of the active layer / deselect"},
+                    {"W / E", "With blocks selected: move / rotate just those blocks within their layer"},
                     {"Ctrl+J", "Copy the selected blocks to a new layer"},
+                    {"Ctrl+Shift+J", "Move the selected blocks to a new layer"},
+                    {"Shift+right-click", "Menu: move the selected blocks to the active layer"},
                     {"Ctrl+R", "Fill the selected blocks with the held block"},
                     {"Delete", "Delete the selected blocks"},
                     {"Shift+right-click", "Menu: region fill, delete, replace, fix block shapes, select by type, copy to layer, hide, lock"},
@@ -111,8 +114,8 @@ final class ShortcutsPanel extends VBox {
                     {"Middle-click", "Record the block under the cursor"},
                     {"Drag from palette", "Put a block in a slot"},
                     {"Delete (Build mode)", "Remove the held block from its slot"},
-                    {"Alt+C", "Clear the hotbar"},
-                    {"Z", "Shuffle mode: place random blocks from the hotbar"}},
+                    {"Shift+C", "Clear the hotbar"},
+                    {"Shift+Z", "Shuffle mode: place random blocks from the hotbar"}},
             {{"Moving layers"},
                     {"Ctrl+wheel", "Along the hovered face's axis (left / right elsewhere)"},
                     {"Ctrl+Shift+wheel", "Up / down"},
@@ -145,6 +148,7 @@ final class ShortcutsPanel extends VBox {
                     {"Ctrl+F", "Search blocks"},
                     {"Ctrl+Z / Ctrl+Y", "Undo / redo"},
                     {"Alt+K / F1", "This list"},
+                    {"Shift+F1", "Key hints in the corner on / off"},
                     {"N", "Viewport settings"},
                     {"Alt+G", "Ground grid on / off"},
                     {"Home", "Frame everything"},
@@ -165,7 +169,9 @@ final class ShortcutsPanel extends VBox {
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("edge-to-edge");
         scroll.setMaxHeight(560);
-        getChildren().add(scroll);
+        Label note = new Label("These are the default keys. Change them in Settings › Keybinds (Ctrl+,).");
+        note.getStyleClass().add("layer-meta");
+        getChildren().addAll(scroll, note);
     }
 
     /** Scrolls the list by a wheel delta (for wheel events that land outside the card). */

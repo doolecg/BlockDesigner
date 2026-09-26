@@ -52,8 +52,12 @@ public final class BlockIcons {
             Image img = flatIcon(assets, flat.get(), firstTint(model));
             if (img != null) return img;
         }
-        if (model.quads().isEmpty()) return new WritableImage(1, 1);
-        return isometric(assets.atlas(), model);
+        BlockAssets.GuiModel gui = assets.guiModel(state);
+        if (gui.model().quads().isEmpty()) {
+            if (model.quads().isEmpty()) return new WritableImage(1, 1);
+            return isometric(assets.atlas(), model, BlockAssets.DEFAULT_GUI);
+        }
+        return isometric(assets.atlas(), gui.model(), gui.gui());
     }
 
     // ---- item model lookup ----------------------------------------------------------------------------------
@@ -172,35 +176,24 @@ public final class BlockIcons {
     // ---- 3D (isometric) icons -------------------------------------------------------------------------------
 
     /**
-     * Software-rasterises the baked model with Minecraft's GUI block transform (rotate 225° about Y, then 30° about X,
-     * orthographic) and its directional face shading. The unit cube always fills the same space, so partial blocks
-     * keep their true size and position (a bottom slab sits low, like in the inventory).
+     * Software-rasterises the item model the way the inventory draws it: the model's own {@code display.gui}
+     * transform (so stairs face the way they do in the creative menu, and fences and walls use their inventory
+     * models' angle and size), an orthographic view of the 16 px slot, and the inventory's lighting.
      */
-    static Image isometric(TextureAtlas atlas, BakedModel model) {
-        int[] out = isometricPixels(atlas, model);
+    static Image isometric(TextureAtlas atlas, BakedModel model, float[] gui) {
+        int[] out = isometricPixels(atlas, model, gui);
         WritableImage img = new WritableImage(SIZE, SIZE);
         img.getPixelWriter().setPixels(0, 0, SIZE, SIZE, PixelFormat.getIntArgbInstance(), out, 0, SIZE);
         return img;
     }
 
     /** {@link #isometric} as {@value #SIZE}×{@value #SIZE} ARGB pixels. */
-    static int[] isometricPixels(TextureAtlas atlas, BakedModel model) {
+    static int[] isometricPixels(TextureAtlas atlas, BakedModel model, float[] gui) {
         int n = SIZE * SS;
         float[] depth = new float[n * n];
         Arrays.fill(depth, Float.NEGATIVE_INFINITY);
         int[] color = new int[n * n];
-
-        // Fit the projected unit cube into the image.
-        float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
-        for (int c = 0; c < 8; c++) {
-            float[] p = project(c & 1, (c >> 1) & 1, (c >> 2) & 1);
-            minX = Math.min(minX, p[0]);
-            maxX = Math.max(maxX, p[0]);
-            minY = Math.min(minY, p[1]);
-            maxY = Math.max(maxY, p[1]);
-        }
-        float scale = n * 0.94f / Math.max(maxX - minX, maxY - minY);
-        float offX = n / 2f - (minX + maxX) / 2f * scale, offY = n / 2f - (minY + maxY) / 2f * scale;
+        Transform t = new Transform(gui);
 
         // Opaque and cutout first, translucent (blended, no depth writes) after.
         for (int pass = 0; pass < 2; pass++) {
@@ -209,12 +202,13 @@ public final class BlockIcons {
                 if ((pass == 1) != translucent) continue;
                 float[] sx = new float[4], sy = new float[4], sz = new float[4];
                 for (int v = 0; v < 4; v++) {
-                    float[] p = project(q.x(v), q.y(v), q.z(v));
-                    sx[v] = p[0] * scale + offX;
-                    sy[v] = p[1] * scale + offY;
+                    float[] p = t.apply(q.x(v), q.y(v), q.z(v));
+                    // The slot is one unit wide, centred; screen y points down.
+                    sx[v] = (p[0] + 0.5f) * n;
+                    sy[v] = (0.5f - p[1]) * n;
                     sz[v] = p[2];
                 }
-                float shade = q.shade() ? shade(q.face()) : 1f;
+                float shade = q.shade() ? t.light(q.face()) : 1f;
                 triangle(atlas, q, sx, sy, sz, 0, 1, 2, shade, translucent, n, depth, color);
                 triangle(atlas, q, sx, sy, sz, 0, 2, 3, shade, translucent, n, depth, color);
             }
@@ -242,27 +236,54 @@ public final class BlockIcons {
         return out;
     }
 
-    private static final float COS_Y = (float) Math.cos(Math.toRadians(225)), SIN_Y = (float) Math.sin(Math.toRadians(225));
-    private static final float COS_X = (float) Math.cos(Math.toRadians(30)), SIN_X = (float) Math.sin(Math.toRadians(30));
+    /**
+     * An item display transform as Minecraft applies it: centre the model, scale, rotate (X·Y·Z, so Z first), then
+     * translate by pixels. Output is x right, y up, z towards the viewer, in slot units.
+     */
+    private static final class Transform {
+        /** Inventory lighting in view space: the top brightest, the left side lighter than the right. */
+        private static final float LX = -0.177f, LY = 0.325f, LZ = 0.637f, AMBIENT = 0.4f;
+        final float[] m = new float[9];
+        final float tx, ty, tz, sx, sy, sz;
 
-    /** Block-space point (0..1) to {screen x, screen y (down), depth (larger is nearer)}. */
-    private static float[] project(float x, float y, float z) {
-        x -= 0.5f;
-        y -= 0.5f;
-        z -= 0.5f;
-        float x1 = x * COS_Y + z * SIN_Y, z1 = -x * SIN_Y + z * COS_Y;
-        float y2 = y * COS_X - z1 * SIN_X, z2 = y * SIN_X + z1 * COS_X;
-        return new float[]{x1, -y2, z2};
-    }
+        Transform(float[] g) {
+            double rx = Math.toRadians(g[0]), ry = Math.toRadians(g[1]), rz = Math.toRadians(g[2]);
+            float cx = (float) Math.cos(rx), snx = (float) Math.sin(rx), cy = (float) Math.cos(ry), sny = (float) Math.sin(ry);
+            float cz = (float) Math.cos(rz), snz = (float) Math.sin(rz);
+            // R = Rx · Ry · Rz, row-major.
+            float[] rxm = {1, 0, 0, 0, cx, -snx, 0, snx, cx};
+            float[] rym = {cy, 0, sny, 0, 1, 0, -sny, 0, cy};
+            float[] rzm = {cz, -snz, 0, snz, cz, 0, 0, 0, 1};
+            float[] xy = mul(rxm, rym), r = mul(xy, rzm);
+            System.arraycopy(r, 0, m, 0, 9);
+            tx = g[3] / 16f;
+            ty = g[4] / 16f;
+            tz = g[5] / 16f;
+            sx = g[6];
+            sy = g[7];
+            sz = g[8];
+        }
 
-    /** Minecraft's directional block shading. */
-    private static float shade(Dir d) {
-        return switch (d) {
-            case UP -> 1f;
-            case DOWN -> 0.5f;
-            case NORTH, SOUTH -> 0.8f;
-            case EAST, WEST -> 0.6f;
-        };
+        private static float[] mul(float[] a, float[] b) {
+            float[] o = new float[9];
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++) o[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j];
+            return o;
+        }
+
+        float[] apply(float x, float y, float z) {
+            x = (x - 0.5f) * sx;
+            y = (y - 0.5f) * sy;
+            z = (z - 0.5f) * sz;
+            return new float[]{m[0] * x + m[1] * y + m[2] * z + tx, m[3] * x + m[4] * y + m[5] * z + ty, m[6] * x + m[7] * y + m[8] * z + tz};
+        }
+
+        /** Brightness of a face after the transform turns it, lit like the inventory. */
+        float light(Dir d) {
+            float nx = d.dx, ny = d.dy, nz = d.dz;
+            float vx = m[0] * nx + m[1] * ny + m[2] * nz, vy = m[3] * nx + m[4] * ny + m[5] * nz, vz = m[6] * nx + m[7] * ny + m[8] * nz;
+            return Math.clamp(AMBIENT + vx * LX + vy * LY + vz * LZ, 0.25f, 1f);
+        }
     }
 
     private static void triangle(TextureAtlas atlas, BakedQuad q, float[] sx, float[] sy, float[] sz, int a, int b, int c, float shade,

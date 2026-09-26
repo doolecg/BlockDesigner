@@ -86,7 +86,9 @@ public final class MainWindow {
     private final javafx.scene.control.Tab resourcesTab = new javafx.scene.control.Tab("Resource Tracker");
     /** Thin bar on the right edge listing closed side tabs; click one to reopen it. */
     private final javafx.scene.layout.VBox closedTabsBar = new javafx.scene.layout.VBox(4);
-    private SplitPane mainSplit;
+    private SplitPane mainSplit, leftSplit;
+    /** The user's key binds (Settings › Keybinds). */
+    private final Keybinds keys;
     private final BorderPane centerColumn = new BorderPane();
     private final java.util.Set<String> disabledPlugins;
     private final io.blockdesigner.app.plugins.PluginManager plugins;
@@ -96,6 +98,8 @@ public final class MainWindow {
         this.stage = stage;
         this.ws = ws;
         this.viewport = new ViewportPane(ws);
+        this.keys = new Keybinds(ws.settings());
+        viewport.setKeybinds(keys);
         this.disabledPlugins = new java.util.LinkedHashSet<>(ws.settings().disabledPlugins);
         this.plugins = new io.blockdesigner.app.plugins.PluginManager(io.blockdesigner.app.Settings.dir().resolve("plugins"), pluginHost(), disabledPlugins);
 
@@ -119,6 +123,7 @@ public final class MainWindow {
         left.getStyleClass().add("left-split");
         left.setPrefWidth(330);
         left.setMinWidth(260);
+        leftSplit = left;
 
         // Centre: viewport with floating dock and loading overlay
         ToolDock dock = new ToolDock(ws, viewport);
@@ -165,6 +170,7 @@ public final class MainWindow {
         stage.titleProperty().bind(ws.projectNameProperty().concat(" — BlockDesigner"));
         stage.setMinWidth(1000);
         stage.setMinHeight(640);
+        restoreWindow();
         stage.getIcons().setAll(appIcons());
         // Every other window (dialogs, alerts, pop-out panels) gets the app icon too, instead of Java's default.
         javafx.stage.Window.getWindows().addListener((javafx.collections.ListChangeListener<javafx.stage.Window>) c -> {
@@ -198,8 +204,52 @@ public final class MainWindow {
         stage.setOnCloseRequest(e -> shutdown());
     }
 
+    /** Puts the window back where it was last closed, if that place is still on a screen. */
+    private void restoreWindow() {
+        double[] b = ws.settings().windowBounds;
+        if (b != null && b.length == 4 && b[2] >= 1000 && b[3] >= 640
+                && !javafx.stage.Screen.getScreensForRectangle(b[0] + 40, b[1] + 10, b[2] - 80, 40).isEmpty()) {
+            stage.setX(b[0]);
+            stage.setY(b[1]);
+            stage.setWidth(b[2]);
+            stage.setHeight(b[3]);
+        }
+        stage.setMaximized(ws.settings().windowMaximized);
+        // Normal bounds are tracked while not maximised, so a maximised window still restores to its old size.
+        javafx.beans.InvalidationListener track = o -> {
+            if (!stage.isMaximized() && !stage.isFullScreen() && !stage.isIconified() && stage.isShowing())
+                ws.settings().windowBounds = new double[]{stage.getX(), stage.getY(), stage.getWidth(), stage.getHeight()};
+        };
+        stage.xProperty().addListener(track);
+        stage.yProperty().addListener(track);
+        stage.widthProperty().addListener(track);
+        stage.heightProperty().addListener(track);
+    }
+
+    /** Sets the panel widths and the layers / palette split to how they were last left (once the window has a size). */
+    private void restorePanels() {
+        io.blockdesigner.app.Settings s = ws.settings();
+        double total = mainSplit.getWidth();
+        if (total <= 0) return;
+        if (s.leftPanelWidth > 0) mainSplit.setDividerPosition(0, Math.clamp(s.leftPanelWidth / total, 0.1, 0.45));
+        if (s.rightPanelWidth > 0 && mainSplit.getItems().contains(rightPanel))
+            mainSplit.setDividerPosition(1, Math.clamp(1 - s.rightPanelWidth / total, 0.55, 0.92));
+        if (s.leftSplit > 0) leftSplit.setDividerPosition(0, Math.clamp(s.leftSplit, 0.1, 0.9));
+    }
+
+    /** Remembers the window and panel layout for next time. */
+    private void saveLayout() {
+        io.blockdesigner.app.Settings s = ws.settings();
+        s.windowMaximized = stage.isMaximized();
+        double left = mainSplit.getItems().getFirst() instanceof javafx.scene.layout.Region r ? r.getWidth() : 0;
+        if (left > 0) s.leftPanelWidth = left;
+        if (mainSplit.getItems().contains(rightPanel) && rightPanel.getWidth() > 0) s.rightPanelWidth = rightPanel.getWidth();
+        if (!leftSplit.getDividers().isEmpty()) s.leftSplit = leftSplit.getDividerPositions()[0];
+    }
+
     /** Stops the viewport and plugins and saves settings; run as the app closes. */
     private void shutdown() {
+        saveLayout();
         viewport.detach();
         plugins.shutdown();
         ws.settings().save();
@@ -302,7 +352,8 @@ public final class MainWindow {
         boolean anyOpen = resources;
         if (anyOpen && !mainSplit.getItems().contains(rightPanel)) {
             mainSplit.getItems().add(rightPanel);
-            mainSplit.setDividerPosition(1, 0.76);
+            double w = ws.settings().rightPanelWidth, total = mainSplit.getWidth();
+            mainSplit.setDividerPosition(1, w > 0 && total > 0 ? Math.clamp(1 - w / total, 0.55, 0.92) : 0.76);
         } else if (!anyOpen) {
             mainSplit.getItems().remove(rightPanel);
         }
@@ -361,6 +412,7 @@ public final class MainWindow {
 
     public void show() {
         stage.show();
+        javafx.application.Platform.runLater(this::restorePanels);
         plugins.loadAll();
         long failed = plugins.plugins().stream().filter(p -> p.state() == io.blockdesigner.app.plugins.PluginManager.State.FAILED).count();
         if (failed > 0) ws.statusProperty().set(failed + " plugin" + (failed == 1 ? "" : "s") + " failed to load · see Plugins > Manage plugins");
@@ -471,7 +523,7 @@ public final class MainWindow {
 
     /** The Settings window (theme, mode, general options). */
     public void openSettings() {
-        new SettingsDialog(stage, ws, () -> startAssetLoading(true),
+        new SettingsDialog(stage, ws, keys, this::applyAccelerators, () -> startAssetLoading(true),
                 () -> new PluginsDialog(stage, plugins, ws.darkProperty().get()).showAndWait(),
                 () -> checkForUpdates(true)).showAndWait();
         ws.settings().save();
@@ -891,27 +943,50 @@ public final class MainWindow {
 
     // ---- input plumbing -----------------------------------------------------------------------------------
 
-    private void installShortcuts(javafx.scene.Scene scene) {
-        var acc = scene.getAccelerators();
-        acc.put(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN), () -> ws.editor().undoStack().undo());
-        acc.put(new KeyCodeCombination(KeyCode.Y, KeyCombination.SHORTCUT_DOWN), () -> ws.editor().undoStack().redo());
-        acc.put(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN), () -> ws.editor().undoStack().redo());
-        acc.put(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN), () -> save(false));
-        acc.put(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN), () -> save(true));
-        acc.put(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN), this::openDialog);
-        acc.put(new KeyCodeCombination(KeyCode.I, KeyCombination.SHORTCUT_DOWN), this::importDialog);
-        acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN), () -> exportDialog(null, null));
-        acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN), this::exportDatapack);
-        acc.put(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN), this::newProject);
-        acc.put(new KeyCodeCombination(KeyCode.COMMA, KeyCombination.SHORTCUT_DOWN), this::openSettings);
-        acc.put(new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN), () -> palette.focusSearch());
-        acc.put(new KeyCodeCombination(KeyCode.F11), () -> {
-            stage.setFullScreenExitHint("F11 or Esc leaves full screen");
+    /** The accelerators currently installed from the key binds (so a rebind can take them out again). */
+    private final List<KeyCombination> installedAccelerators = new ArrayList<>();
+
+    /**
+     * Scene accelerators for the file actions and full screen, from the key binds. These work even while a text
+     * field has focus, as before. Called again after the binds change.
+     */
+    void applyAccelerators() {
+        var acc = mainScene.getAccelerators();
+        installedAccelerators.forEach(acc::remove);
+        installedAccelerators.clear();
+        Map<Keybinds.Action, Runnable> run = new java.util.EnumMap<>(Keybinds.Action.class);
+        run.put(Keybinds.Action.UNDO, () -> ws.editor().undoStack().undo());
+        run.put(Keybinds.Action.REDO, () -> ws.editor().undoStack().redo());
+        run.put(Keybinds.Action.SAVE, () -> save(false));
+        run.put(Keybinds.Action.SAVE_AS, () -> save(true));
+        run.put(Keybinds.Action.OPEN, this::openDialog);
+        run.put(Keybinds.Action.IMPORT, this::importDialog);
+        run.put(Keybinds.Action.EXPORT, () -> exportDialog(null, null));
+        run.put(Keybinds.Action.EXPORT_DATAPACK, this::exportDatapack);
+        run.put(Keybinds.Action.NEW_PROJECT, this::newProject);
+        run.put(Keybinds.Action.SETTINGS, this::openSettings);
+        run.put(Keybinds.Action.SEARCH_BLOCKS, () -> palette.focusSearch());
+        run.put(Keybinds.Action.FULL_SCREEN, () -> {
+            stage.setFullScreenExitHint("Esc leaves full screen");
             stage.setFullScreen(!stage.isFullScreen());
         });
+        run.forEach((action, r) -> {
+            for (KeyCombination k : keys.get(action)) {
+                if (k == null || acc.containsKey(k)) continue;
+                acc.put(k, r);
+                installedAccelerators.add(k);
+            }
+        });
+    }
 
+    private javafx.scene.Scene mainScene;
+
+    private void installShortcuts(javafx.scene.Scene scene) {
+        mainScene = scene;
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (scene.getFocusOwner() instanceof TextInputControl) return;
+            // Any key pressed with Alt is a shortcut, so the Alt-held shape wheel must not open (or stay open).
+            if (e.getCode() != KeyCode.ALT) viewport.altComboPressed();
             // While flying, W A S D, Space, Shift and Ctrl belong to flight: no shortcut may take them (Ctrl+D, Ctrl+A…).
             if (viewport.isFlying() && (e.getCode() == KeyCode.W || e.getCode() == KeyCode.A || e.getCode() == KeyCode.S
                     || e.getCode() == KeyCode.D || e.getCode() == KeyCode.SPACE || e.getCode() == KeyCode.SHIFT
@@ -926,37 +1001,7 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
-            if (e.getCode() == KeyCode.K && e.isAltDown() && !e.isShortcutDown()) {
-                viewport.toggleShortcuts();
-                e.consume();
-                return;
-            }
-            if (e.getCode() == KeyCode.C && e.isAltDown() && !e.isShortcutDown()) {
-                ws.clearHotbar();
-                viewport.showToast("Hotbar cleared");
-                e.consume();
-                return;
-            }
-            // T or / opens the command line, like Minecraft's chat. Alt+T is Select by type.
-            if ((e.getCode() == KeyCode.SLASH || e.getCode() == KeyCode.DIVIDE || e.getCode() == KeyCode.T) && !e.isShortcutDown() && !e.isAltDown()
-                    && !viewport.isPlacing()) {
-                viewport.openCommandBar();
-                e.consume();
-                return;
-            }
-            if (e.getCode() == KeyCode.T && e.isAltDown() && !e.isShortcutDown()) {
-                viewport.openSelectByTypeAtAim();
-                e.consume();
-                return;
-            }
-            // - / = resize the paint brush and eraser.
             ToolKind tool = ws.toolProperty().get();
-            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && !e.isShortcutDown() && !e.isAltDown()
-                    && (e.getCode() == KeyCode.MINUS || e.getCode() == KeyCode.EQUALS || e.getCode() == KeyCode.SUBTRACT || e.getCode() == KeyCode.ADD)) {
-                viewport.stepBrush(e.getCode() == KeyCode.MINUS || e.getCode() == KeyCode.SUBTRACT ? -1 : 1);
-                e.consume();
-                return;
-            }
             // Alt+1…Alt+0 pick the brush mode (Alt isn't a flight key, so this works while flying too).
             if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && e.isAltDown() && !e.isShortcutDown()
                     && e.getCode().isDigitKey() && !e.getCode().isKeypadKey()) {
@@ -966,14 +1011,7 @@ public final class MainWindow {
                 e.consume();
                 return;
             }
-            // , / . change the brush strength.
-            if ((tool == ToolKind.BRUSH || tool == ToolKind.ERASER) && !e.isShortcutDown() && !e.isAltDown()
-                    && (e.getCode() == KeyCode.COMMA || e.getCode() == KeyCode.PERIOD)) {
-                viewport.stepBrushStrength(e.getCode() == KeyCode.COMMA ? -1 : 1);
-                e.consume();
-                return;
-            }
-            if (extraKey(e, scene)) {
+            if (boundKey(e, scene)) {
                 e.consume();
                 return;
             }
@@ -988,115 +1026,92 @@ public final class MainWindow {
                 String name = e.getCode().getName();
                 ws.selectHotbarSlot(name.charAt(name.length() - 1) - '1');
                 e.consume();
-                return;
-            }
-            if (e.getCode() == KeyCode.Z) {
-                ws.shuffleProperty().set(!ws.shuffleProperty().get());
-                long filled = ws.hotbar().stream().filter(java.util.Objects::nonNull).count();
-                viewport.showToast(!ws.shuffleProperty().get() ? "Shuffle off"
-                        : filled == 0 ? "Shuffle on · add blocks to the hotbar (middle-click or drag) to mix them"
-                        : "Shuffle on · placing random blocks from " + filled + " hotbar slot" + (filled == 1 ? "" : "s"));
-                e.consume();
-                return;
-            }
-            if (e.getCode() == KeyCode.R && !viewport.isPlacing()) {
-                // R rotates a placement ghost (handled by the viewport); otherwise it toggles Replace mode.
-                boolean on = !ws.replaceProperty().get();
-                ws.replaceProperty().set(on);
-                viewport.showToast(on ? "Replace on · right-click swaps the aimed block for the held one · R to leave" : "Replace off · right-click places");
-                e.consume();
-                return;
-            }
-            if (e.getCode() == KeyCode.P || e.getCode() == KeyCode.O) {
-                viewport.setOrtho(e.getCode() == KeyCode.O);
-                e.consume();
-                return;
-            }
-            if (e.getCode() == KeyCode.B) {
-                ws.toggleBuild();
-                e.consume();
-                return;
-            }
-            ToolKind t = switch (e.getCode()) {
-                case V -> ToolKind.VIEW;
-                case Q -> ToolKind.SELECT;
-                case G -> ToolKind.MOVE;
-                case E -> ToolKind.ROTATE;
-                case U -> ToolKind.BRUSH;
-                case X -> ToolKind.ERASER;
-                default -> null;
-            };
-            if (t != null) {
-                ws.toolProperty().set(t);
-                e.consume();
             }
         });
+        applyAccelerators();
+    }
+
+    /** Shuffle mode (random blocks from the hotbar) on or off. */
+    private void toggleShuffle() {
+        ws.shuffleProperty().set(!ws.shuffleProperty().get());
+        long filled = ws.hotbar().stream().filter(java.util.Objects::nonNull).count();
+        viewport.showToast(!ws.shuffleProperty().get() ? "Shuffle off"
+                : filled == 0 ? "Shuffle on · add blocks to the hotbar (middle-click or drag) to mix them"
+                : "Shuffle on · placing random blocks from " + filled + " hotbar slot" + (filled == 1 ? "" : "s"));
+    }
+
+    /** Replace mode (right-click swaps the aimed block) on or off. */
+    private void toggleReplace() {
+        boolean on = !ws.replaceProperty().get();
+        ws.replaceProperty().set(on);
+        viewport.showToast(on ? "Replace on · right-click swaps the aimed block for the held one · " + Keybinds.text(keys.get(Keybinds.Action.REPLACE_MODE)[0]) + " to leave"
+                : "Replace off · right-click places");
     }
 
     /**
-     * Keys added for actions that only had buttons or menus: layer management, block-selection helpers and view
-     * toggles. None of them replaces an existing key. Returns whether the key was used.
+     * Runs the action bound to this key, if any (the file actions are scene accelerators instead). Some only apply
+     * in a context: the brush keys with the brush or eraser, R-style keys not while an import is being placed (R turns
+     * it). Returns whether the key was used.
      */
-    private boolean extraKey(KeyEvent e, javafx.scene.Scene scene) {
-        boolean ctrl = e.isShortcutDown(), shift = e.isShiftDown(), alt = e.isAltDown();
+    private boolean boundKey(KeyEvent e, javafx.scene.Scene scene) {
+        ToolKind tool = ws.toolProperty().get();
+        boolean brush = tool == ToolKind.BRUSH || tool == ToolKind.ERASER;
+        boolean placing = viewport.isPlacing();
         // Leave Ctrl+A etc. to a focused list (e.g. selecting every layer row).
         boolean listFocused = scene.getFocusOwner() instanceof javafx.scene.control.ListView<?>;
-        switch (e.getCode()) {
-            case F1 -> viewport.toggleShortcuts();
-            case F2 -> layers.renameActive();
-            case N -> {
-                if (ctrl && shift) layers.newLayer();
-                else if (!ctrl && !alt && !shift) viewport.toggleSettings();
-                else return false;
-            }
-            case A -> {
-                if (ctrl && !shift && !alt && !listFocused) viewport.selectAllInActive();
-                else if (alt && !ctrl) viewport.deselectBlocks();
-                else return false;
-            }
-            case J -> {
-                if (!ctrl || alt) return false;
-                viewport.copySelectionToNewLayer();
-            }
-            case R -> {
-                if (!ctrl || alt || shift) return false;
-                viewport.replaceSelectionWithHeld();
-            }
-            case D -> {
-                if (!ctrl || alt || shift) return false;
-                duplicateLayers();
-            }
-            case M -> {
-                if (!ctrl || alt || shift) return false;
-                mergeLayers();
-            }
-            case DELETE -> {
-                if (!shift || ctrl || alt) return false;
-                deleteLayers();
-            }
-            case H -> {
-                if (ctrl) return false;
-                if (alt) showAllLayers();
-                else if (shift) toggleLayers("ghost", Layer::ghost, Layer::setGhost);
-                else toggleLayers("hide", l -> !l.visible(), (l, v) -> l.setVisible(!v));
-            }
-            case L -> {
-                if (ctrl || alt || shift) return false;
-                toggleLayers("lock", Layer::locked, Layer::setLocked);
-            }
-            case OPEN_BRACKET, CLOSE_BRACKET -> {
-                if (ctrl || alt) return false;
-                stepActiveLayer(e.getCode() == KeyCode.CLOSE_BRACKET ? 1 : -1);
-            }
-            case G -> {
-                if (!alt || ctrl) return false;
-                viewport.toggleGrid();
-            }
-            default -> {
-                return false;
-            }
+        for (Keybinds.Action a : Keybinds.Action.values()) {
+            if (!keys.matches(a, e)) continue;
+            Runnable r = switch (a) {
+                case TOOL_VIEW -> () -> ws.toolProperty().set(ToolKind.VIEW);
+                case TOOL_SELECT -> () -> ws.toolProperty().set(ToolKind.SELECT);
+                case TOOL_BUILD -> ws::toggleBuild;
+                case TOOL_MOVE -> () -> ws.toolProperty().set(ToolKind.MOVE);
+                case TOOL_ROTATE -> () -> ws.toolProperty().set(ToolKind.ROTATE);
+                case TOOL_BRUSH -> () -> ws.toolProperty().set(ToolKind.BRUSH);
+                case TOOL_ERASER -> () -> ws.toolProperty().set(ToolKind.ERASER);
+                case SHUFFLE -> this::toggleShuffle;
+                case REPLACE_MODE -> placing ? null : this::toggleReplace;
+                case CLEAR_HOTBAR -> () -> {
+                    ws.clearHotbar();
+                    viewport.showToast("Hotbar cleared");
+                };
+                case COMMAND_BAR -> placing ? null : viewport::openCommandBar;
+                case SELECT_BY_TYPE -> viewport::openSelectByTypeAtAim;
+                case SELECT_ALL -> listFocused ? null : viewport::selectAllInActive;
+                case DESELECT -> viewport::deselectBlocks;
+                case COPY_TO_LAYER -> viewport::copySelectionToNewLayer;
+                case MOVE_TO_LAYER -> viewport::moveSelectionToNewLayer;
+                case FILL_SELECTION -> viewport::replaceSelectionWithHeld;
+                case NEW_LAYER -> layers::newLayer;
+                case RENAME_LAYER -> layers::renameActive;
+                case DUPLICATE_LAYERS -> this::duplicateLayers;
+                case MERGE_LAYERS -> this::mergeLayers;
+                case DELETE_LAYERS -> this::deleteLayers;
+                case HIDE_LAYERS -> () -> toggleLayers("hide", l -> !l.visible(), (l, v) -> l.setVisible(!v));
+                case GHOST_LAYERS -> () -> toggleLayers("ghost", Layer::ghost, Layer::setGhost);
+                case SHOW_ALL_LAYERS -> this::showAllLayers;
+                case LOCK_LAYERS -> () -> toggleLayers("lock", Layer::locked, Layer::setLocked);
+                case LAYER_BELOW -> () -> stepActiveLayer(-1);
+                case LAYER_ABOVE -> () -> stepActiveLayer(1);
+                case BRUSH_SMALLER -> brush ? () -> viewport.stepBrush(-1) : null;
+                case BRUSH_BIGGER -> brush ? () -> viewport.stepBrush(1) : null;
+                case BRUSH_WEAKER -> brush ? () -> viewport.stepBrushStrength(-1) : null;
+                case BRUSH_STRONGER -> brush ? () -> viewport.stepBrushStrength(1) : null;
+                case SHORTCUTS -> viewport::toggleShortcuts;
+                case KEY_HINTS -> viewport::toggleKeyHints;
+                case VIEWPORT_SETTINGS -> viewport::toggleSettings;
+                case FRAME -> viewport::frameSelectionOrLayer;
+                case GRID -> viewport::toggleGrid;
+                case PERSPECTIVE -> () -> viewport.setOrtho(false);
+                case ORTHOGRAPHIC -> () -> viewport.setOrtho(true);
+                // Scene accelerators (see applyAccelerators).
+                default -> null;
+            };
+            if (r == null) continue;
+            r.run();
+            return true;
         }
-        return true;
+        return false;
     }
 
     private List<Layer> targetLayers() {

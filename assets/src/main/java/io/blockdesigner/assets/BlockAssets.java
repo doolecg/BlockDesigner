@@ -276,6 +276,69 @@ public final class BlockAssets implements Closeable {
         return cache.computeIfAbsent(state, st -> withShape(st, bakeUncached(st)));
     }
 
+    /** The default inventory transform of a block (block/block.json's display.gui). */
+    public static final float[] DEFAULT_GUI = {30, 225, 0, 0, 0, 0, 0.625f, 0.625f, 0.625f};
+
+    /** A block as the inventory draws it: its item model and the item's display.gui transform. */
+    public record GuiModel(BakedModel model, float[] gui) {
+    }
+
+    private final Map<BlockState, GuiModel> guiCache = new ConcurrentHashMap<>();
+
+    /**
+     * The block's item model with its inventory transform, as the creative menu shows it: fences, walls and buttons use
+     * their inventory models, and stairs and others their own angle. Blocks without an item model (or whose item
+     * is drawn by code, like chests) use the block model, with the item's transform when it has one.
+     */
+    public GuiModel guiModel(BlockState state) {
+        return guiCache.computeIfAbsent(state, st -> {
+            Optional<ModelLoader.ResolvedModel> item = itemModelId(st).flatMap(loader::resolve);
+            if (item.isPresent() && !item.get().elements().isEmpty()) {
+                return new GuiModel(baker.bake(st, List.of(new ModelBaker.Placed(item.get(), 0, 0, false))),
+                        item.get().gui() != null ? item.get().gui() : DEFAULT_GUI);
+            }
+            return new GuiModel(model(st), item.map(ModelLoader.ResolvedModel::gui).orElse(DEFAULT_GUI));
+        });
+    }
+
+    /** The model id a block's item uses: the 1.21.4+ item definition's (first) model, else {@code <ns>:item/<path>}. */
+    private Optional<String> itemModelId(BlockState state) {
+        String ns = state.namespace(), path = state.path();
+        Optional<byte[]> def = stack.read("assets/" + ns + "/items/" + path + ".json");
+        if (def.isPresent()) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode m = new ObjectMapper().readTree(def.get()).path("model");
+                // Code-drawn items (chests, beds, heads) name their transform model as "base".
+                if (m.path("type").asText("").endsWith("special") && m.hasNonNull("base")) return Optional.of(m.get("base").asText());
+                String id = firstModelId(m);
+                if (id != null) return Optional.of(id);
+            } catch (IOException | RuntimeException ignored) {
+                // fall through to the old layout
+            }
+        }
+        String id = ns + ":item/" + path;
+        return stack.read("assets/" + ns + "/models/item/" + path + ".json").isPresent() ? Optional.of(id) : Optional.empty();
+    }
+
+    /** First "model" id inside an item definition (select / condition / range_dispatch nest them). */
+    private static String firstModelId(com.fasterxml.jackson.databind.JsonNode n) {
+        if (n == null || n.isMissingNode()) return null;
+        if (n.isObject()) {
+            com.fasterxml.jackson.databind.JsonNode model = n.get("model");
+            if (model != null && model.isTextual()) return model.asText();
+            for (var it = n.elements(); it.hasNext(); ) {
+                String s = firstModelId(it.next());
+                if (s != null) return s;
+            }
+        } else if (n.isArray()) {
+            for (com.fasterxml.jackson.databind.JsonNode c : n) {
+                String s = firstModelId(c);
+                if (s != null) return s;
+            }
+        }
+        return null;
+    }
+
     /** Minecraft's own hitbox where the model's element bounds would be wrong (plants, torches, crops…). */
     private static BakedModel withShape(BlockState state, BakedModel m) {
         List<float[]> boxes = BlockShapes.shape(state, m);

@@ -24,7 +24,7 @@ class BlockIconsIT {
         BlockAssets assets = BlockAssets.open(jar.get().jar(), List.of(), List.of(), m -> {
         });
         List<String> ids = List.of("stone_bricks", "oak_slab", "oak_stairs[facing=east]", "grass_block", "oak_fence", "glass",
-                "stone_brick_wall", "oak_leaves", "poppy", "torch", "oak_door", "white_carpet", "chest", "lantern");
+                "stone_brick_wall", "oak_leaves", "poppy", "torch", "oak_door", "white_carpet", "chest", "lantern", "oak_button", "stone_pressure_plate", "anvil", "oak_trapdoor", "cobblestone_wall", "hopper", "brewing_stand", "cauldron");
         int s = BlockIcons.SIZE;
         BufferedImage sheet = new BufferedImage(s * ids.size(), s, BufferedImage.TYPE_INT_ARGB);
         for (int i = 0; i < ids.size(); i++) {
@@ -32,7 +32,8 @@ class BlockIconsIT {
             Optional<String> flat = BlockIcons.flatItemTexture(assets.assetStack(), st);
             System.out.println(ids.get(i) + " -> " + flat.map(t -> "flat " + t).orElse("3D"));
             if (flat.isPresent()) continue;
-            int[] px = BlockIcons.isometricPixels(assets.atlas(), assets.model(st));
+            var gui = assets.guiModel(st);
+            int[] px = BlockIcons.isometricPixels(assets.atlas(), gui.model(), gui.gui());
             sheet.setRGB(i * s, 0, s, s, px, 0, s);
         }
         Path out = Path.of("build", "icon-sheet.png");

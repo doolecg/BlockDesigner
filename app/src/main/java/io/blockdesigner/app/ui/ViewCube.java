@@ -81,7 +81,7 @@ final class ViewCube extends VBox {
             new Face(View.TOP, "TOP", new Vector3f(0, 1, 0), new Vector3f(1, 0, 0), new Vector3f(0, 0, -1)),
             new Face(View.BOTTOM, "BOTTOM", new Vector3f(0, -1, 0), new Vector3f(1, 0, 0), new Vector3f(0, 0, 1)),
     };
-    private static final double SIZE = 104, HALF = 27;
+    private static final double SIZE = 78, HALF = 20;
     private static final Color[] AXIS = {Color.web("#E5484D"), Color.web("#46C46E"), Color.web("#3E9BFF")};
 
     private final Canvas canvas = new Canvas(SIZE, SIZE);
@@ -204,9 +204,9 @@ final class ViewCube extends VBox {
                 double fx = cx + n[0] * HALF, fy = cy + n[1] * HALF;
                 g.setTransform(new Affine(r[0], -u[0], fx, r[1], -u[1], fy));
                 g.setFill(Color.gray(1, Math.min(1, facing * 1.4)));
-                g.setFont(Font.font(null, FontWeight.BOLD, f.label.length() > 5 ? 8.5 : 10));
+                g.setFont(Font.font(null, FontWeight.BOLD, f.label.length() > 5 ? 6.5 : 7.5));
                 g.setTextAlign(TextAlignment.CENTER);
-                g.fillText(f.label, 0, 3.5);
+                g.fillText(f.label, 0, 2.6);
                 g.setTransform(new Affine());
             }
         }
@@ -216,7 +216,7 @@ final class ViewCube extends VBox {
         double[] c0 = toScreen(corner);
         Vector3f[] axes = {new Vector3f(1, 0, 0), new Vector3f(0, 1, 0), new Vector3f(0, 0, 1)};
         String[] names = {"X", "Y", "Z"};
-        g.setFont(Font.font(null, FontWeight.BOLD, 10));
+        g.setFont(Font.font(null, FontWeight.BOLD, 8.5));
         g.setTextAlign(TextAlignment.CENTER);
         for (int i = 0; i < 3; i++) {
             double[] e = toScreen(new Vector3f(corner).fma(2.7f, axes[i]));
@@ -225,7 +225,7 @@ final class ViewCube extends VBox {
             g.setLineWidth(2);
             g.strokeLine(x0, y0, x1, y1);
             g.setFill(AXIS[i]);
-            g.fillText(names[i], x1 + (x1 - x0) * 0.08, y1 + (y1 - y0) * 0.08 + 3.5);
+            g.fillText(names[i], x1 + (x1 - x0) * 0.08, y1 + (y1 - y0) * 0.08 + 3);
         }
     }
 

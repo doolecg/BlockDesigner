@@ -27,11 +27,19 @@ public final class ModelLoader {
     public record Element(float[] from, float[] to, ElementRotation rotation, boolean shade, Map<Dir, Face> faces) {
     }
 
-    private record Unbaked(String parent, Map<String, String> textures, List<Element> elements, Boolean ao) {
+    private record Unbaked(String parent, Map<String, String> textures, List<Element> elements, Boolean ao, float[] gui) {
     }
 
-    /** A model with parents merged and every face texture resolved to a texture id (or null if unresolvable). */
-    public record ResolvedModel(String id, List<Element> elements, Map<String, String> textures, boolean ambientOcclusion) {
+    /**
+     * A model with parents merged and every face texture resolved to a texture id (or null if unresolvable).
+     * {@code gui} is the inventory transform from {@code display.gui} (rotation xyz in degrees, translation xyz in
+     * pixels, scale xyz), or null when no model in the chain has one.
+     */
+    public record ResolvedModel(String id, List<Element> elements, Map<String, String> textures, boolean ambientOcclusion, float[] gui) {
+        public ResolvedModel(String id, List<Element> elements, Map<String, String> textures, boolean ambientOcclusion) {
+            this(id, elements, textures, ambientOcclusion, null);
+        }
+
         public String resolve(String ref) {
             String cur = ref;
             for (int i = 0; i < 16 && cur != null && cur.startsWith("#"); i++) cur = textures.get(cur.substring(1));
@@ -75,6 +83,7 @@ public final class ModelLoader {
         Map<String, String> textures = new HashMap<>();
         List<Element> elements = null;
         Boolean ao = null;
+        float[] gui = null;
         String cur = id;
         boolean any = false;
         for (int depth = 0; cur != null && depth < MAX_PARENT_DEPTH; depth++) {
@@ -85,10 +94,11 @@ public final class ModelLoader {
             m.textures.forEach(textures::putIfAbsent);
             if (elements == null && m.elements != null) elements = m.elements;
             if (ao == null && m.ao != null) ao = m.ao;
+            if (gui == null && m.gui != null) gui = m.gui;
             cur = m.parent == null || m.parent.startsWith("builtin/") ? null : normalize(m.parent);
         }
         if (!any) return Optional.empty();
-        return Optional.of(new ResolvedModel(id, elements == null ? List.of() : elements, Map.copyOf(textures), ao == null || ao));
+        return Optional.of(new ResolvedModel(id, elements == null ? List.of() : elements, Map.copyOf(textures), ao == null || ao, gui));
     }
 
     private Optional<Unbaked> load(String id) {
@@ -117,7 +127,13 @@ public final class ModelLoader {
             for (JsonNode e : n.get("elements")) elements.add(parseElement(e));
         }
         Boolean ao = n.has("ambientocclusion") ? n.get("ambientocclusion").asBoolean(true) : null;
-        return new Unbaked(parent, textures, elements, ao);
+        JsonNode g = n.path("display").path("gui");
+        float[] gui = null;
+        if (g.isObject()) {
+            float[] r = vec3(g.path("rotation")), t = vec3(g.path("translation")), sc = vec3(g.path("scale"), 1);
+            gui = new float[]{r[0], r[1], r[2], t[0], t[1], t[2], sc[0], sc[1], sc[2]};
+        }
+        return new Unbaked(parent, textures, elements, ao, gui);
     }
 
     private static Element parseElement(JsonNode e) {

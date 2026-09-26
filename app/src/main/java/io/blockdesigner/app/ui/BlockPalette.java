@@ -3,6 +3,7 @@ package io.blockdesigner.app.ui;
 import io.blockdesigner.app.Workspace;
 import io.blockdesigner.assets.BlockAssets;
 import io.blockdesigner.assets.BlockRegistry;
+import io.blockdesigner.assets.CreativeOrder;
 import io.blockdesigner.assets.Dir;
 import io.blockdesigner.assets.TextureAtlas;
 import io.blockdesigner.assets.model.BakedQuad;
@@ -50,13 +51,18 @@ public final class BlockPalette extends VBox {
     private final Workspace ws;
     private final TextField search = new TextField();
     private final TilePane tiles = new TilePane();
-    private final FlowPane categories = new FlowPane(4, 4);
+    /** Category tabs, drawn like the creative inventory's: a block icon per tab, its name as the tooltip and title. */
+    private final FlowPane categories = new FlowPane(3, 3);
+    private final Label categoryTitle = new Label("All blocks");
+    private String categoryName = "All blocks", mobGroupTitle = "All mobs";
+    /** Each tab's icon: a block id drawn from the assets, or (no assets / All / Recent) a Feather glyph. */
+    private final List<Runnable> tabIconRefresh = new ArrayList<>();
     private final VBox selectedCard = new VBox(6);
     private final ArrayDeque<String> recent = new ArrayDeque<>();
     private final Map<String, StackPane> tileCache = new HashMap<>();
     private Predicate<BlockRegistry.BlockInfo> category = b -> true;
     /** Mobs tab: the group chips and the group shown (null: all). */
-    private final FlowPane mobGroups = new FlowPane(4, 4);
+    private final FlowPane mobGroups = new FlowPane(3, 3);
     private String mobGroup;
 
     /** Which blocks the palette lists. */
@@ -117,7 +123,9 @@ public final class BlockPalette extends VBox {
 
         selectedCard.getStyleClass().add("selected-block-card");
 
-        getChildren().addAll(header, tabs, searchBox, categories, mobGroups, scroll, selectedCard);
+        categoryTitle.getStyleClass().add("palette-category-title");
+
+        getChildren().addAll(header, tabs, searchBox, categories, mobGroups, categoryTitle, scroll, selectedCard);
 
         schematicRefresh.setOnFinished(e -> {
             if (source == Source.SCHEMATIC) rebuild();
@@ -142,6 +150,7 @@ public final class BlockPalette extends VBox {
 
         ws.assetsProperty().addListener((o, a, b) -> {
             tileCache.clear();
+            tabIconRefresh.forEach(Runnable::run);
             rebuild();
             updateSelectedCard();
         });
@@ -217,30 +226,53 @@ public final class BlockPalette extends VBox {
         tabButtons.get(Source.MOBS).getTooltip().setText(Source.MOBS.tip + String.format(" (%d kinds)", io.blockdesigner.core.model.EntityTypes.all().size()));
     }
 
+    /** A creative-style tab: its name, the block its icon shows (null: the Feather glyph) and which blocks it holds. */
+    private record Category(String name, String iconBlock, Feather glyph, Predicate<BlockRegistry.BlockInfo> test) {
+    }
+
     private void buildCategories() {
-        Map<String, Predicate<BlockRegistry.BlockInfo>> cats = new LinkedHashMap<>();
-        cats.put("All", b -> true);
-        cats.put("Recent", b -> recent.contains(b.id()));
-        cats.put("Stone", b -> has(b, "stone", "brick", "deepslate", "andesite", "diorite", "granite", "tuff", "basalt", "blackstone", "cobble", "sandstone", "prismarine", "quartz", "purpur", "end_stone", "calcite"));
-        cats.put("Wood", b -> has(b, "oak", "spruce", "birch", "jungle", "acacia", "mangrove", "cherry", "bamboo", "crimson", "warped", "planks", "log", "wood", "pale_oak"));
-        cats.put("Shapes", b -> has(b, "stairs", "slab", "wall", "fence", "pane", "door", "trapdoor"));
-        cats.put("Colour", b -> has(b, "wool", "concrete", "terracotta", "glass", "carpet", "candle", "banner", "bed"));
-        cats.put("Nature", b -> has(b, "leaves", "grass", "dirt", "sand", "gravel", "flower", "sapling", "moss", "mud", "clay", "snow", "ice", "coral", "mushroom", "vine", "fern", "tulip", "rose", "daisy", "kelp"));
-        cats.put("Light", b -> has(b, "lantern", "torch", "lamp", "glowstone", "sea_lantern", "froglight", "candle", "shroomlight", "end_rod", "campfire"));
-        cats.put("Redstone", b -> has(b, "redstone", "piston", "observer", "repeater", "comparator", "hopper", "dropper", "dispenser", "lever", "button", "pressure_plate", "rail", "target", "tnt", "crafter"));
+        // Minecraft's own block tabs, with the icons the creative menu gives them.
+        List<Category> cats = new ArrayList<>(List.of(
+                new Category("All blocks", null, Feather.GRID, b -> true),
+                new Category("Recently used", null, Feather.CLOCK, b -> recent.contains(b.id()))));
+        String[] icons = {"minecraft:bricks", "minecraft:cyan_wool", "minecraft:grass_block", "minecraft:oak_sign", "minecraft:redstone"};
+        for (CreativeOrder.Tab tab : CreativeOrder.Tab.values())
+            cats.add(new Category(tab.label, icons[tab.ordinal()], null, b -> creativeTab(b) == tab));
         ToggleGroup group = new ToggleGroup();
-        cats.forEach((name, pred) -> {
-            ToggleButton t = new ToggleButton(name);
-            t.getStyleClass().addAll("chip", "small");
-            t.setToggleGroup(group);
+        for (Category c : cats) {
+            ToggleButton t = categoryTab(group, c.name(), () -> {
+                if (c.iconBlock() == null || ws.assets() == null) return new FontIcon(c.glyph() != null ? c.glyph() : Feather.BOX);
+                // Some tab icons are items, not blocks (redstone dust): those draw from their item texture.
+                var info = ws.assets().registry().get(c.iconBlock());
+                return iconView(BlockIcons.icon(ws.assets(), info.map(BlockRegistry.BlockInfo::defaultState).orElse(BlockState.of(c.iconBlock()))));
+            });
             t.setOnAction(e -> {
                 if (!t.isSelected()) t.setSelected(true);
-                category = pred;
+                category = c.test();
+                categoryName = c.name();
                 rebuild();
             });
-            if (name.equals("All")) t.setSelected(true);
+            if (c == cats.getFirst()) t.setSelected(true);
             categories.getChildren().add(t);
-        });
+        }
+    }
+
+    /** A square tab holding just an icon, redrawn when the assets change; the name shows as its tooltip. */
+    private ToggleButton categoryTab(ToggleGroup group, String name, java.util.function.Supplier<javafx.scene.Node> icon) {
+        ToggleButton t = new ToggleButton(null, icon.get());
+        t.getStyleClass().add("palette-category");
+        t.setToggleGroup(group);
+        t.setTooltip(new Tooltip(name));
+        tabIconRefresh.add(() -> t.setGraphic(icon.get()));
+        return t;
+    }
+
+    private static ImageView iconView(Image img) {
+        ImageView iv = new ImageView(img);
+        iv.setFitWidth(22);
+        iv.setFitHeight(22);
+        iv.setSmooth(false);
+        return iv;
     }
 
     private void buildMobGroups() {
@@ -248,17 +280,40 @@ public final class BlockPalette extends VBox {
         List<String> names = new ArrayList<>(List.of("All"));
         names.addAll(io.blockdesigner.core.model.EntityTypes.groups());
         for (String name : names) {
-            ToggleButton t = new ToggleButton(name);
-            t.getStyleClass().addAll("chip", "small");
-            t.setToggleGroup(group);
+            // Each group shows its first mob, like the creative tab showing one of its items.
+            String iconId = name.equals("All") ? null : io.blockdesigner.core.model.EntityTypes.all().stream()
+                    .filter(k -> k.group().equals(name)).map(io.blockdesigner.core.model.EntityTypes.Kind::id).findFirst().orElse(null);
+            String title = name.equals("All") ? "All mobs" : name;
+            ToggleButton t = categoryTab(group, title,
+                    () -> iconId == null ? new FontIcon(Feather.GRID) : iconView(EntityIcons.icon(ws.assets(), iconId)));
             t.setOnAction(e -> {
                 if (!t.isSelected()) t.setSelected(true);
                 mobGroup = name.equals("All") ? null : name;
+                mobGroupTitle = title;
                 rebuild();
             });
             if (name.equals("All")) t.setSelected(true);
             mobGroups.getChildren().add(t);
         }
+    }
+
+    private final Map<String, CreativeOrder.Tab> tabOf = new HashMap<>();
+
+    /** The creative tab a block is in; modded blocks (which the game's list doesn't have) are guessed from their name. */
+    private CreativeOrder.Tab creativeTab(BlockRegistry.BlockInfo b) {
+        return tabOf.computeIfAbsent(b.id(), id -> {
+            CreativeOrder.Tab t = CreativeOrder.tab(id);
+            if (t != null) return t;
+            if (has(b, "redstone", "piston", "observer", "repeater", "comparator", "hopper", "dropper", "dispenser", "lever", "button",
+                    "pressure_plate", "rail", "target", "tnt", "daylight", "note_block", "sculk_sensor", "tripwire")) return CreativeOrder.Tab.REDSTONE_BLOCKS;
+            if (has(b, "crafting", "furnace", "smoker", "chest", "barrel", "anvil", "table", "loom", "stonecutter", "grindstone",
+                    "brewing", "cauldron", "beacon", "bell", "lectern", "composter", "jukebox", "sign", "ladder", "scaffolding",
+                    "flower_pot", "lantern", "torch", "lamp", "campfire", "chain", "head", "skull", "bed")) return CreativeOrder.Tab.FUNCTIONAL_BLOCKS;
+            if (has(b, "wool", "concrete", "terracotta", "stained", "carpet", "candle", "banner", "shulker_box", "dyed")) return CreativeOrder.Tab.COLORED_BLOCKS;
+            if (has(b, "leaves", "grass", "dirt", "sand", "gravel", "flower", "sapling", "moss", "mud", "clay", "snow", "ice", "coral",
+                    "mushroom", "vine", "fern", "_ore", "crop", "bush", "root")) return CreativeOrder.Tab.NATURAL_BLOCKS;
+            return CreativeOrder.Tab.BUILDING_BLOCKS;
+        });
     }
 
     private static boolean has(BlockRegistry.BlockInfo b, String... words) {
@@ -276,6 +331,7 @@ public final class BlockPalette extends VBox {
         categories.setManaged(!mobs);
         mobGroups.setVisible(mobs);
         mobGroups.setManaged(mobs);
+        categoryTitle.setText(mobs ? mobGroupTitle : categoryName);
         search.setPromptText(mobs ? "Search mobs…  (or type a modded id, e.g. alexsmobs:elephant)" : "Search blocks…  (Ctrl+F · e.g. oak stairs, create:shaft)");
         if (mobs) {
             rebuildMobs();
@@ -299,7 +355,8 @@ public final class BlockPalette extends VBox {
             boolean modded = source == Source.MODDED;
             blocks = new ArrayList<>(q.isEmpty() ? assets.registry().all() : assets.registry().search(q, 2000));
             blocks.removeIf(b -> b.namespace().equals("minecraft") == modded);
-            if (q.isEmpty()) blocks.sort((a, b) -> a.id().compareTo(b.id()));
+            // In the creative menu's order; blocks it doesn't list (and modded ones) follow by id.
+            if (q.isEmpty()) blocks.sort((a, b) -> CreativeOrder.compare(a.id(), b.id()));
         }
         for (BlockRegistry.BlockInfo b : blocks) {
             if (!category.test(b)) continue;

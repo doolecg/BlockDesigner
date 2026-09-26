@@ -15,6 +15,8 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -33,8 +35,8 @@ import java.awt.Desktop;
 import java.util.List;
 
 /**
- * The Settings window: Appearance (colour theme, dark / light / match Windows) and General (author, start screen,
- * Minecraft assets, plugins, updates, where settings live). Changes apply immediately.
+ * The Settings window: General (author, start screen, Minecraft assets, plugins, updates, where settings live),
+ * Appearance (colour theme, dark / light / match Windows) and Keybinds. Changes apply immediately.
  */
 final class SettingsDialog extends Dialog<Void> {
     private final Workspace ws;
@@ -47,8 +49,13 @@ final class SettingsDialog extends Dialog<Void> {
         themeCards.setPrefWrapLength(660);
     }
 
-    SettingsDialog(Window owner, Workspace ws, Runnable changeAssets, Runnable openPlugins, Runnable checkUpdates) {
+    private final Keybinds keys;
+    private final Runnable keysChanged;
+
+    SettingsDialog(Window owner, Workspace ws, Keybinds keys, Runnable keysChanged, Runnable changeAssets, Runnable openPlugins, Runnable checkUpdates) {
         this.ws = ws;
+        this.keys = keys;
+        this.keysChanged = keysChanged;
         initOwner(owner);
         setTitle("Settings");
         setResizable(true);
@@ -61,9 +68,10 @@ final class SettingsDialog extends Dialog<Void> {
             rebuildThemeCards();
         });
 
-        ToggleButton appearance = navButton("Appearance", Feather.DROPLET);
         ToggleButton general = navButton("General", Feather.SLIDERS);
-        VBox side = new VBox(4, appearance, general);
+        ToggleButton appearance = navButton("Appearance", Feather.DROPLET);
+        ToggleButton keybinds = navButton("Keybinds", Feather.COMMAND);
+        VBox side = new VBox(4, general, appearance, keybinds);
         side.getStyleClass().add("settings-nav");
         side.setPrefWidth(190);
         side.setMinWidth(170);
@@ -82,11 +90,12 @@ final class SettingsDialog extends Dialog<Void> {
 
         appearance.setOnAction(e -> showAppearance());
         general.setOnAction(e -> showGeneral(changeAssets, openPlugins, checkUpdates));
+        keybinds.setOnAction(e -> showKeybinds());
         nav.selectedToggleProperty().addListener((o, a, b) -> {
             if (b == null && a != null) a.setSelected(true);
         });
-        appearance.setSelected(true);
-        showAppearance();
+        general.setSelected(true);
+        showGeneral(changeAssets, openPlugins, checkUpdates);
     }
 
     private void syncModeClass() {
@@ -296,5 +305,155 @@ final class SettingsDialog extends Dialog<Void> {
                 hint("You have BlockDesigner " + io.blockdesigner.app.update.Updater.currentVersion()
                         + ". New versions come from github.com/" + io.blockdesigner.app.update.Updater.REPO + "/releases."),
                 section("Files"), folder, hint(Settings.dir().toString()));
+    }
+
+    // ---- Keybinds --------------------------------------------------------------------------------------------
+
+    /** The action whose slot is waiting for a key, and that slot's button. */
+    private Button listening;
+
+    private void showKeybinds() {
+        TextField filter = new TextField();
+        filter.setPromptText("Search actions or keys…  (e.g. layer, Shift+Z)");
+        filter.getStyleClass().add("search-field");
+        HBox searchBox = new HBox(6, new FontIcon(Feather.SEARCH), filter);
+        searchBox.setAlignment(Pos.CENTER_LEFT);
+        searchBox.getStyleClass().add("search-box");
+        HBox.setHgrow(filter, Priority.ALWAYS);
+        Button resetAll = new Button("Reset all to defaults", new FontIcon(Feather.ROTATE_CCW));
+        resetAll.setOnAction(e -> {
+            keys.resetAll();
+            keysChanged.run();
+            showKeybinds();
+        });
+        HBox top = new HBox(8, searchBox, resetAll);
+        top.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(searchBox, Priority.ALWAYS);
+
+        VBox list = new VBox(2);
+        Runnable fill = () -> {
+            list.getChildren().clear();
+            String q = filter.getText() == null ? "" : filter.getText().strip().toLowerCase(java.util.Locale.ROOT);
+            Keybinds.Group group = null;
+            for (Keybinds.Action a : Keybinds.Action.values()) {
+                KeyCombination[] k = keys.get(a);
+                String hay = (a.label + " " + a.group.label + " " + Keybinds.text(k[0]) + " " + Keybinds.text(k[1])).toLowerCase(java.util.Locale.ROOT);
+                if (!q.isEmpty() && !hay.contains(q)) continue;
+                if (a.group != group) {
+                    group = a.group;
+                    Label sec = section(group.label);
+                    VBox.setMargin(sec, new Insets(list.getChildren().isEmpty() ? 4 : 12, 0, 2, 0));
+                    list.getChildren().add(sec);
+                }
+                list.getChildren().add(keyRow(a));
+            }
+            if (list.getChildren().isEmpty()) list.getChildren().add(hint("No action or key matches \"" + q + "\"."));
+        };
+        filter.textProperty().addListener((o, a, b) -> fill.run());
+        refillKeys = fill;
+        fill.run();
+
+        page.getChildren().setAll(title("Keybinds"),
+                hint("Click a key to change it, then press the new key or combination (Esc cancels). Each action can have a second key. "
+                        + "Keys shown in red are used by another action too; both still run. Mouse buttons, flying (WASD) and the "
+                        + "viewport's own keys (M, Esc, arrows, Home…) are fixed."),
+                top, list);
+    }
+
+    private HBox keyRow(Keybinds.Action a) {
+        Label name = new Label(a.label);
+        // Names give way (with an ellipsis) before the key columns do, so narrow windows don't scroll sideways.
+        name.setMinWidth(90);
+        name.setTooltip(new Tooltip(a.label));
+        Region grow = new Region();
+        HBox.setHgrow(grow, Priority.ALWAYS);
+        HBox row = new HBox(6, name, grow);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("keybind-row");
+        KeyCombination[] k = keys.get(a);
+        for (int slot = 0; slot < 2; slot++) row.getChildren().add(keySlot(a, slot, k[slot], row));
+        Button reset = new Button(null, new FontIcon(Feather.ROTATE_CCW));
+        reset.getStyleClass().addAll("flat", "small");
+        reset.setTooltip(new Tooltip("Back to " + defaultsText(a)));
+        reset.setDisable(keys.isDefault(a));
+        reset.setOnAction(e -> {
+            keys.reset(a);
+            keysChanged.run();
+            refreshRow(row, a);
+        });
+        row.getChildren().add(reset);
+        return row;
+    }
+
+    /** Redraws the key list (keeping the search): a change can make other rows clash or stop clashing. */
+    private Runnable refillKeys = () -> {
+    };
+
+    private void refreshRow(HBox row, Keybinds.Action a) {
+        refillKeys.run();
+    }
+
+    private String defaultsText(Keybinds.Action a) {
+        List<String> d = a.defaults().stream().map(Keybinds::text).toList();
+        return d.isEmpty() ? "no key" : String.join(" / ", d);
+    }
+
+    /** One binding: a keycap-like button that listens for the next key when clicked, with a small clear button. */
+    private Node keySlot(Keybinds.Action a, int slot, KeyCombination k, HBox row) {
+        Button b = new Button(k == null ? (slot == 0 ? "None" : "+ Add") : Keybinds.text(k));
+        b.getStyleClass().add("keybind-key");
+        if (k == null) b.getStyleClass().add("keybind-empty");
+        List<Keybinds.Action> clash = keys.usersOf(k, a);
+        if (!clash.isEmpty()) {
+            b.getStyleClass().add("keybind-clash");
+            b.setTooltip(new Tooltip("Also: " + String.join(", ", clash.stream().map(c -> c.label).toList())));
+        }
+        b.setMinWidth(96);
+        b.setFocusTraversable(false);
+        b.setOnAction(e -> {
+            if (listening != null) {
+                listening.getStyleClass().remove("keybind-listening");
+            }
+            listening = b;
+            b.setText("Press a key…");
+            b.getStyleClass().add("keybind-listening");
+            b.requestFocus();
+        });
+        b.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+            if (listening != b) return;
+            e.consume();
+            if (e.getCode() == KeyCode.ESCAPE) {
+                listening = null;
+                refreshRow(row, a);
+                return;
+            }
+            KeyCombination got = Keybinds.fromEvent(e);
+            if (got == null) return;
+            listening = null;
+            keys.set(a, slot, got);
+            keysChanged.run();
+            refreshRow(row, a);
+        });
+        // Alt, F10 and the like must not reach the dialog's own handling while a key is being recorded.
+        b.addEventFilter(javafx.scene.input.KeyEvent.KEY_RELEASED, e -> {
+            if (listening == b) e.consume();
+        });
+        HBox box = new HBox(0, b);
+        box.setAlignment(Pos.CENTER_LEFT);
+        // A fixed width per slot keeps the main and second keys in straight columns.
+        box.setMinWidth(128);
+        box.setPrefWidth(128);
+        if (k == null) return box;
+        Button clear = new Button(null, new FontIcon(Feather.X));
+        clear.getStyleClass().addAll("flat", "small", "keybind-clear");
+        clear.setTooltip(new Tooltip("Remove this key"));
+        clear.setFocusTraversable(false);
+        clear.setOnAction(e -> {
+            keys.set(a, slot, null);
+            keysChanged.run();
+            refreshRow(row, a);
+        });
+        box.getChildren().add(clear);
+        return box;
     }
 }
