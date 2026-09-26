@@ -38,3 +38,6 @@ AGENTS.md
 .tabnine/
 .specstory/
 .augment/
+
+# Python caches (packaging scripts)
+__pycache__/
