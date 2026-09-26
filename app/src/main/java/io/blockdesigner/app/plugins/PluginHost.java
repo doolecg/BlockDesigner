@@ -1,6 +1,8 @@
 package io.blockdesigner.app.plugins;
 
+import io.blockdesigner.assets.BlockAssets;
 import io.blockdesigner.core.edit.SceneEditor;
+import io.blockdesigner.core.model.Box;
 import io.blockdesigner.core.model.Layer;
 import io.blockdesigner.core.model.Scene;
 import io.blockdesigner.core.model.Structure;
@@ -35,4 +37,29 @@ public interface PluginHost {
 
     /** Plugins were loaded, enabled or disabled: menus and the export window should refresh. */
     void pluginsChanged();
+
+    // ---- API 2 ------------------------------------------------------------------------------------------------
+
+    /** Runs a task on a later pulse of the UI thread (scene events are merged until then). */
+    default void runLater(Runnable task) {
+        runOnUiThread(task);
+    }
+
+    /** The loaded Minecraft assets, or null while none are. */
+    default BlockAssets assets() {
+        return null;
+    }
+
+    /** World box around the selected blocks, or the //pos1 //pos2 region; empty when neither exists. */
+    default Optional<Box> selection() {
+        return Optional.empty();
+    }
+
+    /** Opens a plugin transform's dialog (from {@code /transform <id>}). */
+    default void openTransform(PluginManager.Transform transform) {
+    }
+
+    /** A plugin with tools is about to be disabled: put down its tool if it is the active one. */
+    default void pluginUnloading(PluginManager.Plugin plugin) {
+    }
 }

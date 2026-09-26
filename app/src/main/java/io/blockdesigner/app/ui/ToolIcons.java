@@ -43,6 +43,35 @@ final class ToolIcons {
                 "M11.5 20.5 H20.5");
     }
 
+    /**
+     * A plugin's icon: SVG path data on a 16px grid, stroked like the other tool glyphs; the puzzle-piece plugin
+     * icon when the plugin gives none (or bad path data).
+     */
+    static Node plugin(String svgPath, double size) {
+        if (svgPath == null || svgPath.isBlank()) return FormatIcons.icon(FormatIcons.Kind.PLUGIN, size);
+        SVGPath p = new SVGPath();
+        try {
+            p.setContent(svgPath);
+        } catch (RuntimeException bad) {
+            return FormatIcons.icon(FormatIcons.Kind.PLUGIN, size);
+        }
+        p.setFill(null);
+        p.setStrokeWidth(1.5);
+        p.setStrokeLineCap(StrokeLineCap.ROUND);
+        p.setStrokeLineJoin(StrokeLineJoin.ROUND);
+        p.getStyleClass().add("tool-glyph");
+        javafx.scene.shape.Rectangle frame = new javafx.scene.shape.Rectangle(16, 16, javafx.scene.paint.Color.TRANSPARENT);
+        Group g = new Group(frame, p);
+        double k = size / 16;
+        g.setScaleX(k);
+        g.setScaleY(k);
+        StackPane box = new StackPane(new Group(g));
+        box.setMinSize(size, size);
+        box.setPrefSize(size, size);
+        box.setMaxSize(size, size);
+        return box;
+    }
+
     private static Node glyph(double size, double rotate, String... paths) {
         Group g = new Group();
         for (String d : paths) {

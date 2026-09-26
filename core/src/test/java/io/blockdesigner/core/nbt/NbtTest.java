@@ -29,6 +29,25 @@ class NbtTest {
     }
 
     @Test
+    void littleEndianRoundTripAndByteOrder() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        NbtIO.writeLE(sample(), "", out);
+        NbtIO.Named back = NbtIO.readLE(new ByteArrayInputStream(out.toByteArray()));
+        assertThat(back.name()).isEmpty();
+        assertThat(back.tag()).isEqualTo(sample());
+
+        // A Bedrock root {format_version: 1}: type, u16 LE name length, then the int's name and value little-endian.
+        ByteArrayOutputStream one = new ByteArrayOutputStream();
+        NbtIO.writeLE(new CompoundTag().putInt("format_version", 1), "", one);
+        byte[] b = one.toByteArray();
+        assertThat(b[0]).isEqualTo(Tag.COMPOUND);
+        assertThat(new byte[]{b[1], b[2]}).containsExactly(0, 0);
+        assertThat(b[3]).isEqualTo(Tag.INT);
+        assertThat(new byte[]{b[4], b[5]}).containsExactly(14, 0);
+        assertThat(new byte[]{b[20], b[21], b[22], b[23]}).containsExactly(1, 0, 0, 0);
+    }
+
+    @Test
     void binaryRoundTripCompressedAndRaw() throws IOException {
         for (boolean gzip : new boolean[]{true, false}) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();

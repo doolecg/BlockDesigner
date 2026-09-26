@@ -45,6 +45,7 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
     private final Map<String, Map<Long, Float>> opened = new HashMap<>();
     private final Map<String, Group> groupOf = new HashMap<>();
     private int nextMesh;
+    private final String meshPrefix;
 
     /** One GPU mesh and the layers drawing it. Owner-thread state except {@link #pending}, {@link #dead} and versions. */
     private static final class Group {
@@ -73,11 +74,21 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
      * @param onMeshReady invoked from a worker thread after a mesh has been queued for upload; request a redraw
      */
     public SceneRenderer(Scene scene, BlockAssets assets, ViewportRenderer gpu, Runnable onMeshReady) {
+        this(scene, assets, gpu, onMeshReady, "mesh-", Math.max(2, Runtime.getRuntime().availableProcessors() - 2));
+    }
+
+    /**
+     * A renderer sharing {@code gpu} with others (e.g. one for preview ghosts next to the scene's own).
+     *
+     * @param meshPrefix starts the ids of this renderer's meshes, so they can't clash with another renderer's on the same gpu
+     * @param threads    meshing threads
+     */
+    public SceneRenderer(Scene scene, BlockAssets assets, ViewportRenderer gpu, Runnable onMeshReady, String meshPrefix, int threads) {
         this.scene = scene;
         this.gpu = gpu;
         this.mesher = new SectionMesher(assets);
         this.onMeshReady = onMeshReady;
-        int threads = Math.max(2, Runtime.getRuntime().availableProcessors() - 2);
+        this.meshPrefix = meshPrefix;
         this.pool = Executors.newFixedThreadPool(threads, Thread.ofPlatform().name("blockdesigner-mesher-", 0).daemon().factory());
         scene.addListener(this);
         for (Layer l : scene.layers()) regroup(l);
@@ -145,7 +156,7 @@ public final class SceneRenderer implements Scene.Listener, AutoCloseable {
             leave(l, g);
         }
         if (target == null) {
-            target = new Group("mesh-" + nextMesh++, k);
+            target = new Group(meshPrefix + nextMesh++, k);
             if (g != null && !g.dead) target.fallback = g.meshId;
             Integer base = clipBase(l);
             target.clipLo = base == null ? Integer.MIN_VALUE : clipLocal(sliceMin, base);

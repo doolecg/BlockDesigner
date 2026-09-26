@@ -78,6 +78,12 @@ public final class Settings {
     public boolean symShowPlanes = true;
     /** Ids of plugins the user switched off in the Plugins window. */
     public List<String> disabledPlugins = new ArrayList<>();
+    /** Last values of plugin options, per feature ("plugin/kind/id"), as text; see OptionStore. */
+    public java.util.Map<String, java.util.Map<String, String>> pluginOptions = new java.util.LinkedHashMap<>();
+    /** Plugin panels ("plugin/panel") the user closed; every other plugin panel opens with its plugin. */
+    public List<String> closedPluginPanels = new ArrayList<>();
+    /** Keys for plugin tools ("plugin/tool" to a key such as "Shift+K", "" for none), overriding the plugin's default. */
+    public java.util.Map<String, String> pluginToolKeys = new java.util.LinkedHashMap<>();
 
     // ---- Export window (remembered between exports) ----
     /** Card chosen last: a format id, "datapack", or "plugin:<plugin>/<exporter>". */

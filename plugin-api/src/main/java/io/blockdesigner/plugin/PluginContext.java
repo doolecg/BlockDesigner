@@ -2,6 +2,7 @@ package io.blockdesigner.plugin;
 
 import io.blockdesigner.core.edit.SceneEditor;
 import io.blockdesigner.core.formats.SchematicFormat;
+import io.blockdesigner.core.model.Box;
 import io.blockdesigner.core.model.Layer;
 import io.blockdesigner.core.model.Scene;
 import io.blockdesigner.core.model.Structure;
@@ -41,6 +42,30 @@ public interface PluginContext {
     /** Adds a command to the command bar. */
     void registerCommand(PluginCommand command);
 
+    /**
+     * Adds a transform: Plugins › Transform, the selection's right-click menu and {@code /transform <id>}.
+     * Since API 2.
+     */
+    void registerTransform(PluginTransform transform);
+
+    /** Adds a panel (a closable tab on the right). Since API 2. */
+    void registerPanel(PluginPanel panel);
+
+    /** Adds an importer for files that aren't schematics (Import window and drag and drop). Since API 2. */
+    void registerImporter(PluginImporter importer);
+
+    /** Adds a tool to the tool dock over the viewport. Since API 2. */
+    void registerTool(PluginTool tool);
+
+    // ---- events (API 2) --------------------------------------------------------------------------------------
+
+    /**
+     * Calls {@code listener} on the JavaFX thread whenever an event of {@code type} happens, at most once per frame
+     * per kind (bursts are merged, see {@link SceneEvent}). Pass {@code SceneEvent.class} to hear every kind.
+     * Listeners are removed when the plugin is disabled; cancel the subscription to stop earlier. Since API 2.
+     */
+    <E extends SceneEvent> Subscription on(Class<E> type, Consumer<? super E> listener);
+
     // ---- the open project ------------------------------------------------------------------------------------
 
     /** The layers being edited. Read freely; change blocks and layers through {@link #editor()} so undo works. */
@@ -56,6 +81,18 @@ public interface PluginContext {
 
     /** The Minecraft version exports target. */
     McVersion targetVersion();
+
+    /** Block registry, families, variants and colours. Since API 2. */
+    BlockCatalog blocks();
+
+    /** Block models, the texture atlas and texture files of the loaded Minecraft version. Since API 2. */
+    AssetAccess assets();
+
+    /**
+     * World-space box around the selected blocks, or the //pos1 //pos2 region when no blocks are selected; empty when
+     * neither is. Since API 2.
+     */
+    Optional<Box> selection();
 
     /**
      * Edits blocks in world coordinates across the visible, unlocked layers, exactly like a command does, as one undo

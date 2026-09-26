@@ -14,7 +14,10 @@ import java.nio.file.Path;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-/** Binary NBT reading and writing in Java edition (big-endian) format. */
+/**
+ * Binary NBT reading and writing: Java edition's big-endian format ({@link #read}, {@link #write}), and Bedrock
+ * edition's little-endian one ({@link #readLE}, {@link #writeLE}), as used by {@code .mcstructure} files.
+ */
 public final class NbtIO {
     private static final int MAX_DEPTH = 512;
 
@@ -61,6 +64,28 @@ public final class NbtIO {
         try (OutputStream out = Files.newOutputStream(file)) {
             write(root, name, out, gzip);
         }
+    }
+
+    /**
+     * Reads a root compound in Bedrock's little-endian format (uncompressed, strings as a little-endian length and
+     * UTF-8 bytes), e.g. a {@code .mcstructure} file.
+     */
+    public static Named readLE(InputStream in) throws IOException {
+        DataInput data = new LittleEndianInput(new DataInputStream(new BufferedInputStream(in)));
+        byte type = data.readByte();
+        if (type != Tag.COMPOUND) throw new IOException("Root tag is not a compound (type " + type + ")");
+        String name = data.readUTF();
+        return new Named(name, (CompoundTag) readPayload(data, type, 0));
+    }
+
+    /** Writes a root compound in Bedrock's little-endian format (uncompressed). */
+    public static void writeLE(CompoundTag root, String name, OutputStream out) throws IOException {
+        DataOutputStream buffered = new DataOutputStream(new BufferedOutputStream(out));
+        DataOutput data = new LittleEndianOutput(buffered);
+        data.writeByte(Tag.COMPOUND);
+        data.writeUTF(name);
+        writePayload(data, root);
+        buffered.flush();
     }
 
     private static Tag readPayload(DataInput in, byte type, int depth) throws IOException {
@@ -147,6 +172,162 @@ public final class NbtIO {
                 out.writeInt(t.length());
                 for (long v : t.value()) out.writeLong(v);
             }
+        }
+    }
+
+    /** Reads numbers little-endian and strings as a little-endian u16 length plus UTF-8, Bedrock's way. */
+    private record LittleEndianInput(DataInputStream in) implements DataInput {
+        @Override
+        public void readFully(byte[] b) throws IOException {
+            in.readFully(b);
+        }
+
+        @Override
+        public void readFully(byte[] b, int off, int len) throws IOException {
+            in.readFully(b, off, len);
+        }
+
+        @Override
+        public int skipBytes(int n) throws IOException {
+            return in.skipBytes(n);
+        }
+
+        @Override
+        public boolean readBoolean() throws IOException {
+            return in.readBoolean();
+        }
+
+        @Override
+        public byte readByte() throws IOException {
+            return in.readByte();
+        }
+
+        @Override
+        public int readUnsignedByte() throws IOException {
+            return in.readUnsignedByte();
+        }
+
+        @Override
+        public short readShort() throws IOException {
+            return Short.reverseBytes(in.readShort());
+        }
+
+        @Override
+        public int readUnsignedShort() throws IOException {
+            return readShort() & 0xFFFF;
+        }
+
+        @Override
+        public char readChar() throws IOException {
+            return (char) readUnsignedShort();
+        }
+
+        @Override
+        public int readInt() throws IOException {
+            return Integer.reverseBytes(in.readInt());
+        }
+
+        @Override
+        public long readLong() throws IOException {
+            return Long.reverseBytes(in.readLong());
+        }
+
+        @Override
+        public float readFloat() throws IOException {
+            return Float.intBitsToFloat(readInt());
+        }
+
+        @Override
+        public double readDouble() throws IOException {
+            return Double.longBitsToDouble(readLong());
+        }
+
+        @Override
+        public String readLine() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public String readUTF() throws IOException {
+            byte[] b = new byte[readUnsignedShort()];
+            in.readFully(b);
+            return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+        }
+    }
+
+    /** The writing side of {@link LittleEndianInput}. */
+    private record LittleEndianOutput(DataOutputStream out) implements DataOutput {
+        @Override
+        public void write(int b) throws IOException {
+            out.write(b);
+        }
+
+        @Override
+        public void write(byte[] b) throws IOException {
+            out.write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            out.write(b, off, len);
+        }
+
+        @Override
+        public void writeBoolean(boolean v) throws IOException {
+            out.writeBoolean(v);
+        }
+
+        @Override
+        public void writeByte(int v) throws IOException {
+            out.writeByte(v);
+        }
+
+        @Override
+        public void writeShort(int v) throws IOException {
+            out.writeShort(Short.reverseBytes((short) v));
+        }
+
+        @Override
+        public void writeChar(int v) throws IOException {
+            writeShort(v);
+        }
+
+        @Override
+        public void writeInt(int v) throws IOException {
+            out.writeInt(Integer.reverseBytes(v));
+        }
+
+        @Override
+        public void writeLong(long v) throws IOException {
+            out.writeLong(Long.reverseBytes(v));
+        }
+
+        @Override
+        public void writeFloat(float v) throws IOException {
+            writeInt(Float.floatToIntBits(v));
+        }
+
+        @Override
+        public void writeDouble(double v) throws IOException {
+            writeLong(Double.doubleToLongBits(v));
+        }
+
+        @Override
+        public void writeBytes(String s) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void writeChars(String s) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void writeUTF(String s) throws IOException {
+            byte[] b = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            if (b.length > 0xFFFF) throw new IOException("String too long for NBT: " + b.length + " bytes");
+            writeShort(b.length);
+            out.write(b);
         }
     }
 }

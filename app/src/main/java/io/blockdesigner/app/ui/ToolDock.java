@@ -19,6 +19,11 @@ public final class ToolDock extends VBox {
     private final Map<ToolKind, ToggleButton> buttons = new EnumMap<>(ToolKind.class);
 
     private final ToggleButton flyToggle = new ToggleButton(null, new FontIcon(Feather.NAVIGATION));
+    private final ToggleGroup group = new ToggleGroup();
+    private final Workspace ws;
+    /** Buttons of the tools plugins added (after a separator), by tool key. */
+    private final Map<String, ToggleButton> pluginButtons = new java.util.LinkedHashMap<>();
+    private final Separator pluginSeparator = new Separator();
 
     public ToolDock(Workspace ws, ViewportPane viewport) {
         getStyleClass().add("tool-dock");
@@ -26,7 +31,7 @@ public final class ToolDock extends VBox {
         setSpacing(2);
         setMaxHeight(USE_PREF_SIZE);
         setMaxWidth(USE_PREF_SIZE);
-        ToggleGroup group = new ToggleGroup();
+        this.ws = ws;
         this.viewport = viewport;
         add(ws, group, ToolKind.VIEW, Feather.EYE, "View mode", Keybinds.Action.TOOL_VIEW, "look around, no editing");
         add(ws, group, ToolKind.SELECT, Feather.MOUSE_POINTER, "Select mode", Keybinds.Action.TOOL_SELECT, "click to select layers, drag to slide them");
@@ -41,8 +46,61 @@ public final class ToolDock extends VBox {
         flyToggle.setOnAction(e -> viewport.setFly(flyToggle.isSelected()));
         viewport.onFlyChanged(() -> flyToggle.setSelected(viewport.isFlying()));
         getChildren().add(flyToggle);
-        ws.toolProperty().addListener((o, a, b) -> buttons.get(b).setSelected(true));
-        buttons.get(ws.toolProperty().get()).setSelected(true);
+        ws.toolProperty().addListener((o, a, b) -> syncSelection());
+        syncSelection();
+    }
+
+    /** Selects the button of the current tool (for plugin tools, the one the viewport has). */
+    private void syncSelection() {
+        ToolKind t = ws.toolProperty().get();
+        ToggleButton b = t == ToolKind.PLUGIN
+                ? viewport.pluginTool().map(x -> pluginButtons.get(x.key())).orElse(null)
+                : buttons.get(t);
+        if (b != null) b.setSelected(true);
+        else if (group.getSelectedToggle() != null) group.getSelectedToggle().setSelected(false);
+    }
+
+    /**
+     * Shows a button for each plugin tool, below the built-in ones; {@code pick} makes one the active tool.
+     *
+     * @param keyText the key that picks a tool, for its tooltip ("" for none)
+     */
+    public void setPluginTools(java.util.List<io.blockdesigner.app.plugins.PluginManager.Tool> tools,
+                               java.util.function.Consumer<io.blockdesigner.app.plugins.PluginManager.Tool> pick,
+                               java.util.function.Function<io.blockdesigner.app.plugins.PluginManager.Tool, String> keyText) {
+        pluginButtons.values().forEach(b -> {
+            b.setToggleGroup(null);
+            getChildren().remove(b);
+        });
+        pluginButtons.clear();
+        getChildren().remove(pluginSeparator);
+        if (tools.isEmpty()) {
+            syncSelection();
+            return;
+        }
+        // Plugin tools go between the built-in tools and the flight toggle.
+        int at = getChildren().indexOf(flyToggle) - 1;
+        getChildren().add(at++, pluginSeparator);
+        for (var t : tools) {
+            ToggleButton b = new ToggleButton(null, ToolIcons.plugin(t.tool().icon(), 17));
+            b.getStyleClass().addAll("flat", "tool-button");
+            b.setToggleGroup(group);
+            Tooltip tip = new Tooltip();
+            tip.setOnShowing(e -> {
+                String k = keyText.apply(t);
+                tip.setText(t.tool().name() + (k.isEmpty() ? "" : " (" + k + ")")
+                        + (t.tool().description().isBlank() ? "" : ": " + t.tool().description()) + "\nFrom the plugin " + t.plugin().info().name());
+            });
+            b.setTooltip(tip);
+            b.setOnAction(e -> {
+                if (!b.isSelected()) b.setSelected(true);
+                pick.accept(t);
+                syncSelection();
+            });
+            pluginButtons.put(t.key(), b);
+            getChildren().add(at++, b);
+        }
+        syncSelection();
     }
 
     private ViewportPane viewport;

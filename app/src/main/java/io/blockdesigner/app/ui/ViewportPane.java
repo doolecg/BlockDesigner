@@ -95,6 +95,26 @@ public final class ViewportPane extends StackPane {
 
     private ViewportRenderer gpu;
     private SceneRenderer sceneRenderer;
+    /**
+     * Ghost blocks previewing a plugin transform, drawn translucent over the scene. They live in a scene of their own
+     * so the preview never shows up in the layer list, undo history, saves or plugin events.
+     */
+    private final Scene previewScene = new Scene();
+    private SceneRenderer previewRenderer;
+    private Layer previewLayer;
+    /** Cells the preview empties (outlined in red) and extra boxes to outline. */
+    private List<BlockPos> previewRemoved = List.of();
+    private List<Box> previewOutlines = List.of();
+    /** Told when the block selection or the //pos region may have changed; and what was last reported. */
+    private Runnable selectionListener = () -> {
+    };
+    private int lastSelCount = -1;
+    private Box lastSelRegion;
+    /** The active plugin tool (tool mode PLUGIN), and its options bar above the hotbar. */
+    private PluginToolSession pluginTool;
+    private final javafx.scene.layout.VBox pluginToolBar = new javafx.scene.layout.VBox(6);
+    /** Plugin transforms for the right-click menu, given the viewport's current selection; set by the main window. */
+    private java.util.function.Supplier<List<javafx.scene.control.MenuItem>> transformItems = List::of;
     private PixelBuffer<IntBuffer> pixels;
     private int pbW, pbH;
     private final AtomicReference<ViewportRenderer.Frame> latest = new AtomicReference<>();
@@ -310,6 +330,11 @@ public final class ViewportPane extends StackPane {
         });
         StackPane.setAlignment(brushBar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(brushBar, new javafx.geometry.Insets(0, 0, 76, 0));
+        pluginToolBar.getStyleClass().add("brush-bar");
+        pluginToolBar.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
+        pluginToolBar.setVisible(false);
+        StackPane.setAlignment(pluginToolBar, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(pluginToolBar, new javafx.geometry.Insets(0, 0, 76, 0));
         StackPane.setAlignment(hotbar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(hotbar, new javafx.geometry.Insets(0, 0, 14, 0));
         shapeInfo.getStyleClass().add("viewport-toast");
@@ -334,7 +359,7 @@ public final class ViewportPane extends StackPane {
         updateSymmetryButton();
         StackPane.setAlignment(keyHints, Pos.BOTTOM_RIGHT);
         StackPane.setMargin(keyHints, new javafx.geometry.Insets(0, 14, 14, 0));
-        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, brushBar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar,
+        getChildren().addAll(marquee, hud, crosshair, sliceBadge, toast, hotbar, brushBar, pluginToolBar, viewCube, settingsButton, keysButton, filterButton, commandButton, commandBar,
                 shapeInfo, symmetryButton, keyHints, shapeRadial);
         keyHintsTick.setCycleCount(javafx.animation.Animation.INDEFINITE);
         keyHintsTick.play();
@@ -375,7 +400,9 @@ public final class ViewportPane extends StackPane {
                 case ROTATE -> "Rotate · drag a ring to turn 90° · E";
                 case BRUSH -> "Brush · drag to paint · right-drag smooths · Alt+1…0 modes · Shift+right-click settings · - / = size · , / . strength";
                 case ERASER -> "Eraser · drag to remove blocks · - / = size" + (keyText(Keybinds.Action.TOOL_ERASER).isEmpty() ? "" : " · " + keyText(Keybinds.Action.TOOL_ERASER));
+                case PLUGIN -> pluginToolToast();
             });
+            if (b != ToolKind.PLUGIN && pluginTool != null) setPluginTool(null, null);
         });
         ws.editor().undoStack().addListener(this::requestRedraw);
         ws.scene().addListener(new Scene.Listener() {
@@ -435,14 +462,17 @@ public final class ViewportPane extends StackPane {
         });
         sceneRenderer = new SceneRenderer(ws.scene(), assets, gpu, this::requestRedraw);
         sceneRenderer.setSlice(sliceMin(), sliceMax());
+        previewRenderer = new SceneRenderer(previewScene, assets, gpu, this::requestRedraw, "preview-", 1);
         requestRedraw();
         return gpu.ready();
     }
 
     public void detach() {
         if (sceneRenderer != null) sceneRenderer.close();
+        if (previewRenderer != null) previewRenderer.close();
         if (gpu != null) gpu.close();
         sceneRenderer = null;
+        previewRenderer = null;
         gpu = null;
     }
 
@@ -474,6 +504,8 @@ public final class ViewportPane extends StackPane {
         strokeStep();
         lidStep(dt);
         if (sceneRenderer != null) sceneRenderer.sync();
+        if (previewRenderer != null) previewRenderer.sync();
+        checkSelection();
         double scale = getScene() != null && getScene().getWindow() != null ? getScene().getWindow().getOutputScaleX() : 1;
         int w = (int) Math.max(1, Math.round(getWidth() * scale)), h = (int) Math.max(1, Math.round(getHeight() * scale));
         if (w != pbW || h != pbH) {
@@ -521,6 +553,7 @@ public final class ViewportPane extends StackPane {
         Layer active = ws.activeLayerProperty().get();
         viewCube.update(camera);
         List<FrameRequest.LayerDraw> draws = sceneRenderer.layerDraws(active == null ? null : active.id());
+        if (previewRenderer != null) draws.addAll(previewRenderer.layerDraws(null));
         List<FrameRequest.Line> lines = new ArrayList<>();
 
         for (Layer l : ws.scene().layers()) {
@@ -554,6 +587,7 @@ public final class ViewportPane extends StackPane {
 
         drawBrushPreview(lines);
         drawShapePreview(lines);
+        drawPluginPreview(lines);
         drawSymmetry(lines);
         updateGizmo();
 
@@ -714,6 +748,7 @@ public final class ViewportPane extends StackPane {
                 return;
             }
             updateHover(e.getX(), e.getY());
+            if (pluginToolActive()) pluginTool.hover(toolEvent(e.getX(), e.getY(), MouseButton.NONE, e.isShiftDown(), e.isShortcutDown(), e.isAltDown()));
             Gizmo.Handle h = gizmo.hit(e.getX(), e.getY());
             if (!java.util.Objects.equals(h, gizmoHot)) {
                 gizmoHot = h;
@@ -1015,6 +1050,11 @@ public final class ViewportPane extends StackPane {
             orbitPivot = viewSwing ? null : pivotUnder(e.getX(), e.getY());
             return;
         }
+        if (pluginToolActive() && (e.getButton() == MouseButton.PRIMARY || e.getButton() == MouseButton.SECONDARY)) {
+            updateHover(e.getX(), e.getY());
+            pluginTool.press(toolEvent(e.getX(), e.getY(), e.getButton(), e.isShiftDown(), e.isShortcutDown(), e.isAltDown()));
+            return;
+        }
         if (e.getButton() == MouseButton.SECONDARY && (mode == ToolKind.BRUSH || mode == ToolKind.ERASER) && placing.isEmpty()) {
             // Right-drag smooths; Shift+right-click opens the brush settings instead (on release, see onRelease).
             if (!e.isShiftDown()) {
@@ -1049,6 +1089,9 @@ public final class ViewportPane extends StackPane {
                 // A click on a layer selects it on release (see onRelease).
             }
             case BRUSH, ERASER -> startStroke(null, e.isShiftDown(), e.isShortcutDown());
+            case PLUGIN -> {
+                // Handled above, before the other buttons.
+            }
         }
     }
 
@@ -1089,6 +1132,11 @@ public final class ViewportPane extends StackPane {
             updateHover(e.getX(), e.getY());
             return;
         }
+        if (pluginToolActive() && (dragButton == MouseButton.PRIMARY || dragButton == MouseButton.SECONDARY)) {
+            updateHover(e.getX(), e.getY());
+            pluginTool.drag(toolEvent(e.getX(), e.getY(), dragButton, e.isShiftDown(), e.isShortcutDown(), e.isAltDown()));
+            return;
+        }
         if (dragButton != MouseButton.PRIMARY) return;
         if (gizmoDrag != null) {
             dragGizmo(e.getX(), e.getY());
@@ -1110,6 +1158,13 @@ public final class ViewportPane extends StackPane {
             commitShape();
             dragButton = null;
             if (fly) e.consume();
+            return;
+        }
+        if (!fly && pluginToolActive() && (e.getButton() == MouseButton.PRIMARY || e.getButton() == MouseButton.SECONDARY)) {
+            updateHover(e.getX(), e.getY());
+            pluginTool.release(toolEvent(e.getX(), e.getY(), e.getButton(), e.isShiftDown(), e.isShortcutDown(), e.isAltDown()));
+            dragButton = null;
+            requestRedraw();
             return;
         }
         boolean click = dragDistance <= CLICK_SLOP;
@@ -1188,6 +1243,11 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (delta == 0) return;
+        if (pluginToolActive() && pluginTool.scroll(toolEvent(e.getX(), e.getY(), MouseButton.NONE, e.isShiftDown(), e.isShortcutDown(), e.isAltDown()),
+                delta > 0 ? 1 : -1)) {
+            e.consume();
+            return;
+        }
         int sign = delta > 0 ? 1 : -1;
         if (e.isControlDown() && e.isShiftDown()) {
             nudge(0, sign, 0);
@@ -1890,6 +1950,12 @@ public final class ViewportPane extends StackPane {
             byType.getItems().addAll(
                     item("Select or replace…", "Alt+T", () -> openSelectByType(type)));
             contextMenu.getItems().add(byType);
+        }
+        List<javafx.scene.control.MenuItem> transforms = transformItems.get();
+        if (!transforms.isEmpty() && (n > 0 || layer != null)) {
+            javafx.scene.control.Menu tm = new javafx.scene.control.Menu(n > 0 ? "Transform selection" : "Transform " + layer.name());
+            tm.getItems().setAll(transforms);
+            contextMenu.getItems().add(tm);
         }
         if (n > 0) {
             contextMenu.getItems().addAll(
@@ -3518,6 +3584,7 @@ public final class ViewportPane extends StackPane {
                 ws.scene().setActive(touched.getLast());
             }
         }
+        selectionListener.run();
         requestRedraw();
     }
 
@@ -3607,6 +3674,211 @@ public final class ViewportPane extends StackPane {
             le.reconnect();
         });
         return true;
+    }
+
+    // ---- plugin tools ---------------------------------------------------------------------------------------------
+
+    /** A plugin tool is the active tool and nothing is being placed: mouse input goes to it. */
+    private boolean pluginToolActive() {
+        return pluginTool != null && ws.toolProperty().get() == ToolKind.PLUGIN && placing.isEmpty();
+    }
+
+    /**
+     * Makes a plugin tool the viewport's tool (the caller then sets the PLUGIN tool mode); null puts the current one
+     * down. Returns false when the plugin failed to activate it.
+     */
+    public boolean setPluginTool(io.blockdesigner.app.plugins.PluginManager.Tool tool, io.blockdesigner.app.plugins.PluginManager plugins) {
+        if (pluginTool != null) {
+            PluginToolSession old = pluginTool;
+            pluginTool = null;
+            old.deactivate();
+        }
+        pluginToolBar.getChildren().clear();
+        if (tool == null) {
+            updateHotbarVisibility();
+            return true;
+        }
+        PluginToolSession s = new PluginToolSession(ws, plugins, tool, new PluginToolSession.Viewport() {
+            @Override
+            public void showPreview(java.util.Map<BlockPos, BlockState> ghosts, List<BlockPos> removed, List<Box> outlines) {
+                ViewportPane.this.showPreview(ghosts, removed, outlines);
+            }
+
+            @Override
+            public LayeredEdit newEdit(String label) {
+                Layer active = ws.activeLayerProperty().get();
+                return new LayeredEdit(ws, worldLayers(), active != null && !active.locked() ? active : null, ViewportPane.this::newLayer, label, null);
+            }
+        });
+        if (!s.activate()) {
+            updateHotbarVisibility();
+            return false;
+        }
+        pluginTool = s;
+        var opts = tool.tool().options();
+        if (!opts.isEmpty()) {
+            Label title = new Label(tool.tool().name());
+            title.getStyleClass().add("brush-title");
+            OptionsEditor editor = new OptionsEditor(s.options(), plugins.blocks(), () -> ws.selectedBlockProperty().get(), s::setOptions);
+            editor.setPrefWidth(320);
+            pluginToolBar.getChildren().addAll(title, editor);
+        }
+        updateHotbarVisibility();
+        if (ws.toolProperty().get() == ToolKind.PLUGIN) showToast(pluginToolToast());
+        requestFocus();
+        return true;
+    }
+
+    /** The active plugin tool, if one is picked. */
+    public Optional<io.blockdesigner.app.plugins.PluginManager.Tool> pluginTool() {
+        return Optional.ofNullable(pluginTool).map(PluginToolSession::tool);
+    }
+
+    private String pluginToolToast() {
+        if (pluginTool == null) return "Plugin tool";
+        var t = pluginTool.tool().tool();
+        return t.name() + (t.description().isBlank() ? "" : " · " + t.description());
+    }
+
+    /** Offers a key press to the active plugin tool; true when it used it. */
+    boolean pluginToolKey(KeyEvent e) {
+        if (!pluginToolActive() || e.getCode().isModifierKey()) return false;
+        String name = switch (e.getCode()) {
+            case ESCAPE -> "Esc";
+            case ENTER -> "Enter";
+            default -> e.getCode().getName();
+        };
+        String key = (e.isShortcutDown() ? "Ctrl+" : "") + (e.isAltDown() ? "Alt+" : "") + (e.isShiftDown() ? "Shift+" : "") + name;
+        return pluginTool.key(key);
+    }
+
+    /** What the mouse points at, for a plugin tool. */
+    private io.blockdesigner.plugin.ToolEvent toolEvent(double x, double y, MouseButton button, boolean shift, boolean ctrl, boolean alt) {
+        Optional<io.blockdesigner.plugin.ToolEvent.Hit> hit = Optional.empty();
+        if (hover != null) {
+            hit = Optional.of(new io.blockdesigner.plugin.ToolEvent.Hit(hover.world(), dirOf(hover.normal()), hover.adjacentWorld(), Optional.of(hover.layer())));
+        } else if (hoverGround != null) {
+            hit = Optional.of(new io.blockdesigner.plugin.ToolEvent.Hit(hoverGround.add(0, -1, 0), BlockPlacement.Dir.UP, hoverGround, Optional.empty()));
+        }
+        java.util.EnumSet<io.blockdesigner.plugin.ToolEvent.Modifier> mods = java.util.EnumSet.noneOf(io.blockdesigner.plugin.ToolEvent.Modifier.class);
+        if (shift) mods.add(io.blockdesigner.plugin.ToolEvent.Modifier.SHIFT);
+        if (ctrl) mods.add(io.blockdesigner.plugin.ToolEvent.Modifier.CTRL);
+        if (alt) mods.add(io.blockdesigner.plugin.ToolEvent.Modifier.ALT);
+        var b = switch (button) {
+            case PRIMARY -> io.blockdesigner.plugin.ToolEvent.Button.PRIMARY;
+            case SECONDARY -> io.blockdesigner.plugin.ToolEvent.Button.SECONDARY;
+            case MIDDLE -> io.blockdesigner.plugin.ToolEvent.Button.MIDDLE;
+            default -> io.blockdesigner.plugin.ToolEvent.Button.NONE;
+        };
+        Vector3f[] r = ray(x, y);
+        return new io.blockdesigner.plugin.ToolEvent(hit, b, mods, new io.blockdesigner.plugin.ToolEvent.Vec3(r[0].x, r[0].y, r[0].z),
+                new io.blockdesigner.plugin.ToolEvent.Vec3(r[1].x, r[1].y, r[1].z));
+    }
+
+    private static BlockPlacement.Dir dirOf(BlockPos normal) {
+        for (BlockPlacement.Dir d : BlockPlacement.Dir.values()) {
+            if (d.x == normal.x() && d.y == normal.y() && d.z == normal.z()) return d;
+        }
+        return BlockPlacement.Dir.UP;
+    }
+
+    // ---- plugin transforms and previews ------------------------------------------------------------------------
+
+    /** Tells {@code listener} when the block selection or the //pos1 //pos2 region may have changed. */
+    public void onSelectionChanged(Runnable listener) {
+        this.selectionListener = listener;
+    }
+
+    /**
+     * Catches selection changes made without going through {@link #selectionChanged()} (there are many paths that
+     * edit the selection): a change in the count or the region is enough to notice nearly all of them.
+     */
+    private void checkSelection() {
+        int n = selectedBlockCount();
+        Box r = worldEdit.region();
+        if (n != lastSelCount || !java.util.Objects.equals(r, lastSelRegion)) {
+            lastSelCount = n;
+            lastSelRegion = r;
+            selectionListener.run();
+        }
+    }
+
+    /** World box around the selected blocks, or the //pos region when none are selected; empty when neither exists. */
+    public Optional<Box> selectionBounds() {
+        Box b = null;
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l == null) continue;
+            for (long packed : e.getValue()) {
+                BlockPos w = l.toWorld(BlockPos.unpack(packed));
+                Box one = new Box(w.x(), w.y(), w.z(), w.x(), w.y(), w.z());
+                b = b == null ? one : b.union(one);
+            }
+        }
+        return Optional.ofNullable(b != null ? b : worldEdit.region());
+    }
+
+    public void setTransformItems(java.util.function.Supplier<List<javafx.scene.control.MenuItem>> items) {
+        this.transformItems = items;
+    }
+
+    /** The blocks a plugin transform of this scope works on now, or null when there are none. */
+    public io.blockdesigner.app.plugins.TransformRunner.Target transformTarget(io.blockdesigner.plugin.PluginTransform.Scope scope) {
+        return TransformTargets.resolve(ws, scope, blockSel, worldEdit.region(), worldLayers(), ws.activeLayerProperty().get());
+    }
+
+    /** Why {@link #transformTarget} found nothing, for a toast. */
+    public String transformTargetMissing(io.blockdesigner.plugin.PluginTransform.Scope scope) {
+        return TransformTargets.nothingMessage(scope, ws.activeLayerProperty().get());
+    }
+
+    /** The blocks as a transform on {@code target} reads them (nothing written through it is kept). */
+    public io.blockdesigner.core.worldedit.WorldEdit.World transformWorld(io.blockdesigner.app.plugins.TransformRunner.Target target) {
+        return TransformTargets.readWorld(ws, target, worldLayers());
+    }
+
+    /** Writes a transform's changes as one undo step; returns how many cells changed. */
+    public int applyTransform(String label, io.blockdesigner.app.plugins.TransformRunner.Target target,
+                              io.blockdesigner.app.plugins.TransformRunner.Changes changes) {
+        int n = TransformTargets.apply(ws, target, changes, label, worldLayers(), ws.activeLayerProperty().get());
+        requestRedraw();
+        return n;
+    }
+
+    /**
+     * Shows ghost blocks (world positions) over the scene, red outlines around {@code removed} cells and white ones
+     * around {@code outlines}, replacing any earlier preview.
+     */
+    public void showPreview(java.util.Map<BlockPos, BlockState> ghosts, List<BlockPos> removed, List<Box> outlines) {
+        if (previewLayer != null) previewScene.remove(previewLayer);
+        previewLayer = null;
+        if (!ghosts.isEmpty()) {
+            io.blockdesigner.core.model.Structure s = new io.blockdesigner.core.model.Structure();
+            ghosts.forEach(s::set);
+            previewLayer = new Layer("Preview", s);
+            previewLayer.setGhost(true);
+            previewScene.add(previewLayer);
+        }
+        previewRemoved = List.copyOf(removed);
+        previewOutlines = List.copyOf(outlines);
+        requestRedraw();
+    }
+
+    public void clearPreview() {
+        showPreview(java.util.Map.of(), List.of(), List.of());
+    }
+
+    private void drawPluginPreview(List<FrameRequest.Line> lines) {
+        float e = 0.03f;
+        for (Box b : previewOutlines) {
+            Overlays.box(lines, b.minX() - e, b.minY() - e, b.minZ() - e, b.maxX() + 1 + e, b.maxY() + 1 + e, b.maxZ() + 1 + e, 0xE6FFFFFF);
+        }
+        if (previewRemoved.size() <= SEL_OUTLINE_LIMIT) {
+            for (BlockPos p : previewRemoved) Overlays.block(lines, p.x(), p.y(), p.z(), 0xFFE5484D);
+        } else {
+            Box b = io.blockdesigner.core.place.ShapeTool.bounds(previewRemoved);
+            if (b != null) Overlays.box(lines, b.minX() - e, b.minY() - e, b.minZ() - e, b.maxX() + 1 + e, b.maxY() + 1 + e, b.maxZ() + 1 + e, 0xFFE5484D);
+        }
     }
 
     // ---- build shapes ---------------------------------------------------------------------------------------
@@ -3949,6 +4221,7 @@ public final class ViewportPane extends StackPane {
     }
 
     private void selectionChanged() {
+        selectionListener.run();
         int n = selectedBlockCount(), ne = entitySel.values().stream().mapToInt(java.util.Set::size).sum();
         Box r = worldEdit.region();
         String box = r == null ? "" : String.format(" · pos1 %s, pos2 %s (%d×%d×%d)", worldEdit.pos1(), worldEdit.pos2(), r.sizeX(), r.sizeY(), r.sizeZ());
@@ -4130,7 +4403,8 @@ public final class ViewportPane extends StackPane {
     /** The hotbar shows in Build mode. */
     private void updateHotbarVisibility() {
         ToolKind t = ws.toolProperty().get();
-        hotbar.setVisible(t == ToolKind.BUILD || t == ToolKind.BRUSH);
+        hotbar.setVisible(t == ToolKind.BUILD || t == ToolKind.BRUSH || t == ToolKind.PLUGIN);
+        pluginToolBar.setVisible(t == ToolKind.PLUGIN && pluginTool != null && !pluginToolBar.getChildren().isEmpty());
         boolean brush = t == ToolKind.BRUSH || t == ToolKind.ERASER;
         brushBar.setVisible(brush);
         if (brush) brushBar.show(t == ToolKind.ERASER);
@@ -4260,6 +4534,10 @@ public final class ViewportPane extends StackPane {
                     h.add(KeyHints.Hint.of("Erase", "LMB"));
                     hint(h, "Smaller eraser", Keybinds.Action.BRUSH_SMALLER);
                     hint(h, "Bigger eraser", Keybinds.Action.BRUSH_BIGGER);
+                }
+                case PLUGIN -> {
+                    h.add(KeyHints.Hint.of(pluginTool == null ? "Use the tool" : pluginTool.tool().tool().name(), "LMB"));
+                    h.add(KeyHints.Hint.of("Other action", "RMB"));
                 }
                 case VIEW -> {
                 }

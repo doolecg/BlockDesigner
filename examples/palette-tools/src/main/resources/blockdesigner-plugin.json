@@ -1,0 +1,9 @@
+{
+  "id": "palette-tools",
+  "name": "Palette Tools",
+  "version": "1.0.0",
+  "author": "BlockDesigner",
+  "description": "Example plugin for API 2: weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool.",
+  "main": "com.example.palette.PaletteToolsPlugin",
+  "api": 2
+}
