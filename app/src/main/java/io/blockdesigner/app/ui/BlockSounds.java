@@ -16,8 +16,9 @@ import java.util.Random;
  * <p>
  * Painting: {@code sounds/paint.wav} is split by its loudness into an intro (played once when a stroke starts), a
  * steady middle that loops (crossfaded so the seam doesn't click) while the stroke goes on, and the tail, which plays
- * when the stroke ends. UI: soft synthesised pick-up and put-down pops and a tick for the hotbar, which buttons and
- * menu items share, in the spirit of the Extra Sounds mod.
+ * when the stroke ends. UI sounds (in the spirit of the Extra Sounds mod) are the same place / break recordings,
+ * played lower and quieter: the hotbar tick (which buttons and menu items share) and putting a block in the hotbar
+ * use the place sound, picking a block up the break sound.
  */
 final class BlockSounds {
     private static final float RATE = 44100;
@@ -27,8 +28,6 @@ final class BlockSounds {
     private final float[][] place, breaks;
     /** The paint sound's parts (null without a paint.wav): intro, crossfaded loop, and the tail (fading in). */
     private final float[] paintIntro, paintLoop, paintTail;
-    /** UI sounds, synthesised. */
-    private final float[] pickUp, putDown, tick;
     // Paint voice state, guarded by voices: 0 off, 1 intro, 2 looping, 3 fading out (the tail is then a normal voice).
     private int paintState, paintPos;
     private float paintGain, paintFade;
@@ -68,9 +67,6 @@ final class BlockSounds {
         paintIntro = paint == null ? null : paint[0];
         paintLoop = paint == null ? null : paint[1];
         paintTail = paint == null ? null : paint[2];
-        pickUp = blip(520, 980, 0.07, 0.08, 0.7);
-        putDown = blip(900, 480, 0.08, 0.1, 0.7);
-        tick = blip(1800, 1700, 0.012, 0.2, 0.45);
         // Open the audio device now (it can take a few hundred ms), so the first click isn't late.
         Thread warm = new Thread(this::open, "block-sounds-open");
         warm.setDaemon(true);
@@ -154,7 +150,7 @@ final class BlockSounds {
     }
 
     /** The bundled {@code <name>.wav}, {@code <name>-2.wav}… as mono float samples at {@link #RATE}, levelled. */
-    private static float[][] loadRecordings(String name) {
+    static float[][] loadRecordings(String name) {
         List<float[]> out = new ArrayList<>();
         for (int i = 1; i <= 32; i++) {
             var url = BlockSounds.class.getResource("/io/blockdesigner/app/sounds/" + name + (i == 1 ? "" : "-" + i) + ".wav");
@@ -250,50 +246,29 @@ final class BlockSounds {
         tick(volume, 0);
     }
 
-    /** A block was taken (from the palette, or picked in the world). */
+    /** A block was taken (from the palette, or picked in the world): the break sound, lower and quiet. */
     void pickUp(double volume) {
-        ui(pickUp, volume * 0.55, 1);
+        ui(breaks, volume * 0.35, 0.85);
     }
 
-    /** A block was put in the hotbar. */
+    /** A block was put in the hotbar: the place sound, deepest. */
     void putDown(double volume) {
-        ui(putDown, volume * 0.55, 1);
+        ui(place, volume * 0.4, 0.72);
     }
 
-    /** The held hotbar slot changed: a tick that rises a little with the slot number. */
+    /** The held hotbar slot changed: the place sound, low and soft, rising a little with the slot number. */
     void tick(double volume, int slot) {
-        ui(tick, volume * 0.45, 1 + slot * 0.03);
+        ui(place, volume * 0.3, 0.8 + slot * 0.02);
     }
 
-    private void ui(float[] samples, double volume, double rate) {
-        if (volume <= 0 || line == null) return;
+    /** One of the recordings (a different variant from last time), at {@code rate} (below 1 is lower and longer). */
+    private void ui(float[][] set, double volume, double rate) {
+        if (volume <= 0 || line == null || set.length == 0) return;
         synchronized (voices) {
             if (voices.size() >= 8) voices.removeFirst();
-            voices.add(new Voice(samples, (float) volume, rate, new double[]{0}));
+            voices.add(new Voice(set[random.nextInt(set.length)], (float) volume, rate, new double[]{0}));
             voices.notifyAll();
         }
-    }
-
-    /**
-     * A short UI sound: a sine gliding from {@code fromHz} to {@code toHz} over {@code seconds} with a quick attack
-     * and decay, plus a touch of filtered noise ({@code noise}) for texture, peaking at {@code gain}.
-     */
-    static float[] blip(double fromHz, double toHz, double seconds, double noise, double gain) {
-        int n = (int) (RATE * seconds);
-        float[] s = new float[n];
-        Random r = new Random(11);
-        double phase = 0, lp = 0, peak = 1e-9;
-        for (int i = 0; i < n; i++) {
-            double t = (double) i / n;
-            phase += 2 * Math.PI * (fromHz + (toHz - fromHz) * t) / RATE;
-            double env = Math.min(1, i / (RATE * 0.002)) * Math.pow(1 - t, 2.2);
-            lp += 0.35 * ((r.nextDouble() * 2 - 1) - lp);
-            s[i] = (float) ((Math.sin(phase) + noise * lp) * env);
-            peak = Math.max(peak, Math.abs(s[i]));
-        }
-        float k = (float) (gain / peak);
-        for (int i = 0; i < n; i++) s[i] *= k;
-        return s;
     }
 
     void place(double volume) {

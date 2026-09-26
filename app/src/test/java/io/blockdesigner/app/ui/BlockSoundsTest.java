@@ -28,14 +28,4 @@ class BlockSoundsTest {
         assertThat(Math.abs(tail[0])).isLessThan(1e-4f);
         for (float[] p : parts) for (float v : p) assertThat(Math.abs(v)).isLessThan(1f);
     }
-
-    @Test
-    void uiSoundsAreShortAndSoft() {
-        float[] click = BlockSounds.blip(2600, 1900, 0.018, 0.35, 0.55);
-        assertThat(click.length / RATE).isLessThan(0.03f);
-        float peak = 0;
-        for (float v : click) peak = Math.max(peak, Math.abs(v));
-        assertThat(peak).isCloseTo(0.55f, org.assertj.core.data.Offset.offset(0.01f));
-        assertThat(Math.abs(click[click.length - 1])).isLessThan(0.01f);
-    }
 }

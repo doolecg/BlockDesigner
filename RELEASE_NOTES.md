@@ -1,3 +1,28 @@
+# BlockDesigner 0.4.6
+
+Softer interface sounds: clicks, the hotbar, and picking up or putting down blocks now use the place and break sounds, played lower and quieter, so everything sounds like one set.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.6.exe** | You want a normal install. Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.6-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand (see [0.4.2](https://github.com/doolecg/BlockDesigner/releases/tag/0.4.2)).
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Changed
+- **The interface sounds are quieter, lower versions of the place and break sounds.** They replace the high-pitched ones from 0.4.5:
+  - **buttons, toggles, menu items and the hotbar:** the place sound, low and soft, rising a little from hotbar slot 1 to 9;
+  - **picking up a block** (from the palette, or middle-click): the break sound, lower and quiet;
+  - **a block landing in the hotbar:** the place sound at its deepest.
+  
+  Building itself sounds as before. Viewport settings › Editing › UI sounds still turns them off.
+
+---
+
 # BlockDesigner 0.4.5
 
 Sounds: painting with the brush has its own looping sound, and the interface has soft sounds for clicks, picking up blocks and the hotbar. Clicking a button over the 3D view no longer also breaks, places or paints behind it.
