@@ -18,7 +18,7 @@ import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Block entity data and entities carried through WorldEdit commands, and /fixshapes. */
+/** Block entity data and entities carried through BlockEdit commands, and /fixshapes. */
 class WorldEditDataTest {
     final Map<BlockPos, BlockState> blocks = new HashMap<>();
     final Map<BlockPos, CompoundTag> nbt = new HashMap<>();

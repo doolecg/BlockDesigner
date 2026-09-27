@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Build-mode shapes placed by right-dragging (in the spirit of the Effortless Building mod). A shape is defined by
+ * Build-mode shapes placed by right-dragging (Easy Build). A shape is defined by
  * the cell where the drag started ({@code a}), the cell under the mouse now ({@code b}) and, for 3D shapes, a
  * height set with the mouse wheel.
  */

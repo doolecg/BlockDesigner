@@ -15,7 +15,7 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
- * Minecraft-chat-style WorldEdit command line along the bottom of the viewport (T or "/" opens it, like Minecraft's chat). Shows matching commands
+ * Minecraft-chat-style BlockEdit command line along the bottom of the viewport (T or "/" opens it, like Minecraft's chat). Shows matching commands
  * with their usage as you type; Tab completes, ↑ ↓ walk the history, Enter runs, Esc closes. A failed command keeps
  * the bar open with the error so it can be fixed.
  */

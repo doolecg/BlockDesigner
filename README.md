@@ -18,7 +18,7 @@
 
 ---
 
-BlockDesigner is a desktop app for planning Minecraft structures outside the game. You build block by block with the controls you know from creative mode (flight, a hotbar, place / break / pick block), use shapes, symmetry, sculpting brushes and WorldEdit-style commands, and keep every imported or new schematic as its own layer. The textures and models come from your own Minecraft install (modded instances too), and nothing from Minecraft is shipped with the app.
+BlockDesigner is a desktop app for planning Minecraft structures outside the game. You build block by block with the controls you know from creative mode (flight, a hotbar, place / break / pick block), use shapes, symmetry, sculpting brushes and BlockEdit commands, and keep every imported or new schematic as its own layer. The textures and models come from your own Minecraft install (modded instances too), and nothing from Minecraft is shipped with the app.
 
 **Contents:** [Download](#download-and-install) · [Features](#features) · [Controls](#controls-and-keybinds) · [Plugins](#plugins) · [Building from source](#building-from-source) · [Project layout](#project-layout)
 
@@ -46,22 +46,22 @@ Both include their own Java runtime, so there is nothing else to install.
 - **Placement** works as in the game: stairs and slabs go top or bottom, logs follow the clicked face, torches and signs go on walls, and doors and beds place both halves. Fences, walls, panes, redstone dust and rails connect to their neighbours.
 - **Palette** laid out like the creative menu (Building, Colored, Natural, Functional, Redstone, plus All and Recently used), with Minecraft's own block names from the game's and each mod's language files. Hover a block and press 1–9 to put it in that hotbar slot.
 - **Replace** (swap the aimed block, keeping its facing) and **Shuffle** (random blocks from the hotbar) modes.
-- **Shapes** (hold Alt in Build mode): line, wall, floor, box, room, walls, circle, ring, cylinder, sphere, dome and pyramid, drawn out with a preview and placed as one undo step. They grow from the face you start on.
+- **Easy Build shapes** (hold Alt in Build mode for the Easy Build wheel): line, wall, floor, box, room, walls, circle, ring, cylinder, sphere, dome and pyramid, drawn out with a preview and placed as one undo step. They grow from the face you start on.
 - **Symmetry** (M): mirror across X, Y and / or Z, or radial copies around a vertical axis. Stairs, doors, slabs and logs turn to match in every copy.
 - **Mobs as stand-ins:** place pigs, villagers, iron golems, armour stands, paintings and more, drawn with Minecraft's models where available. They are saved with the project and exported with the schematic.
 
 <p align="center">
   <img src="docs/images/palette.png" alt="The block palette, laid out like the creative menu" width="260">
   &nbsp;
-  <img src="docs/images/shape-wheel.png" alt="The shape wheel in Build mode" width="340">
+  <img src="docs/images/shape-wheel.png" alt="The Easy Build wheel in Build mode" width="340">
 </p>
 
-### Brushes, selections and WorldEdit
+### Brushes, selections and BlockEdit
 
 - **Sculpting brushes:** draw, erase, smooth, erode, fill, pinch, raise, lower, flatten and slope, with size, strength and shape settings, plus an Eraser. Each stroke is one undo step.
 - **Select** blocks by clicking, marquee-dragging or setting pos1 / pos2. **Select or replace by type** (Alt+T) finds blocks by kind and swaps them, keeping facing and other shared properties.
 - **Move and Rotate** gizmos (Blender-style) move or turn whole layers or just the selected blocks.
-- **Command line** (T or /), like Minecraft's chat: `/set`, `/replace`, `/walls`, `/copy`, `/paste`, `/stack`, `/smooth`, `/sphere` and more, with Tab completion and history. See the command table under [Controls](#controls-and-keybinds) › Select mode and WorldEdit.
+- **BlockEdit command line** (T or /), like Minecraft's chat: `/set`, `/replace`, `/walls`, `/copy`, `/paste`, `/stack`, `/smooth`, `/sphere` and more, with Tab completion and history. See the command table under [Controls](#controls-and-keybinds) › Select mode and BlockEdit.
 
 <p align="center">
   <img src="docs/images/replace-by-type.png" alt="Select or replace by type" width="330">
@@ -151,7 +151,7 @@ These are the default keys. **Every keyboard shortcut can be rebound in Settings
 | Left-click | Break (hold to repeat) |
 | Right-click | Place (hold to repeat), oriented like Minecraft |
 | Middle-click | Pick the block into the hotbar |
-| Hold Alt | Shape wheel: point at a shape and let go, then right-drag to draw it |
+| Hold Alt | Easy Build wheel: point at a shape and let go, then right-drag to draw it |
 | M / Shift+M | Symmetry settings / put the symmetry centre on the aimed block |
 | Shift+X | Replace mode: right-click swaps the aimed block and keeps its facing |
 | Shift+Z | Shuffle mode: place random blocks from the hotbar |
@@ -178,7 +178,7 @@ These are the default keys. **Every keyboard shortcut can be rebound in Settings
 </details>
 
 <details>
-<summary><b>Select mode and WorldEdit</b></summary>
+<summary><b>Select mode and BlockEdit</b></summary>
 
 | Key | Action |
 |---|---|

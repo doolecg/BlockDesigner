@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A WorldEdit-style command for the command bar (T or /), e.g. {@code /hello 5 stone}.
+ * A BlockEdit command for the command bar (T or /), e.g. {@code /hello 5 stone}.
  *
  * @param name        without the slash; lower case letters, digits and _
  * @param usage       shown while typing, e.g. {@code /hello <radius> [pattern]}
@@ -41,7 +41,7 @@ public record PluginCommand(String name, String usage, String description, Handl
      *
      * @param args   the words after the command name (flags removed)
      * @param flags  single letters given as {@code -x}
-     * @param world  every visible, unlocked layer merged in world coordinates; reads and writes behave like WorldEdit's
+     * @param world  every visible, unlocked layer merged in world coordinates; reads and writes behave like the built-in BlockEdit commands'
      * @param region the region selected with //pos1 //pos2 (or the region tool), if any
      * @param aim    the block under the crosshair, if any
      * @param hand   the held block, if any

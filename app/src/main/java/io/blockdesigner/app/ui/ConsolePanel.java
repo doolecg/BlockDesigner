@@ -35,8 +35,8 @@ import java.util.function.Consumer;
 
 /**
  * The console, docked above the status bar and opened from the button at the very bottom left: everything in
- * {@link ConsoleLog} (app output, errors, status messages, plugin logs, WorldEdit commands), filterable by level and text.
- * The line at the bottom runs WorldEdit commands, plus a few of its own (help, clear, copy).
+ * {@link ConsoleLog} (app output, errors, status messages, plugin logs, BlockEdit commands), filterable by level and text.
+ * The line at the bottom runs BlockEdit commands, plus a few of its own (help, clear, copy).
  */
 final class ConsolePanel extends VBox {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -278,7 +278,7 @@ final class ConsolePanel extends VBox {
             case "clear", "cls" -> clearLog();
             case "copy" -> copy();
             case "help", "?" -> ConsoleLog.info("console", """
-                    Commands: any WorldEdit command (/set, /replace, /walls, /copy, /paste… · /help lists them), \
+                    Commands: any BlockEdit command (/set, /replace, /walls, /copy, /paste… · /help lists them), \
                     clear, copy, errors (show only errors), all (show everything). \
                     ↑ ↓ walk the history, Esc closes, Ctrl+C copies the selected lines.""");
             case "errors" -> level.getSelectionModel().select(2);

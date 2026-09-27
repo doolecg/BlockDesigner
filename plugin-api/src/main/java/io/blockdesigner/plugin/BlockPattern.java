@@ -9,7 +9,7 @@ import java.util.Objects;
 import java.util.random.RandomGenerator;
 
 /**
- * A weighted mix of blocks, like WorldEdit's {@code 70%stone,30%andesite}. The value of a
+ * A weighted mix of blocks, written {@code 70%stone,30%andesite} (the same syntax as WorldEdit patterns). The value of a
  * {@link Options.Builder#blockList block list} option.
  *
  * @param entries at least one block with a positive weight

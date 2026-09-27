@@ -19,7 +19,7 @@ import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 /**
- * Symmetry settings (M in Build mode), like Effortless Building's mirror and radial mirror: mirror planes across X,
+ * Symmetry settings (M in Build mode), part of Easy Build: mirror planes across X,
  * Y and Z through a centre point, and N copies around a vertical axis. Applies to shapes, placing and breaking.
  */
 final class SymmetryPopup extends Popup {

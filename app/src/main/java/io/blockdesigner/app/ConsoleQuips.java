@@ -66,18 +66,18 @@ public final class ConsoleQuips {
                     "redo|Doc, we have to go back… to the future!",
                     "redo|redo stack popped. and we're so back")),
             Map.entry(Event.COMMAND, List.of(
-                    "worldedit|//wand not required. we're built different",
-                    "worldedit|command ran in O(n). n is your blocks. sorry",
-                    "worldedit|sudo make me a castle",
-                    "worldedit|that command understood the assignment")),
+                    "blockedit|//wand not required. we're built different",
+                    "blockedit|command ran in O(n). n is your blocks. sorry",
+                    "blockedit|sudo make me a castle",
+                    "blockedit|that command understood the assignment")),
             Map.entry(Event.BIG_COMMAND, List.of(
-                    "worldedit|You're gonna need a bigger boat.",
-                    "worldedit|vanilla /fill caps at 32768 blocks. couldn't be us",
-                    "worldedit|that's a lot of blocks. GPU said \"bet\"",
-                    "worldedit|I am inevitable. *snap*")),
+                    "blockedit|You're gonna need a bigger boat.",
+                    "blockedit|vanilla /fill caps at 32768 blocks. couldn't be us",
+                    "blockedit|that's a lot of blocks. GPU said \"bet\"",
+                    "blockedit|I am inevitable. *snap*")),
             Map.entry(Event.HELP, List.of(
                     "advancements|Advancement made! [RTFM]",
-                    "man|man worldedit: No manual entry. but we got you")),
+                    "man|man blockedit: No manual entry. but we got you")),
             Map.entry(Event.PLUGIN, List.of(
                     "classloader|\"I know kung fu.\"",
                     "classloader|new jar just dropped",

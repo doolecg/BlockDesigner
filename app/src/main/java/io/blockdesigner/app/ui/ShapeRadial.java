@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * The build-shape wheel (hold Alt in Build mode): one sector per shape around the mouse. Moving the mouse towards a
+ * The Easy Build wheel (hold Alt in Build mode): one sector per shape around the mouse. Moving the mouse towards a
  * sector highlights it and releasing Alt picks it; the middle keeps the current shape. Sectors can also be clicked.
  */
 final class ShapeRadial extends Pane {
@@ -164,7 +164,7 @@ final class ShapeRadial extends Pane {
         for (int k = 0; k < sectors.size(); k++) sectors.get(k).pseudoClassStateChanged(HOT, k == i);
         Shape s = i < 0 ? current : shapes[i];
         title.setText(i < 0 ? "Keep " + shortName(current) : shortName(s));
-        sub.setText(i < 0 ? "Release Alt to close" : s.description);
+        sub.setText(i < 0 ? "Easy Build · release Alt to close" : s.description);
     }
 
     /** The highlighted shape, or null for "keep the current one". */

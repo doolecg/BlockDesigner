@@ -1374,7 +1374,7 @@ public final class MainWindow {
     }
 
     private void projectExtrasLoaded(Map<String, byte[]> extras) {
-        // The block selection, selected entities and WorldEdit region come back as they were saved.
+        // The block selection, selected entities and BlockEdit region come back as they were saved.
         viewport.loadSelectionExtras(extras);
         // Plugin scene objects (those of plugins that are off wait, parked, until the plugin is on again).
         ws.objects().load(extras);

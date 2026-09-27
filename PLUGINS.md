@@ -187,7 +187,7 @@ The examples in this section come from [`HelloPlugin.java`](examples/hello-plugi
 
 ### Commands
 
-A `PluginCommand` adds a WorldEdit-style command to the command bar (T or /), with its usage shown while typing and a line in `/help`. Names use `a-z 0-9 _`. The handler gets a `Context` with the arguments (`args`, with `-x` flags split out into `flags`), a `world` of every visible, unlocked layer merged in world coordinates, the `//pos1 //pos2` `region`, the aimed block (`aim`), the held block (`hand`) and a block resolver. Everything written to `c.world()` is one undo step. Throw `IllegalArgumentException` for a friendly error in the command bar; return the success message.
+A `PluginCommand` adds a BlockEdit command to the command bar (T or /), with its usage shown while typing and a line in `/help`. Names use `a-z 0-9 _`. The handler gets a `Context` with the arguments (`args`, with `-x` flags split out into `flags`), a `world` of every visible, unlocked layer merged in world coordinates, the `//pos1 //pos2` `region`, the aimed block (`aim`), the held block (`hand`) and a block resolver. Everything written to `c.world()` is one undo step. Throw `IllegalArgumentException` for a friendly error in the command bar; return the success message.
 
 ```java
 ctx.registerCommand(new PluginCommand("pillar", "/pillar <height> [block]", "Build a pillar on the aimed block", c -> {

@@ -20,7 +20,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * WorldEdit-style editing: a cuboid region between pos1 and pos2, a clipboard, and the familiar commands
+ * BlockEdit, the app's command editing: a cuboid region between pos1 and pos2, a clipboard, and the familiar commands
  * ({@code /set}, {@code /replace}, {@code /walls}, {@code /copy}, {@code /paste}, {@code /stack}, {@code /sphere}…).
  * The session state lives here; the caller supplies the world to read and write and the player's aim and look.
  */
@@ -596,7 +596,7 @@ public final class WorldEdit {
         return Result.region("Region " + (out ? "outset" : "inset") + " by " + n + ".");
     }
 
-    /** WorldEdit's /smooth: blurs the heightmap of the region's columns and raises / lowers them to match. */
+    /** BlockEdit's /smooth: blurs the heightmap of the region's columns and raises / lowers them to match. */
     private Result smoothRegion(List<String> args, Context c) {
         Box b = needRegion();
         int passes = args.isEmpty() ? 1 : integer(args.getFirst());
@@ -651,7 +651,7 @@ public final class WorldEdit {
     private static final java.util.Set<String> NATURAL = java.util.Set.of("minecraft:stone", "minecraft:dirt", "minecraft:grass_block",
             "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:mycelium", "minecraft:rooted_dirt");
 
-    /** WorldEdit's /naturalize: by depth below each column's surface, grass, three dirt, then stone. */
+    /** BlockEdit's /naturalize: by depth below each column's surface, grass, three dirt, then stone. */
     private Result naturalize(Context c) {
         Box b = needRegion();
         BlockState grass = BlockState.of("grass_block").withProperties(Map.of("snowy", "false")), dirt = BlockState.of("dirt"), stone = BlockState.of("stone");
@@ -674,7 +674,7 @@ public final class WorldEdit {
         return done(n);
     }
 
-    /** WorldEdit's /hollow: keeps a shell of {@code thickness} around solid shapes and clears (or fills) the inside. */
+    /** BlockEdit's /hollow: keeps a shell of {@code thickness} around solid shapes and clears (or fills) the inside. */
     private Result hollow(List<String> args, Context c) {
         Box b = needRegion();
         int thick = args.isEmpty() ? 1 : integer(args.getFirst());
@@ -713,7 +713,7 @@ public final class WorldEdit {
         return done(n);
     }
 
-    /** WorldEdit's /center: the middle block of the region (two per axis when that side is even). */
+    /** BlockEdit's /center: the middle block of the region (two per axis when that side is even). */
     private Result center(List<String> args, Context c) {
         if (args.isEmpty()) throw new IllegalArgumentException("Usage: /center <pattern>");
         Box b = needRegion();

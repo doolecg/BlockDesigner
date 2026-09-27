@@ -724,7 +724,7 @@
     -fx-max-width: 260;
 }
 
-/* ---------- WorldEdit command bar ---------- */
+/* ---------- BlockEdit command bar ---------- */
 
 .command-bar {
     -fx-background-color: -bd-glass;

@@ -127,8 +127,8 @@ public final class ViewportPane extends StackPane {
     // input state
     private double lastX, lastY, pressX, pressY;
 
-    // ---- build shapes (Effortless Building style) ----
-    /** Shape wheel, opened by holding Alt in Build mode. */
+    // ---- build shapes (Easy Build) ----
+    /** The Easy Build wheel, opened by holding Alt in Build mode. */
     private final ShapeRadial shapeRadial = new ShapeRadial(this::pickShape);
     /** Waits a moment after Alt goes down so Alt+key shortcuts never flash the wheel. */
     private final PauseTransition radialDelay = new PauseTransition(Duration.millis(140));
@@ -257,7 +257,7 @@ public final class ViewportPane extends StackPane {
     private final javafx.scene.layout.Region modeFrame = new javafx.scene.layout.Region();
     private Stroke stroke;
     private long lastBrushSound;
-    // WorldEdit: pos1 / pos2 region, clipboard and the "/" command bar
+    // BlockEdit: pos1 / pos2 region, clipboard and the "/" command bar
     private final io.blockdesigner.core.worldedit.WorldEdit worldEdit = new io.blockdesigner.core.worldedit.WorldEdit();
     private final CommandBar commandBar = new CommandBar(this::runCommand, this::blockIds);
     private final javafx.scene.control.Button commandButton = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.TERMINAL));
@@ -324,7 +324,7 @@ public final class ViewportPane extends StackPane {
         StackPane.setAlignment(filterButton, Pos.TOP_RIGHT);
         StackPane.setMargin(filterButton, new javafx.geometry.Insets(94, 12, 0, 0));
         commandButton.getStyleClass().addAll("flat", "viewport-settings-button");
-        commandButton.setTooltip(Keybinds.tooltip("WorldEdit commands", "/set, /replace, /walls, /copy, /paste, /stack, /sphere…", Keybinds.Action.COMMAND_BAR));
+        commandButton.setTooltip(Keybinds.tooltip("BlockEdit commands", "/set, /replace, /walls, /copy, /paste, /stack, /sphere…", Keybinds.Action.COMMAND_BAR));
         commandButton.setFocusTraversable(false);
         commandButton.setOnAction(e -> openCommandBar());
         StackPane.setAlignment(commandButton, Pos.TOP_RIGHT);
@@ -1231,7 +1231,7 @@ public final class ViewportPane extends StackPane {
                 // Selection happens on release: a click selects one block, a drag draws a marquee.
             }
             case BUILD -> {
-                // With a shape chosen, a left-drag breaks that shape (as Effortless Building does).
+                // With a shape chosen, a left-drag breaks that shape.
                 if (!beginShape(true)) startHold(Action.BREAK);
                 else updateShapeEnd(e.getX(), e.getY());
             }
@@ -1361,7 +1361,7 @@ public final class ViewportPane extends StackPane {
             return;
         }
         if (e.getButton() == MouseButton.SECONDARY && click && ws.toolProperty().get() == ToolKind.SELECT && placing.isEmpty()) {
-            // WorldEdit: right-click sets pos2; Shift+right-click opens the menu.
+            // BlockEdit: right-click sets pos2; Shift+right-click opens the menu.
             updateHover(e.getX(), e.getY());
             if (e.isShiftDown()) showContextMenu(e.getScreenX(), e.getScreenY());
             else setCorner(false);
@@ -1375,7 +1375,7 @@ public final class ViewportPane extends StackPane {
                 showToast(ws.objects().selected().map(o -> o.name() + " · " + keyText(Keybinds.Action.TOOL_MOVE) + " move · "
                         + keyText(Keybinds.Action.TOOL_ROTATE) + " rotate · right-click for options").orElse(""));
             } else if (click) {
-                // WorldEdit: a plain click sets pos1; Shift / Ctrl still add or toggle single blocks.
+                // BlockEdit: a plain click sets pos1; Shift / Ctrl still add or toggle single blocks.
                 updateHover(e.getX(), e.getY());
                 selectClick(e.isShiftDown(), e.isShortcutDown());
             }
@@ -3957,7 +3957,7 @@ public final class ViewportPane extends StackPane {
 
     /**
      * A click in Select mode: on an entity it selects the entity (Shift adds, Ctrl toggles); otherwise Shift / Ctrl add or
-     * toggle single blocks and a plain click sets WorldEdit's pos1.
+     * toggle single blocks and a plain click sets BlockEdit's pos1.
      */
     private void selectClick(boolean add, boolean toggle) {
         if (hoverEntity != null) {
@@ -4199,7 +4199,7 @@ public final class ViewportPane extends StackPane {
 
     // ---- saving the selection with the project --------------------------------------------------------------------
 
-    /** Project file entry holding the block selection, the selected entities and WorldEdit's region. */
+    /** Project file entry holding the block selection, the selected entities and BlockEdit's region. */
     public static final String SELECTION_ENTRY = "selection.json";
 
     /** The selection and region as a project extra (see {@link io.blockdesigner.core.project.ProjectFile}). */
@@ -4295,7 +4295,7 @@ public final class ViewportPane extends StackPane {
 
     /**
      * After a drag selection (or Shift / Ctrl adding or removing blocks), the box around the selected blocks becomes
-     * the WorldEdit region: pos1 its low corner, pos2 its high one. The selection itself stays as it is.
+     * the BlockEdit region: pos1 its low corner, pos2 its high one. The selection itself stays as it is.
      */
     private void regionFromSelection() {
         int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE;
@@ -4396,7 +4396,7 @@ public final class ViewportPane extends StackPane {
         }
     }
 
-    // ---- WorldEdit region and commands ---------------------------------------------------------------------------
+    // ---- BlockEdit region and commands ---------------------------------------------------------------------------
 
     /** Left-click (pos1) / right-click (pos2) in Select mode: the aimed block, or the ground cell under the cursor. */
     private void setCorner(boolean first) {
@@ -4448,7 +4448,7 @@ public final class ViewportPane extends StackPane {
         requestRedraw();
     }
 
-    /** The region box, with pos1 in red and pos2 in blue (like WorldEdit CUI). */
+    /** The region box, with pos1 in red and pos2 in blue (the usual convention). */
     private void drawRegion(List<FrameRequest.Line> lines) {
         Box r = worldEdit.region();
         if (r == null) return;
@@ -4465,7 +4465,7 @@ public final class ViewportPane extends StackPane {
         return a == null ? List.of() : a.registry().all().stream().map(i -> i.id().startsWith("minecraft:") ? i.path() : i.id()).toList();
     }
 
-    /** T, "/" or the terminal button: the WorldEdit command bar, like Minecraft's chat. */
+    /** T, "/" or the terminal button: the BlockEdit command bar, like Minecraft's chat. */
     public void openCommandBar() {
         if (fly) setFly(false);
         commandBar.open();
@@ -4477,7 +4477,7 @@ public final class ViewportPane extends StackPane {
     }
 
     /**
-     * Runs a WorldEdit command (built-in or from a plugin) as one undo step, through {@link #editWorld}.
+     * Runs a BlockEdit command (built-in or from a plugin) as one undo step, through {@link #editWorld}.
      */
     private void runCommand(String line) {
         io.blockdesigner.app.ConsoleLog.info("command", line.strip());
@@ -5044,7 +5044,7 @@ public final class ViewportPane extends StackPane {
                         : new BlockPos(Math.clamp((int) Math.floor(o.x + d.x * t), a.x() - reach, a.x() + reach), hy, a.z());
             }
             case AXIS -> {
-                // The axis through the start that passes closest to the mouse ray wins, like Effortless Building.
+                // The axis through the start that passes closest to the mouse ray wins.
                 float best = Float.MAX_VALUE;
                 BlockPos out = null;
                 float[][] axes = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
@@ -5136,7 +5136,7 @@ public final class ViewportPane extends StackPane {
             return;
         }
         BlockPlacement.Blocks blocks = placementBlocks();
-        // A line of logs, pillars or chains runs along the line (as Effortless Building does); a single cell follows the face.
+        // A line of logs, pillars or chains runs along the line; a single cell follows the face.
         BlockPos run = new BlockPos(sd.end.x() - sd.anchor.x(), sd.end.y() - sd.anchor.y(), sd.end.z() - sd.anchor.z());
         String lineAxis = sd.shape.plane != io.blockdesigner.core.place.ShapeTool.Plane.AXIS || run.equals(new BlockPos(0, 0, 0)) ? null
                 : run.x() != 0 ? "x" : run.y() != 0 ? "y" : "z";
@@ -5628,7 +5628,7 @@ public final class ViewportPane extends StackPane {
                     h.add(KeyHints.Hint.of("Select area", "LMB"));
                     h.add(KeyHints.Hint.of("Add / remove", "Shift", "Ctrl"));
                     hint(h, "Select or replace by type", Keybinds.Action.SELECT_BY_TYPE);
-                    hint(h, "WorldEdit command", Keybinds.Action.COMMAND_BAR);
+                    hint(h, "BlockEdit command", Keybinds.Action.COMMAND_BAR);
                     if (!blockSel.isEmpty()) {
                         hint(h, "Move / rotate them", Keybinds.Action.TOOL_MOVE);
                         hint(h, "Move to new layer", Keybinds.Action.MOVE_TO_LAYER);

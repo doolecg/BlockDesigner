@@ -253,7 +253,7 @@ public final class Sculpt {
     }
 
     /**
-     * Terrain smoothing, like WorldEdit's //smooth: finds each column's surface, blurs the heights (strength passes,
+     * Terrain smoothing, like the BlockEdit /smooth command: finds each column's surface, blurs the heights (strength passes,
      * wider for bigger brushes) and raises or lowers every column to its new height, softly towards the brush rim.
      * The top block stays on top (grass stays grass) and new ground below it copies what was under it.
      */

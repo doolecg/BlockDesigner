@@ -1,3 +1,30 @@
+# BlockDesigner 0.4.22
+
+BlockDesigner's own tools get their own names: the command line is now **BlockEdit**, and shapes with symmetry are **Easy Build**.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.22.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.22.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.22-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Changed
+- **The command line is now called BlockEdit.** It is the same feature with the same commands (T or /): the key in Settings › Keybinds is "BlockEdit command line", and the tooltips, the shortcuts list (F1), the console and the README use the new name. Its block patterns like `70%stone,30%andesite` still work the same way as WorldEdit's.
+- **The shape wheel is now the Easy Build wheel.** Hold Alt in Build mode as before. Easy Build is the name for shapes and symmetry together.
+- Your key binds and settings carry over unchanged.
+
+**Plugin makers:** nothing changes in the plugin API; `WorldEdit` and its types keep their names.
+
+Importing and exporting WorldEdit `.schem` files is unchanged, and is still called WorldEdit, because that's the program those files are for.
+
+---
+
 # BlockDesigner 0.4.21
 
 A cleaner console: warnings show once and at the right level, and a colour warning at startup is fixed.

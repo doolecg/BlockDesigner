@@ -55,8 +55,8 @@ public final class Keybinds {
         SHUFFLE(Group.BUILD, "Shuffle hotbar blocks on / off", "Shift+Z"),
         REPLACE_MODE(Group.BUILD, "Replace mode on / off", "Shift+X"),
         CLEAR_HOTBAR(Group.BUILD, "Clear the hotbar", "Shift+C"),
-        COMMAND_BAR(Group.BUILD, "WorldEdit command line", "T", "Slash"),
-        SHAPE_WHEEL(Group.BUILD, true, "Shape wheel (hold)", "Alt"),
+        COMMAND_BAR(Group.BUILD, "BlockEdit command line", "T", "Slash"),
+        SHAPE_WHEEL(Group.BUILD, true, "Easy Build wheel (hold)", "Alt"),
         SYMMETRY(Group.BUILD, "Symmetry on / off", "M"),
         SYMMETRY_SETTINGS(Group.BUILD, "Symmetry settings", "Alt+M"),
         SYMMETRY_CENTRE(Group.BUILD, "Put the symmetry centre on the aimed block", "Shift+M"),
@@ -157,7 +157,7 @@ public final class Keybinds {
         public final Group group;
         public final String label;
         /**
-         * A key that is held rather than pressed (flying, bigger steps, the shape wheel): bound to a single key,
+         * A key that is held rather than pressed (flying, bigger steps, the Easy Build wheel): bound to a single key,
          * modifiers included (Shift, Ctrl, Alt), and matched whatever else is held with it.
          */
         public final boolean held;

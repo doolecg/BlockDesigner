@@ -17,7 +17,7 @@ import java.util.logging.LogRecord;
 
 /**
  * Everything the app says, for the console (bottom left): standard out and error, java.util.logging, uncaught
- * exceptions, status-bar messages, plugin logs and WorldEdit commands. Keeps the last {@value #MAX} lines. Thread safe;
+ * exceptions, status-bar messages, plugin logs and BlockEdit commands. Keeps the last {@value #MAX} lines. Thread safe;
  * listeners are called on the thread that logged.
  */
 public final class ConsoleLog {

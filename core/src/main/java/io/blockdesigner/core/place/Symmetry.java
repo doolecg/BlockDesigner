@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Mirror and radial symmetry for building, like Effortless Building: every placed or broken block is repeated in
+ * Mirror and radial symmetry for building (part of Easy Build): every placed or broken block is repeated in
  * mirror images across up to three planes and/or around a vertical axis.
  *
  * <p>The centre is kept in half blocks ({@code cx2 = 2 × x}), so it can sit on a block's centre (odd) or on the

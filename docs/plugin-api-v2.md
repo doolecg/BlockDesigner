@@ -27,8 +27,8 @@ kept.
 ### Options and OptionValues
 
 `Options` is an immutable, ordered list of typed parameters built with `Options.builder()`:
-`integer`, `decimal`, `toggle`, `block`, `blockList` (a weighted `BlockPattern`, WorldEdit's `70%stone,30%andesite`
-syntax), `choice`, `text`, `file`. `Options.none()` means "run straight away".
+`integer`, `decimal`, `toggle`, `block`, `blockList` (a weighted `BlockPattern` in the `70%stone,30%andesite`
+syntax, the same as WorldEdit patterns), `choice`, `text`, `file`. `Options.none()` means "run straight away".
 
 `OptionValues` is immutable. Typed getters (`integer`, `decimal`, `toggle`, `block`, `blockList`, `choice`, `text`,
 `file` → `Optional<Path>`) throw a clear `IllegalArgumentException` for an unknown key or the wrong type. `with(key,
