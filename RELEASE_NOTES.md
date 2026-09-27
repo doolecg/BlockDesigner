@@ -1,3 +1,30 @@
+# BlockDesigner 0.4.23
+
+Projects are now saved in an open format that doesn't depend on any mod, the same one BlockCompanion will use in the game. There's also a new guide for plugin makers.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.23.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.23.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.23-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Changed
+- **Projects use an open format inside.** A `.bdproj` project now stores each layer as a Sponge Schematic v3 (`.schem`), an open, documented format that no single mod owns, instead of Litematica's format. Everything in a layer comes along: blocks, chest and sign contents, and mobs. This is the format BlockCompanion, the in-game companion mod, will read, so projects can move between the app and the game without Litematica or Create.
+- **Your existing projects still open**, and they're saved in the new format the next time you save them.
+- A project saved with this version won't open in BlockDesigner 0.4.22 or earlier (it says so instead of loading it wrong). Updates install by themselves, so this only matters if you share projects with someone on an old version.
+- Importing and exporting `.litematic`, `.schem` and `.nbt` files works as before.
+
+## For plugin makers
+- **A plugin developer wiki** in `docs/wiki/`: setting up a plugin project, the manifest field by field, how plugins are loaded, registering features, BlockEdit commands, storing data, automatic updates and what a release needs for them, testing, troubleshooting, and the `.bdproj` project file format. The README and PLUGINS.md link to it.
+
+---
+
 # BlockDesigner 0.4.22
 
 BlockDesigner's own tools get their own names: the command line is now **BlockEdit**, and shapes with symmetry are **Easy Build**.

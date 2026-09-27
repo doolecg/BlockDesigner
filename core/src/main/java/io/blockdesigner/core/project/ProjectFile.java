@@ -34,12 +34,14 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * The {@code .bdproj} project container: a zip with {@code project.json} (layer list, offsets, transforms, flags,
- * target version), one Litematica-encoded {@code layers/<id>.litematic} per layer (preserving local coordinates),
- * and free-form extra entries (chat history, snapshots) owned by other modules.
+ * target version), one block file per layer, and free-form extra entries owned by other modules (plugins).
+ * <p>Format 2 (current) stores each layer as {@code layers/<id>.schem}, Sponge Schematic v3: an open format no single
+ * mod owns, which BlockCompanion also reads. Format 1 stored {@code layers/<id>.litematic}; it still loads. A layer's
+ * blocks are stored from their own min corner, which is kept in {@code origin}, so local coordinates survive.
  */
 public final class ProjectFile {
     public static final String EXTENSION = "bdproj";
-    private static final int FORMAT = 1;
+    private static final int FORMAT = 2;
     private static final ObjectMapper JSON = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
     /** Everything stored in a project. {@code extras} maps zip entry names to raw bytes. */
@@ -72,15 +74,15 @@ public final class ProjectFile {
                 n.put("ghost", l.ghost());
                 n.put("color", String.format("#%06X", l.color() & 0xFFFFFF));
                 if (l.source() != null) n.put("source", l.source());
-                String entry = "layers/" + l.id() + ".litematic";
+                String entry = "layers/" + l.id() + ".schem";
                 n.put("file", entry);
 
                 Structure s = l.structure();
                 BlockPos min = s.bounds().map(Box::min).orElse(BlockPos.ORIGIN);
                 SchematicFile sf = new SchematicFile(l.name(), "", "", c.targetVersion().dataVersion(),
                         List.of(new SchematicFile.Region(l.name(), s, min)));
-                var enc = Schematics.LITEMATICA.write(sf, opts);
-                // Litematica stores region positions relative to the enclosing box; keep the absolute min separately.
+                var enc = Schematics.SPONGE.write(sf, opts.withSpongeVersion(3));
+                // The schematic is stored from its own min corner; keep the absolute min separately.
                 n.putArray("origin").add(min.x()).add(min.y()).add(min.z());
                 ByteArrayOutputStream bytes = new ByteArrayOutputStream();
                 NbtIO.write(enc.root(), enc.rootName(), bytes, true);
@@ -123,7 +125,9 @@ public final class ProjectFile {
             Structure s = new Structure();
             if (data != null) {
                 var nbt = NbtIO.read(new ByteArrayInputStream(data)).tag();
-                Structure normalized = Schematics.LITEMATICA.read(nbt).merged();
+                // Format 2 layers are Sponge .schem; format 1 layers were Litematica.
+                var format = entry.endsWith(".litematic") ? Schematics.LITEMATICA : Schematics.SPONGE;
+                Structure normalized = format.read(nbt).merged();
                 normalized.normalizeToOrigin();
                 JsonNode o = n.path("origin");
                 s.paste(normalized, o.path(0).asInt(), o.path(1).asInt(), o.path(2).asInt());

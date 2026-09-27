@@ -2,7 +2,7 @@
 
 A plugin is a `.jar` that BlockDesigner loads at startup, each in its own class loader. It can add schematic formats, exporters, importers, menu actions, `/commands`, transforms with a live preview, side panels and tools, and it can read and edit the open project with full undo.
 
-This guide covers setting up a plugin project, the manifest, installing and testing, and every extension point with examples taken from the two example plugins in this repository. For a list of every type in the API see [docs/plugin-api-reference.md](docs/plugin-api-reference.md); for the design notes behind API 2 see [docs/plugin-api-v2.md](docs/plugin-api-v2.md).
+This guide covers setting up a plugin project, the manifest, installing and testing, and every extension point with examples taken from the two example plugins in this repository. For a list of every type in the API see [docs/plugin-api-reference.md](docs/plugin-api-reference.md); for the design notes behind API 2 see [docs/plugin-api-v2.md](docs/plugin-api-v2.md). The [plugin developer wiki](docs/wiki/Home.md) covers the rest of a plugin's life: project setup, the manifest field by field, how plugins are loaded, automatic updates, releasing, testing and troubleshooting.
 
 **Contents**
 

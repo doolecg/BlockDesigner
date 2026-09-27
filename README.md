@@ -281,7 +281,7 @@ Each plugin lives in its own repository and is released there, separately from B
 
 Download a plugin's `.jar` from its releases page, then install it with **Plugins › Manage plugins… › Install…**.
 
-To write one, see **[PLUGINS.md](PLUGINS.md)** (guide), [docs/plugin-api-reference.md](docs/plugin-api-reference.md) (every API type) and the plugin repositories above. The smallest template to copy is [`examples/hello-plugin`](examples/hello-plugin); it and [`examples/palette-tools`](examples/palette-tools) stay in this repository because BlockDesigner's own tests load them.
+To write one, see **[PLUGINS.md](PLUGINS.md)** (guide), [docs/plugin-api-reference.md](docs/plugin-api-reference.md) (every API type) and the plugin repositories above. The smallest template to copy is [`examples/hello-plugin`](examples/hello-plugin); it and [`examples/palette-tools`](examples/palette-tools) stay in this repository because BlockDesigner's own tests load them. The [plugin developer wiki](docs/wiki/Home.md) covers project setup, the manifest, loading, automatic updates, releasing and testing.
 
 ## Building from source
 
