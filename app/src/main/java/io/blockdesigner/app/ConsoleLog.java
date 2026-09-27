@@ -38,9 +38,26 @@ public final class ConsoleLog {
     public static synchronized void install() {
         if (installed) return;
         installed = true;
+        PrintStream realErr = System.err;
         System.setOut(tee(System.out, Level.INFO, "stdout"));
-        System.setErr(tee(System.err, Level.ERROR, "stderr"));
-        java.util.logging.Logger.getLogger("").addHandler(new Handler() {
+        System.setErr(tee(System.err, Level.WARN, "stderr"));
+        java.util.logging.Logger root = java.util.logging.Logger.getLogger("");
+        // Java's own console handler prints every log record to stderr, which the console also reads: the record
+        // would show twice (and as an error). It writes to the real stderr instead; the handler below logs it once.
+        for (Handler h : root.getHandlers()) {
+            if (!(h instanceof java.util.logging.ConsoleHandler)) continue;
+            root.removeHandler(h);
+            java.util.logging.StreamHandler direct = new java.util.logging.StreamHandler(realErr, new java.util.logging.SimpleFormatter()) {
+                @Override
+                public synchronized void publish(LogRecord r) {
+                    super.publish(r);
+                    flush();
+                }
+            };
+            direct.setLevel(h.getLevel());
+            root.addHandler(direct);
+        }
+        root.addHandler(new Handler() {
             @Override
             public void publish(LogRecord r) {
                 if (r == null) return;
@@ -55,6 +72,8 @@ public final class ConsoleLog {
                 }
                 if (r.getThrown() != null) msg = (msg == null ? "" : msg + "\n") + stackTrace(r.getThrown());
                 String src = r.getLoggerName();
+                // JavaFX warns about running from the class path on every start; it works fine this way.
+                if (msg != null && msg.startsWith("Unsupported JavaFX configuration")) level = Level.DEBUG;
                 add(level, src == null || src.isEmpty() ? "log" : src.substring(src.lastIndexOf('.') + 1), msg);
             }
 
@@ -159,10 +178,15 @@ public final class ConsoleLog {
                 buf.reset();
                 // Stack-trace lines join the entry above them, so one exception is one entry.
                 if (s.startsWith("\tat ") || s.startsWith("\t... ") || s.startsWith("Caused by: ")) appendToLast(source, s);
-                else add(level, source, s);
+                // Plain stderr lines are warnings; an exception or error line is an error.
+                else add(level == Level.WARN && looksLikeError(s) ? Level.ERROR : level, source, s);
             }
         };
         return new PrintStream(line, true, StandardCharsets.UTF_8);
+    }
+
+    static boolean looksLikeError(String s) {
+        return s.contains("Exception") || s.startsWith("Error") || s.contains("Error:") || s.startsWith("SEVERE");
     }
 
     private static void appendToLast(String source, String s) {

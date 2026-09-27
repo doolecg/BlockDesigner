@@ -183,6 +183,9 @@ public enum AppTheme {
         var(sb, "-color-accent-subtle", rgba(accent, darkMode ? 0.15 : 0.12));
         var(sb, "-bd-accent", hex(acc));
         var(sb, "-bd-accent-soft", rgba(accent, darkMode ? 0.16 : 0.14));
+        // The current tool's colour (mode badge, brush pill, viewport frame); nodes set their own inline, this is the
+        // fallback so the rules that use it never see an undefined colour.
+        var(sb, "-bd-mode", hex(acc));
         Neutrals n = neutrals(darkMode);
         if (n != null) {
             var(sb, "-color-bg-default", hex(n.bg()));

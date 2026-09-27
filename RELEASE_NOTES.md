@@ -1,3 +1,28 @@
+# BlockDesigner 0.4.21
+
+A cleaner console: warnings show once and at the right level, and a colour warning at startup is fixed.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.21.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.21.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.21-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Fixed
+- **Warnings showed twice in the console, the second time as an error.** Each warning now appears once, as a warning. Other lines Java prints count as warnings too, unless they report an exception or error.
+- **A colour warning at startup.** The mode badge, the brush and eraser pill and the viewport's mode frame no longer log a warning about an undefined colour.
+
+## Changed
+- **JavaFX's "Unsupported JavaFX configuration" notice** is now a grey debug line, hidden by the "Warnings & errors" filter. It's harmless: it only means JavaFX runs from the class path.
+
+---
+
 # BlockDesigner 0.4.20
 
 The paint brush gets a Replace mode, five new shapes and soft noise for natural-looking strokes. Stone and other grey textures are no longer too bright, side views get their own grid, and symmetry now switches on and off with M.
