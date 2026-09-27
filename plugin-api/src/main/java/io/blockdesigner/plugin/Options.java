@@ -24,10 +24,15 @@ import java.util.regex.Pattern;
  *         .blockList("fill", "Fill with", List.of(BlockState.of("stone"), BlockState.of("andesite")))
  *         .build();
  * }</pre>
+ *
+ * <p>Since API 6 options can also be laid out: {@link Builder#group headings}, {@link Builder#advanced collapsed
+ * groups}, a line of {@link Builder#help help} under an option, a {@link Builder#unit unit} after a number and
+ * options {@link Builder#enabledWhen greyed out} while a toggle is off. That is metadata only: older BlockDesigners
+ * ignore it and show the options as one list.
  */
 public final class Options {
     private static final Pattern KEY = Pattern.compile("[A-Za-z0-9_.-]+");
-    private static final Options NONE = new Options(List.of(), Map.of());
+    private static final Options NONE = new Options(List.of(), Map.of(), List.of(), Map.of(), Map.of(), Map.of());
 
     /** One parameter. {@link #key()} identifies it in {@link OptionValues}; {@link #label()} is shown next to its control. */
     public sealed interface Option permits IntegerOption, DecimalOption, ToggleOption, BlockOption, BlockListOption,
@@ -110,14 +115,38 @@ public final class Options {
         }
     }
 
+    /**
+     * A heading over some options, in the order they are shown (API 6). The options added before the first
+     * {@link Builder#group} form a group without a title ({@code title} null).
+     *
+     * @param title    the heading, or null for the untitled leading group
+     * @param advanced drawn collapsed until opened (see {@link Builder#advanced})
+     * @param keys     the options under it, in order
+     */
+    public record Group(String title, boolean advanced, List<String> keys) {
+        public Group {
+            if (title != null && title.isBlank()) throw new IllegalArgumentException("A group title can't be blank");
+            keys = List.copyOf(keys);
+        }
+    }
+
     private final List<Option> options;
     private final Map<String, List<Condition>> conditions;
+    private final List<Group> groups;
+    private final Map<String, String> help;
+    private final Map<String, String> units;
+    private final Map<String, String> enabledWhen;
 
-    private Options(List<Option> options, Map<String, List<Condition>> conditions) {
+    private Options(List<Option> options, Map<String, List<Condition>> conditions, List<Group> groups, Map<String, String> help,
+                    Map<String, String> units, Map<String, String> enabledWhen) {
         this.options = List.copyOf(options);
         Map<String, List<Condition>> c = new LinkedHashMap<>();
         conditions.forEach((k, v) -> c.put(k, List.copyOf(v)));
         this.conditions = Map.copyOf(c);
+        this.groups = List.copyOf(groups);
+        this.help = Map.copyOf(help);
+        this.units = Map.copyOf(units);
+        this.enabledWhen = Map.copyOf(enabledWhen);
     }
 
     /** No parameters: the feature runs straight away. */
@@ -159,10 +188,55 @@ public final class Options {
         return OptionValues.defaults(this);
     }
 
+    // ---- layout metadata (API 6) -------------------------------------------------------------------------------
+
+    /**
+     * The options under their headings, in order; every option is in exactly one group. Options without any
+     * {@link Builder#group} come back as one untitled group; empty for no options. Since API 6.
+     */
+    public List<Group> groups() {
+        return groups;
+    }
+
+    /** The line of help shown under the option (a tooltip where space is tight), if it has one. Since API 6. */
+    public Optional<String> help(String key) {
+        return Optional.ofNullable(help.get(key));
+    }
+
+    /**
+     * The unit shown after a number, such as "blocks" or "°", if it has one. {@code "%"} on a decimal means the value
+     * is a fraction shown ×100. Since API 6.
+     */
+    public Optional<String> unit(String key) {
+        return Optional.ofNullable(units.get(key));
+    }
+
+    /** The toggle option that the option {@code key} depends on (greyed out while it is off), if any. Since API 6. */
+    public Optional<String> enabledWhen(String key) {
+        return Optional.ofNullable(enabledWhen.get(key));
+    }
+
+    /**
+     * Whether the option {@code key} can be changed with these values: false while the toggle it
+     * {@link Builder#enabledWhen depends on} is off. Disabled options keep their values. Since API 6.
+     */
+    public boolean enabled(String key, OptionValues values) {
+        String toggle = enabledWhen.get(key);
+        return toggle == null || values.toggle(toggle);
+    }
+
     /** Builds {@link Options}; keys must be unique and use {@code A-Z a-z 0-9 _ . -}. */
     public static final class Builder {
         private final Map<String, Option> options = new LinkedHashMap<>();
         private final Map<String, List<Condition>> conditions = new LinkedHashMap<>();
+        private final List<Group> groups = new ArrayList<>();
+        private final Map<String, String> help = new LinkedHashMap<>();
+        private final Map<String, String> units = new LinkedHashMap<>();
+        private final Map<String, String> enabledWhen = new LinkedHashMap<>();
+        /** The group being filled: its title (null before the first group()), whether it is advanced, and its keys. */
+        private String groupTitle;
+        private boolean groupAdvanced;
+        private List<String> groupKeys = new ArrayList<>();
         private String last;
 
         private Builder() {
@@ -209,7 +283,91 @@ public final class Options {
             if (!KEY.matcher(o.key()).matches()) throw new IllegalArgumentException("Option keys use A-Z, a-z, 0-9, _ . - only: " + o.key());
             if (options.putIfAbsent(o.key(), o) != null) throw new IllegalArgumentException("Option '" + o.key() + "' added twice");
             last = o.key();
+            groupKeys.add(o.key());
             return this;
+        }
+
+        /**
+         * Adds any option, such as one taken from another {@link Options} (a tool offering a transform's options).
+         * Its help, unit and conditions are not copied; add them after it. Since API 6.
+         */
+        public Builder option(Option o) {
+            Objects.requireNonNull(o, "option");
+            return add(o);
+        }
+
+        /**
+         * Puts the options added after this under a heading such as "Shape" (API 6; older BlockDesigners show one
+         * list). A group left empty is dropped.
+         */
+        public Builder group(String title) {
+            return startGroup(title, false);
+        }
+
+        /**
+         * Like {@link #group}, but drawn collapsed until the user opens it: for settings most people never touch,
+         * such as "Advanced" or "Picture adjustments". Since API 6.
+         */
+        public Builder advanced(String title) {
+            return startGroup(title, true);
+        }
+
+        private Builder startGroup(String title, boolean advanced) {
+            Objects.requireNonNull(title, "title");
+            if (title.isBlank()) throw new IllegalArgumentException("A group title can't be blank");
+            closeGroup();
+            groupTitle = title.strip();
+            groupAdvanced = advanced;
+            return this;
+        }
+
+        private void closeGroup() {
+            if (!groupKeys.isEmpty()) groups.add(new Group(groupTitle, groupAdvanced, groupKeys));
+            groupKeys = new ArrayList<>();
+        }
+
+        /**
+         * A line of help for the option added just before this call, shown under its control (or as its tooltip where
+         * space is tight). Since API 6.
+         */
+        public Builder help(String text) {
+            String key = requireLast("help");
+            Objects.requireNonNull(text, "text");
+            if (!text.isBlank()) help.put(key, text.strip());
+            return this;
+        }
+
+        /**
+         * A unit shown after the integer or decimal option added just before this call: "blocks", "px", "°",
+         * "minutes"… {@code "%"} on a decimal between 0 and 1 shows the fraction as a percentage. Since API 6.
+         */
+        public Builder unit(String unit) {
+            String key = requireLast("unit");
+            Objects.requireNonNull(unit, "unit");
+            Option o = options.get(key);
+            if (!(o instanceof IntegerOption) && !(o instanceof DecimalOption))
+                throw new IllegalArgumentException("unit applies to integer and decimal options, not '" + key + "'");
+            if (unit.strip().equals("%") && !(o instanceof DecimalOption d && d.min() >= 0 && d.max() <= 1))
+                throw new IllegalArgumentException("'%' needs a decimal option between 0 and 1: '" + key + "'");
+            if (!unit.isBlank()) units.put(key, unit.strip());
+            return this;
+        }
+
+        /**
+         * Greys out the option added just before this call while the toggle option {@code toggleKey} (added earlier)
+         * is off, and indents it under that toggle. It keeps its value. Since API 6.
+         */
+        public Builder enabledWhen(String toggleKey) {
+            String key = requireLast("enabledWhen");
+            if (!(options.get(toggleKey) instanceof ToggleOption) || toggleKey.equals(key))
+                throw new IllegalArgumentException("enabledWhen needs an earlier toggle option, not '" + toggleKey + "'");
+            enabledWhen.put(key, toggleKey);
+            return this;
+        }
+
+        private String requireLast(String what) {
+            if (last == null) throw new IllegalStateException(what + " follows the option it applies to");
+            return last;
         }
 
         /**
@@ -228,7 +386,10 @@ public final class Options {
         }
 
         public Options build() {
-            return options.isEmpty() ? NONE : new Options(new ArrayList<>(options.values()), conditions);
+            if (options.isEmpty()) return NONE;
+            List<Group> all = new ArrayList<>(groups);
+            if (!groupKeys.isEmpty()) all.add(new Group(groupTitle, groupAdvanced, groupKeys));
+            return new Options(new ArrayList<>(options.values()), conditions, all, help, units, enabledWhen);
         }
     }
 }

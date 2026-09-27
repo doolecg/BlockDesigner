@@ -29,14 +29,19 @@ Nothing checks that you declared the right level. If you use an API 5 method but
 | **3** | 0.4.12 | Scene objects: `registerObjectType`, `objects()`, `SceneObject`, `ObjectHandle`, `Pose`, `Drawing`, `ImageData`, `ViewInfo`. |
 | **4** | 0.4.14 | Settings in the plugin's own tab: `registerSettings(options, onChange)` and `settings()`. Every plugin gets the tab whatever its level; only registering settings needs 4. |
 | **5** | 0.4.17 | Tools that work on the selection (`PluginTool.selects()`, `ToolContext.selection()`, `previewTransform`, `applyTransform`), `ToolHandler.optionsChanged()`, options shown only for some choices (`Options.Builder.showWhen`), the hotbar (`hotbar()`, `setHotbar`), block icons (`blockIcon`), `pickTool` and `setToolOptions`. |
+| **6** | 0.4.24 | Resource packs: `resourcePacks()` and `useResourcePacks(packs)`. The UI kit (`io.blockdesigner.plugin.ui`: `PanelScaffold`, `Section`, `Form`, `ActionBar`, `StatusBadge`, `Banner`, `EmptyState`, `ItemList`/`ItemRow`, `Segmented`, `Controls`, `Icon`, `Theme`, `Tone`) and `ui()` (`PluginUi`: the app's options form, remembered forms, dialogs, owner window, dark mode). `Options` groups, advanced groups, `help`, `unit`, `enabledWhen` and `option(...)`. `showPanel`, `setPanelStatus`, `openSettings`, `updateSettings`. Plugin settings move to the Settings window, and tool and action keys to Settings › Keybinds (app changes, for every level). |
 
 The "Added" column follows the Javadoc of `PluginApi.VERSION`. The "First BlockDesigner" column comes from the main
-repository's `RELEASE_NOTES.md` (0.3.0 introduced plugins; 0.4.4, 0.4.12, 0.4.14 and 0.4.17 name API 2, 3, 4 and 5).
+repository's `RELEASE_NOTES.md` (0.3.0 introduced plugins; 0.4.4, 0.4.12, 0.4.14, 0.4.17 and 0.4.24 name API 2, 3, 4, 5 and 6).
 
 Two app-side changes that are not API levels but matter to plugins:
 
 - **0.4.16**: automatic plugin updates through the manifest's `"updates"` link. Older BlockDesigners ignore the field.
 - **0.4.17**: every plugin gets one tab on the right; panels became pages of it instead of tabs of their own.
+- **0.4.24**: the tab opens on its first page (the Overview is behind an info button), registered settings are on the
+  plugin's page in the Settings window, tool and action keys are in Settings › Keybinds, and a file type that several
+  importers take asks which one to use. Panels that aren't built with the UI kit's `PanelScaffold` keep their 10 px
+  padding.
 
 ## Which jars to compile against
 

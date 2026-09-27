@@ -35,8 +35,9 @@ Plugins window). Update BlockDesigner, or lower `api` if you don't use the newer
 API levels only add things, so API calls keep working. But `core` classes (`BlockState`, `Structure`, `Layer`,
 `SchematicFormat`, `WorldEdit.World`…) come with the API and are not versioned by the level; a change there can break
 a plugin compiled against older jars. Rebuild against the newer jars and run your tests; the official plugins do this
-after every BlockDesigner release. Anything outside `io.blockdesigner.plugin` and the `core` types it exposes (the
-app's own classes, AtlantaFX internals) can change without notice; don't depend on it.
+after every BlockDesigner release. Anything outside `io.blockdesigner.plugin` (including the UI kit in
+`io.blockdesigner.plugin.ui`, whose classes and documented `bd-*` style classes are stable) and the `core` types it
+exposes (the app's own classes, AtlantaFX internals, app.css classes) can change without notice; don't depend on it.
 
 ## It doesn't update itself
 

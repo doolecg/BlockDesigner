@@ -140,4 +140,98 @@ class OptionsTest {
         assertThatThrownBy(() -> Options.builder().choice("m", "M", List.of("a"), "a").toggle("t", "T", true).showWhen("m", "b"))
                 .hasMessageContaining("not a value");
     }
+
+    // ---- layout metadata (API 6) ----------------------------------------------------------------------------------
+
+    @Test
+    void groupsKeepTheirOrderAndLeadingOptionsFormAnUntitledGroup() {
+        Options o = Options.builder()
+                .choice("mode", "Mode", List.of("a", "b"), "a")
+                .group("Shape")
+                .integer("width", "Width", 64, 1, 512)
+                .toggle("hollow", "Hollow", false)
+                .group("Empty")
+                .advanced("Picture adjustments")
+                .decimal("brightness", "Brightness", 0, -1, 1)
+                .build();
+        assertThat(o.groups()).containsExactly(
+                new Options.Group(null, false, List.of("mode")),
+                new Options.Group("Shape", false, List.of("width", "hollow")),
+                new Options.Group("Picture adjustments", true, List.of("brightness")));
+        assertThat(o.groups().stream().flatMap(g -> g.keys().stream()).toList())
+                .as("every option in exactly one group, in order").isEqualTo(o.all().stream().map(Options.Option::key).toList());
+        Options plain = Options.builder().toggle("a", "A", true).toggle("b", "B", false).build();
+        assertThat(plain.groups()).containsExactly(new Options.Group(null, false, List.of("a", "b")));
+        assertThat(Options.none().groups()).isEmpty();
+        assertThatThrownBy(() -> Options.builder().group(" ")).hasMessageContaining("blank");
+        assertThatThrownBy(() -> new Options.Group("", false, List.of())).hasMessageContaining("blank");
+    }
+
+    @Test
+    void helpUnitsAndEnabledWhenAreStoredAndChecked() {
+        Options o = Options.builder()
+                .integer("width", "Width", 64, 1, 512).unit("blocks").help("How wide the result is")
+                .decimal("tolerance", "Tolerance", 0.1, 0, 0.4).unit("%")
+                .decimal("angle", "Angle", 0, -180, 180).unit("°")
+                .toggle("relief", "Relief", false)
+                .integer("depth", "Depth", 3, 1, 16).enabledWhen("relief")
+                .build();
+        assertThat(o.unit("width")).contains("blocks");
+        assertThat(o.help("width")).contains("How wide the result is");
+        assertThat(o.unit("tolerance")).contains("%");
+        assertThat(o.unit("angle")).contains("°");
+        assertThat(o.help("angle")).isEmpty();
+        assertThat(o.unit("relief")).isEmpty();
+        assertThat(o.enabledWhen("depth")).contains("relief");
+        assertThat(o.enabledWhen("width")).isEmpty();
+        OptionValues v = o.defaults();
+        assertThat(o.enabled("depth", v)).isFalse();
+        assertThat(o.enabled("depth", v.with("relief", true))).isTrue();
+        assertThat(o.enabled("width", v)).isTrue();
+
+        assertThatThrownBy(() -> Options.builder().help("x")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> Options.builder().unit("px")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> Options.builder().enabledWhen("t")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> Options.builder().toggle("t", "T", true).unit("px")).hasMessageContaining("integer and decimal");
+        assertThatThrownBy(() -> Options.builder().integer("i", "I", 1, 0, 1).unit("%")).hasMessageContaining("between 0 and 1");
+        assertThatThrownBy(() -> Options.builder().decimal("d", "D", 1, 0, 2).unit("%")).hasMessageContaining("between 0 and 1");
+        assertThatThrownBy(() -> Options.builder().integer("i", "I", 1, 0, 1).toggle("t", "T", true).enabledWhen("t"))
+                .as("not the option itself").hasMessageContaining("earlier toggle");
+        assertThatThrownBy(() -> Options.builder().choice("c", "C", List.of("a"), "a").integer("i", "I", 1, 0, 1).enabledWhen("c"))
+                .hasMessageContaining("earlier toggle");
+    }
+
+    @Test
+    void optionCopiesARecordFromOtherOptions() {
+        Options from = Options.builder()
+                .decimal("amount", "Amount", 0.3, 0, 1).unit("%").help("How much")
+                .toggle("mossy", "Moss", true)
+                .build();
+        Options.Builder b = Options.builder().choice("mode", "Mode", List.of("x"), "x");
+        for (Options.Option opt : from.all()) {
+            b.option(opt);
+            from.help(opt.key()).ifPresent(b::help);
+            from.unit(opt.key()).ifPresent(b::unit);
+        }
+        Options copy = b.build();
+        assertThat(copy.all()).hasSize(3);
+        assertThat(copy.get("amount")).contains(from.get("amount").orElseThrow());
+        assertThat(copy.unit("amount")).contains("%");
+        assertThat(copy.help("amount")).contains("How much");
+        assertThatThrownBy(() -> Options.builder().option(from.get("amount").orElseThrow()).option(from.get("amount").orElseThrow()))
+                .hasMessageContaining("twice");
+    }
+
+    @Test
+    void builtOptionsAreImmutable() {
+        Options.Builder b = Options.builder().group("One").toggle("a", "A", true).help("first");
+        Options first = b.build();
+        b.group("Two").toggle("b", "B", true).help("second");
+        Options second = b.build();
+        assertThat(first.groups()).hasSize(1);
+        assertThat(first.help("b")).isEmpty();
+        assertThat(second.groups()).hasSize(2);
+        assertThatThrownBy(() -> first.groups().add(new Options.Group("X", false, List.of()))).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> first.groups().getFirst().keys().add("z")).isInstanceOf(UnsupportedOperationException.class);
+    }
 }

@@ -1,0 +1,512 @@
+/*
+ * BlockDesigner plugin UI kit (io.blockdesigner.plugin.ui), API 6.
+ *
+ * Only the theme's looked-up colours are used (-color-fg-*, -color-bg-*, -color-border-*, -color-accent-*,
+ * -color-success-*, -color-warning-*, -color-danger-*), so every rule follows the app's theme, dark or light, in the
+ * main window and in a plugin's own dialogs alike. The bd-* classes and the pseudo-classes :narrow, :error, :accent,
+ * :success, :warning, :danger and :busy are stable; plugins may use them on their own nodes.
+ *
+ * Type scale: 13px body, 12px section titles, hints and form labels, 11px captions and badges, 14px page titles.
+ * Spacing: 4 / 8 / 12 / 16 / 24. Radii: 6 controls and rows, 8 cards, banners and frames, 999 pills and dots.
+ */
+
+.bd-root {
+    -fx-font-family: "Segoe UI Variable Text", "Segoe UI", "Inter", sans-serif;
+    -fx-font-size: 13px;
+}
+
+/* ---------- page frame ---------- */
+
+.bd-scaffold {
+    -fx-background-color: transparent;
+}
+
+.bd-top {
+    -fx-padding: 12 12 0 12;
+    -fx-spacing: 8;
+}
+
+.bd-content {
+    -fx-padding: 12;
+    -fx-spacing: 16;
+}
+
+.bd-footer {
+    -fx-padding: 8 12 12 12;
+    -fx-spacing: 8;
+    -fx-border-color: -color-border-muted transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.bd-scroll,
+.bd-scroll > .viewport,
+.bd-scroll > .corner {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+}
+
+.bd-scaffold:narrow .bd-content {
+    -fx-spacing: 12;
+}
+
+/* ---------- sections ---------- */
+
+.bd-section {
+    -fx-spacing: 8;
+}
+
+.bd-section-header {
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+    -fx-min-height: 24;
+}
+
+.bd-section-title {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
+}
+
+.bd-section-actions {
+    -fx-spacing: 4;
+}
+
+/* Text links in a heading need more room between them than icon buttons. */
+.bd-section-actions > .bd-link {
+    -fx-padding: 0 0 0 8;
+}
+
+.bd-section-body {
+    -fx-spacing: 8;
+}
+
+.bd-section-header.bd-collapsible {
+    -fx-cursor: hand;
+    -fx-background-radius: 6;
+}
+
+.bd-section-header.bd-collapsible:hover .bd-section-title {
+    -fx-text-fill: -color-accent-fg;
+}
+
+.bd-section-header.bd-collapsible:focused {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.bd-chevron .bd-icon-path {
+    -fx-stroke: -color-fg-muted;
+}
+
+.bd-page-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
+}
+
+/* ---------- text ---------- */
+
+.bd-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-wrap-text: true;
+}
+
+.bd-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.bd-caption:accent, .bd-hint:accent { -fx-text-fill: -color-accent-fg; }
+.bd-caption:success, .bd-hint:success { -fx-text-fill: -color-success-fg; }
+.bd-caption:warning, .bd-hint:warning { -fx-text-fill: -color-warning-fg; }
+.bd-caption:danger, .bd-hint:danger { -fx-text-fill: -color-danger-fg; }
+
+.bd-mono {
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.bd-link {
+    -fx-font-size: 12px;
+    -fx-padding: 0;
+    -fx-border-width: 0;
+    -fx-text-fill: -color-accent-fg;
+}
+
+.bd-link:visited {
+    -fx-text-fill: -color-accent-fg;
+}
+
+/* ---------- forms ---------- */
+
+.bd-form {
+    -fx-hgap: 12;
+    -fx-vgap: 8;
+}
+
+.bd-form-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-min-height: 28;
+    -fx-alignment: center-left;
+}
+
+.bd-form:narrow .bd-form-label {
+    -fx-min-height: 0;
+}
+
+.bd-form-cell {
+    -fx-spacing: 4;
+}
+
+.bd-form-line {
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.bd-indent {
+    -fx-padding: 0 0 0 20;
+}
+
+.bd-unit {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.bd-form-error {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-danger-fg;
+}
+
+.text-input:error,
+.combo-box-base:error,
+.spinner:error {
+    -color-input-border: -color-danger-emphasis;
+    -color-input-border-focused: -color-danger-emphasis;
+    -fx-border-color: -color-danger-emphasis;
+    -fx-border-radius: 6;
+}
+
+.bd-inline-field {
+    -fx-pref-width: 56;
+    -fx-max-width: 56;
+    -fx-padding: 2 6 2 6;
+    -fx-font-size: 12px;
+    -fx-alignment: center-right;
+}
+
+/* A visible box everywhere, also inside list rows (the theme flattens text fields in list cells). */
+.text-input.bd-inline-field,
+.list-cell .text-input.bd-inline-field {
+    -fx-background-color: -color-border-default, -color-bg-default;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 4, 3;
+}
+
+.text-input.bd-inline-field:focused,
+.list-cell .text-input.bd-inline-field:focused {
+    -fx-background-color: -color-accent-emphasis, -color-bg-default;
+}
+
+.bd-search {
+    -fx-padding: 4 8 4 28;
+}
+
+/* ---------- buttons and icons ---------- */
+
+.bd-icon-path {
+    -fx-stroke: -color-fg-default;
+    -fx-fill: transparent;
+}
+
+.bd-icon-button {
+    -fx-padding: 5;
+    -fx-min-width: 28;
+    -fx-min-height: 28;
+    -fx-background-radius: 6;
+}
+
+.bd-icon-button.small {
+    -fx-padding: 3;
+    -fx-min-width: 22;
+    -fx-min-height: 22;
+}
+
+.button.accent .bd-icon-path,
+.toggle-button:selected .bd-icon-path {
+    -fx-stroke: -color-fg-emphasis;
+}
+
+.button.danger .bd-icon-path {
+    -fx-stroke: -color-danger-fg;
+}
+
+.button.danger:hover .bd-icon-path {
+    -fx-stroke: -color-fg-emphasis;
+}
+
+.bd-icon:accent .bd-icon-path { -fx-stroke: -color-accent-fg; }
+.bd-icon:success .bd-icon-path { -fx-stroke: -color-success-fg; }
+.bd-icon:warning .bd-icon-path { -fx-stroke: -color-warning-fg; }
+.bd-icon:danger .bd-icon-path { -fx-stroke: -color-danger-fg; }
+
+.button:busy {
+    -fx-opacity: 0.85;
+}
+
+.bd-busy {
+    -fx-progress-color: -color-fg-muted;
+}
+
+.bd-action-bar {
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.bd-action-bar:narrow {
+    -fx-spacing: 6;
+}
+
+/* ---------- status ---------- */
+
+.bd-badge {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 999;
+    -fx-padding: 2 8 2 6;
+    -fx-graphic-text-gap: 6;
+}
+
+.bd-badge-dot {
+    -fx-min-width: 7;
+    -fx-min-height: 7;
+    -fx-pref-width: 7;
+    -fx-pref-height: 7;
+    -fx-max-width: 7;
+    -fx-max-height: 7;
+    -fx-background-radius: 999;
+    -fx-background-color: -color-fg-subtle;
+}
+
+.bd-badge:accent { -fx-text-fill: -color-accent-fg; -fx-background-color: -color-accent-subtle; }
+.bd-badge:accent .bd-badge-dot { -fx-background-color: -color-accent-emphasis; }
+.bd-badge:success { -fx-text-fill: -color-success-fg; -fx-background-color: -color-success-subtle; }
+.bd-badge:success .bd-badge-dot { -fx-background-color: -color-success-emphasis; }
+.bd-badge:warning { -fx-text-fill: -color-warning-fg; -fx-background-color: -color-warning-subtle; }
+.bd-badge:warning .bd-badge-dot { -fx-background-color: -color-warning-emphasis; }
+.bd-badge:danger { -fx-text-fill: -color-danger-fg; -fx-background-color: -color-danger-subtle; }
+.bd-badge:danger .bd-badge-dot { -fx-background-color: -color-danger-emphasis; }
+
+.bd-banner {
+    -fx-spacing: 8;
+    -fx-padding: 8 6 8 10;
+    -fx-alignment: top-left;
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.bd-banner-icon {
+    -fx-padding: 2 0 0 0;
+}
+
+.bd-banner-message {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-default;
+    -fx-padding: 2 0 0 0;
+}
+
+.bd-banner:accent { -fx-background-color: -color-accent-subtle; -fx-border-color: -color-accent-muted; }
+.bd-banner:accent .bd-banner-icon .bd-icon-path { -fx-stroke: -color-accent-fg; }
+.bd-banner:success { -fx-background-color: -color-success-subtle; -fx-border-color: -color-success-muted; }
+.bd-banner:success .bd-banner-icon .bd-icon-path { -fx-stroke: -color-success-fg; }
+.bd-banner:warning { -fx-background-color: -color-warning-subtle; -fx-border-color: -color-warning-muted; }
+.bd-banner:warning .bd-banner-icon .bd-icon-path { -fx-stroke: -color-warning-fg; }
+.bd-banner:danger { -fx-background-color: -color-danger-subtle; -fx-border-color: -color-danger-muted; }
+.bd-banner:danger .bd-banner-icon .bd-icon-path { -fx-stroke: -color-danger-fg; }
+
+.bd-progress {
+    -fx-max-width: infinity;
+    -fx-pref-height: 8;
+}
+
+/* ---------- empty states ---------- */
+
+.bd-empty {
+    -fx-spacing: 8;
+    -fx-padding: 24;
+    -fx-alignment: center;
+}
+
+.bd-empty .bd-icon-path {
+    -fx-stroke: -color-fg-subtle;
+}
+
+.bd-empty-message {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.bd-empty-actions {
+    -fx-spacing: 8;
+    -fx-padding: 4 0 0 0;
+}
+
+/* ---------- lists ---------- */
+
+.bd-list {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 1;
+}
+
+.bd-list:focused {
+    -fx-border-color: -color-accent-emphasis;
+}
+
+.bd-list > .virtual-flow > .clipped-container > .sheet > .list-cell {
+    -fx-padding: 4 8 4 8;
+    -fx-background-color: transparent;
+    -fx-text-fill: -color-fg-default;
+}
+
+.bd-list > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.bd-list > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected {
+    -fx-background-color: -color-accent-subtle;
+    -fx-text-fill: -color-fg-default;
+}
+
+.bd-list .placeholder {
+    -fx-background-color: transparent;
+}
+
+.bd-row {
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+    -fx-min-height: 24;
+}
+
+.bd-row.bd-row-tall {
+    -fx-min-height: 40;
+}
+
+.bd-row-text {
+    -fx-spacing: 2;
+}
+
+.bd-row-title {
+    -fx-font-size: 13px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.bd-row-meta {
+    -fx-font-size: 11px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.bd-row-meta:accent { -fx-text-fill: -color-accent-fg; }
+.bd-row-meta:success { -fx-text-fill: -color-success-fg; }
+.bd-row-meta:warning { -fx-text-fill: -color-warning-fg; }
+.bd-row-meta:danger { -fx-text-fill: -color-danger-fg; }
+
+/* ---------- segmented control ---------- */
+
+.bd-segmented {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8;
+    -fx-padding: 2;
+    -fx-spacing: 2;
+}
+
+.bd-segment,
+.bd-segment:focused {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6;
+    -fx-border-width: 0;
+    -fx-padding: 4 10 4 10;
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+    -fx-effect: none;
+}
+
+.bd-segment:hover {
+    -fx-text-fill: -color-fg-default;
+}
+
+.bd-segment:selected,
+.bd-segment:selected:focused {
+    -fx-background-color: -color-border-muted, -color-bg-default;
+    -fx-background-insets: 0, 1;
+    -fx-text-fill: -color-fg-default;
+    -fx-effect: dropshadow(gaussian, -color-shadow-default, 3, 0, 0, 1);
+}
+
+.bd-segment:focused {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+}
+
+/* ---------- blocks, cards and frames ---------- */
+
+.bd-block-slot {
+    -fx-background-color: -color-bg-inset;
+    -fx-background-radius: 6;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 6;
+    -fx-border-width: 1;
+}
+
+.bd-block-slot:hover {
+    -fx-border-color: -color-accent-emphasis;
+}
+
+.bd-swatch {
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+}
+
+.bd-card {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8;
+    -fx-padding: 12;
+    -fx-spacing: 8;
+}
+
+.bd-card:accent {
+    -fx-background-color: -color-accent-subtle;
+}
+
+.bd-frame {
+    -fx-background-color: -color-bg-inset;
+    -fx-background-radius: 8;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+/* ---------- dialogs made with PluginUi ---------- */
+
+.bd-dialog > .content {
+    -fx-padding: 24;
+    -fx-spacing: 16;
+}
+
+.bd-dialog .bd-dialog-message {
+    -fx-wrap-text: true;
+    -fx-text-fill: -color-fg-default;
+}

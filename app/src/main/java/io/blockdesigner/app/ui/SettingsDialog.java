@@ -2,6 +2,7 @@ package io.blockdesigner.app.ui;
 
 import io.blockdesigner.app.Settings;
 import io.blockdesigner.app.Workspace;
+import io.blockdesigner.app.plugins.PluginManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -36,10 +37,18 @@ import java.util.List;
 
 /**
  * The Settings window: General (author, start screen, Minecraft assets, plugins, updates, where settings live),
- * Appearance (colour theme, dark / light / match Windows) and Keybinds. Changes apply immediately.
+ * Appearance (colour theme, dark / light / match Windows), Keybinds (the app's and plugins' tools and actions), and a
+ * page per plugin with settings. Changes apply immediately.
  */
 final class SettingsDialog extends Dialog<Void> {
     private final Workspace ws;
+    private final PluginManager plugins;
+    private final PluginKeys pluginKeys;
+    private final Runnable pluginKeysChanged;
+    /** The plugin whose page is showing and its form, to redraw when the plugin changes its own settings. */
+    private PluginManager.Plugin shownPlugin;
+    private OptionsEditor pluginEditor;
+    private ToggleButton keybindsNav;
     private final VBox page = new VBox(14);
     private final ToggleGroup nav = new ToggleGroup();
     private final FlowPane themeCards = new FlowPane(12, 12);
@@ -60,17 +69,27 @@ final class SettingsDialog extends Dialog<Void> {
         restartApp = restart;
     }
 
-    SettingsDialog(Window owner, Workspace ws, Keybinds keys, Runnable keysChanged, Runnable changeAssets, Runnable openPlugins, Runnable checkUpdates) {
+    /**
+     * @param plugins           for the plugin pages and plugin keys (may be null: no plugin pages)
+     * @param pluginKeys        plugin tool and action keys
+     * @param pluginKeysChanged a plugin key changed (the tool dock's tooltips follow)
+     * @param pluginId          open at this plugin's page (null: General)
+     */
+    SettingsDialog(Window owner, Workspace ws, Keybinds keys, Runnable keysChanged, Runnable changeAssets, Runnable openPlugins,
+                   Runnable checkUpdates, PluginManager plugins, PluginKeys pluginKeys, Runnable pluginKeysChanged, String pluginId) {
         this.ws = ws;
         this.keys = keys;
         this.keysChanged = keysChanged;
+        this.plugins = plugins;
+        this.pluginKeys = pluginKeys;
+        this.pluginKeysChanged = pluginKeysChanged != null ? pluginKeysChanged : () -> {
+        };
         initOwner(owner);
         setTitle("Settings");
         setResizable(true);
         var dp = getDialogPane();
-        dp.getStylesheets().add(SettingsDialog.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-        dp.getStyleClass().addAll("app-root", "settings-dialog");
-        syncModeClass();
+        Dialogs.style(dp, ws.darkProperty().get());
+        dp.getStyleClass().add("settings-dialog");
         ws.darkProperty().addListener((o, a, b) -> {
             syncModeClass();
             rebuildThemeCards();
@@ -79,7 +98,29 @@ final class SettingsDialog extends Dialog<Void> {
         ToggleButton general = navButton("General", Feather.SLIDERS);
         ToggleButton appearance = navButton("Appearance", Feather.DROPLET);
         ToggleButton keybinds = navButton("Keybinds", Feather.COMMAND);
+        keybindsNav = keybinds;
         VBox side = new VBox(4, general, appearance, keybinds);
+        // One page per running plugin that has settings, under their own heading.
+        ToggleButton open = null;
+        List<PluginManager.Plugin> withSettings = plugins == null ? List.of() : plugins.plugins().stream()
+                .filter(p -> p.state() == PluginManager.State.ENABLED && p.settingsOptions() != null && !p.settingsOptions().isEmpty())
+                .toList();
+        if (!withSettings.isEmpty()) {
+            Label heading = new Label("Plugins");
+            heading.getStyleClass().add("settings-nav-heading");
+            side.getChildren().add(heading);
+            for (PluginManager.Plugin p : withSettings) {
+                ToggleButton b = new ToggleButton(p.info().name(), ToolIcons.plugin(pluginIcon(p), 16));
+                b.getStyleClass().add("settings-nav-item");
+                b.setMaxWidth(Double.MAX_VALUE);
+                b.setAlignment(Pos.CENTER_LEFT);
+                b.setToggleGroup(nav);
+                b.setTooltip(new Tooltip(p.info().name() + " settings"));
+                b.setOnAction(e -> showPlugin(p));
+                side.getChildren().add(b);
+                if (p.info().id().equals(pluginId)) open = b;
+            }
+        }
         side.getStyleClass().add("settings-nav");
         side.setPrefWidth(190);
         side.setMinWidth(170);
@@ -102,13 +143,69 @@ final class SettingsDialog extends Dialog<Void> {
         nav.selectedToggleProperty().addListener((o, a, b) -> {
             if (b == null && a != null) a.setSelected(true);
         });
-        general.setSelected(true);
-        showGeneral(changeAssets, openPlugins, checkUpdates);
+        if (open != null) {
+            open.setSelected(true);
+            open.fire();
+            open.setSelected(true);
+        } else {
+            general.setSelected(true);
+            showGeneral(changeAssets, openPlugins, checkUpdates);
+        }
+    }
+
+    private String pluginIcon(PluginManager.Plugin p) {
+        for (var panel : plugins.panels()) if (panel.plugin() == p) return panel.panel().icon();
+        return null;
+    }
+
+    // ---- a plugin's page -------------------------------------------------------------------------------------
+
+    /** A plugin's settings: its options (live, kept), Reset to defaults, and where its keys are. */
+    private void showPlugin(PluginManager.Plugin p) {
+        shownPlugin = p;
+        Button reset = new Button("Reset to defaults", new FontIcon(Feather.ROTATE_CCW));
+        reset.getStyleClass().add("flat");
+        reset.setTooltip(new Tooltip("Every " + p.info().name() + " setting back to its default"));
+        Region grow = new Region();
+        HBox.setHgrow(grow, Priority.ALWAYS);
+        HBox top = new HBox(8, title(p.info().name()), grow, reset);
+        top.setAlignment(Pos.CENTER_LEFT);
+        pluginEditor = new OptionsEditor(p.settingsValues(), plugins.blocks(), ws::blockToPlace, v -> plugins.setSettings(p, v))
+                .icons(ws).rememberExpanded(p.info().id() + "/settings/tab", ws.settings().expandedOptionGroups);
+        reset.setOnAction(e -> pluginEditor.reset());
+        page.getChildren().setAll(top);
+        String about = firstSentence(p.info().description());
+        if (!about.isBlank()) page.getChildren().add(hint(about));
+        page.getChildren().add(pluginEditor);
+        boolean hasKeys = plugins.tools().stream().anyMatch(t -> t.plugin() == p) || plugins.actions().stream().anyMatch(a -> a.plugin() == p);
+        if (hasKeys) {
+            javafx.scene.control.Hyperlink keysLink = new javafx.scene.control.Hyperlink("Keybinds page");
+            keysLink.getStyleClass().add("bd-link");
+            keysLink.setOnAction(e -> {
+                keybindsNav.setSelected(true);
+                showKeybinds();
+            });
+            Label caption = new Label("Keys for its tools and actions are on the");
+            caption.getStyleClass().add("bd-caption");
+            HBox line = new HBox(4, caption, keysLink);
+            line.setAlignment(Pos.CENTER_LEFT);
+            page.getChildren().add(line);
+        }
+    }
+
+    private static String firstSentence(String text) {
+        if (text == null) return "";
+        int dot = text.indexOf(". ");
+        return (dot < 0 ? text : text.substring(0, dot + 1)).strip();
+    }
+
+    /** The plugin changed its own settings: its page, if showing, shows the new values. */
+    void pluginSettingsChanged(PluginManager.Plugin p) {
+        if (p == shownPlugin && pluginEditor != null && p.settingsValues() != null) pluginEditor.setValues(p.settingsValues());
     }
 
     private void syncModeClass() {
-        getDialogPane().getStyleClass().removeAll("dark", "light");
-        getDialogPane().getStyleClass().add(ws.darkProperty().get() ? "dark" : "light");
+        Dialogs.mode(getDialogPane(), ws.darkProperty().get());
     }
 
     private ToggleButton navButton(String text, Feather icon) {
@@ -126,9 +223,10 @@ final class SettingsDialog extends Dialog<Void> {
         return l;
     }
 
+    /** A heading over a group of settings, in sentence case like plugin pages. */
     private static Label section(String text) {
-        Label l = new Label(text.toUpperCase());
-        l.getStyleClass().add("viewport-settings-section");
+        Label l = new Label(text);
+        l.getStyleClass().addAll("bd-section-title", "settings-section");
         return l;
     }
 
@@ -143,6 +241,7 @@ final class SettingsDialog extends Dialog<Void> {
     // ---- Appearance ------------------------------------------------------------------------------------------
 
     private void showAppearance() {
+        shownPlugin = null;
         // Mode: three pills.
         ToggleGroup modes = new ToggleGroup();
         HBox modeRow = new HBox(0);
@@ -266,6 +365,7 @@ final class SettingsDialog extends Dialog<Void> {
     // ---- General ---------------------------------------------------------------------------------------------
 
     private void showGeneral(Runnable changeAssets, Runnable openPlugins, Runnable checkUpdates) {
+        shownPlugin = null;
         Settings s = ws.settings();
         TextField author = new TextField(s.author);
         author.setPromptText("Your name");
@@ -325,6 +425,7 @@ final class SettingsDialog extends Dialog<Void> {
     private Button listening;
 
     private void showKeybinds() {
+        shownPlugin = null;
         TextField filter = new TextField();
         filter.setPromptText("Search actions or keys…  (e.g. layer, Shift+Z)");
         filter.getStyleClass().add("search-field");
@@ -335,7 +436,10 @@ final class SettingsDialog extends Dialog<Void> {
         Button resetAll = new Button("Reset all to defaults", new FontIcon(Feather.ROTATE_CCW));
         resetAll.setOnAction(e -> {
             keys.resetAll();
+            ws.settings().pluginToolKeys.clear();
+            ws.settings().pluginActionKeys.clear();
             keysChanged.run();
+            pluginKeysChanged.run();
             showKeybinds();
         });
         HBox top = new HBox(8, searchBox, resetAll);
@@ -359,6 +463,19 @@ final class SettingsDialog extends Dialog<Void> {
                 }
                 list.getChildren().add(keyRow(a));
             }
+            // Then each plugin's tools and actions, under the plugin's name.
+            String plugin = null;
+            for (PluginKeys.Target t : pluginTargets()) {
+                String hay = (t.label() + " " + t.pluginName() + " " + Keybinds.text(pluginKeys.bound(t))).toLowerCase(java.util.Locale.ROOT);
+                if (!q.isEmpty() && !hay.contains(q)) continue;
+                if (!t.pluginName().equals(plugin)) {
+                    plugin = t.pluginName();
+                    Label sec = section(plugin);
+                    VBox.setMargin(sec, new Insets(list.getChildren().isEmpty() ? 4 : 12, 0, 2, 0));
+                    list.getChildren().add(sec);
+                }
+                list.getChildren().add(pluginKeyRow(t));
+            }
             if (list.getChildren().isEmpty()) list.getChildren().add(hint("No action or key matches \"" + q + "\"."));
         };
         filter.textProperty().addListener((o, a, b) -> fill.run());
@@ -369,8 +486,117 @@ final class SettingsDialog extends Dialog<Void> {
                 hint("Click a key to change it, then press the new key or combination (click it again, or anywhere else, to "
                         + "cancel). Each action can have a second key. Actions marked \"hold\" take a single key, and Shift, Ctrl or Alt "
                         + "on its own works for them. Keys shown in red are used by another action too; the first one that applies "
-                        + "wins. Mouse buttons are fixed."),
+                        + "wins, and BlockDesigner's own actions win over plugins'. Mouse buttons are fixed."),
                 top, list);
+    }
+
+    /** Every running plugin's tools and actions, grouped by plugin. */
+    private List<PluginKeys.Target> pluginTargets() {
+        if (plugins == null || pluginKeys == null) return List.of();
+        List<PluginKeys.Target> out = new java.util.ArrayList<>();
+        for (PluginManager.Plugin p : plugins.plugins()) {
+            if (p.state() != PluginManager.State.ENABLED) continue;
+            for (var t : plugins.tools()) if (t.plugin() == p) out.add(PluginKeys.Target.of(t));
+            for (var a : plugins.actions()) if (a.plugin() == p) out.add(PluginKeys.Target.of(a));
+        }
+        return out;
+    }
+
+    /** A plugin tool's or action's row: one key (plugins get one), its reset button. */
+    private HBox pluginKeyRow(PluginKeys.Target t) {
+        Label name = new Label(t.label());
+        name.setMinWidth(90);
+        name.setTooltip(new Tooltip(t.fullName()));
+        Region grow = new Region();
+        HBox.setHgrow(grow, Priority.ALWAYS);
+        HBox row = new HBox(6, name, grow);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("keybind-row");
+        List<PluginKeys.Target> all = pluginTargets();
+        KeyTarget target = new KeyTarget() {
+            @Override
+            public String label() {
+                return t.fullName();
+            }
+
+            @Override
+            public boolean held() {
+                return false;
+            }
+
+            @Override
+            public List<String> clashes(KeyCombination k) {
+                return pluginKeys.clashes(k, t, all);
+            }
+
+            @Override
+            public void set(int slot, KeyCombination k) {
+                pluginKeys.set(t, k);
+                pluginKeysChanged.run();
+            }
+        };
+        row.getChildren().add(keySlot(target, 0, pluginKeys.bound(t), row, slot0Text(pluginKeys.bound(t))));
+        Region noSecond = new Region();
+        noSecond.setMinWidth(128);
+        noSecond.setPrefWidth(128);
+        row.getChildren().add(noSecond);
+        Button reset = new Button(null, new FontIcon(Feather.ROTATE_CCW));
+        reset.getStyleClass().addAll("flat", "small");
+        reset.setTooltip(new Tooltip("Back to " + pluginKeys.defaultText(t)));
+        reset.setDisable(pluginKeys.isDefault(t));
+        reset.setOnAction(e -> {
+            pluginKeys.reset(t);
+            pluginKeysChanged.run();
+            refillKeys.run();
+        });
+        row.getChildren().add(reset);
+        return row;
+    }
+
+    private static String slot0Text(KeyCombination k) {
+        return k == null ? "None" : Keybinds.text(k);
+    }
+
+    /** What a key slot edits: an app action's key, or a plugin tool's or action's. */
+    private interface KeyTarget {
+        String label();
+
+        /** Takes a single held key (Shift on its own…) rather than a combination. */
+        boolean held();
+
+        /** What else uses {@code k}, by name. */
+        List<String> clashes(KeyCombination k);
+
+        void set(int slot, KeyCombination k);
+    }
+
+    private KeyTarget target(Keybinds.Action a) {
+        return new KeyTarget() {
+            @Override
+            public String label() {
+                return a.label;
+            }
+
+            @Override
+            public boolean held() {
+                return a.held;
+            }
+
+            @Override
+            public List<String> clashes(KeyCombination k) {
+                List<String> out = new java.util.ArrayList<>(keys.usersOf(k, a).stream().map(c -> c.label).toList());
+                if (k != null && pluginKeys != null) {
+                    for (PluginKeys.Target t : pluginTargets()) if (k.equals(pluginKeys.bound(t))) out.add(t.fullName());
+                }
+                return out;
+            }
+
+            @Override
+            public void set(int slot, KeyCombination k) {
+                keys.set(a, slot, k);
+                keysChanged.run();
+            }
+        };
     }
 
     private HBox keyRow(Keybinds.Action a) {
@@ -384,7 +610,10 @@ final class SettingsDialog extends Dialog<Void> {
         row.setAlignment(Pos.CENTER_LEFT);
         row.getStyleClass().add("keybind-row");
         KeyCombination[] k = keys.get(a);
-        for (int slot = 0; slot < 2; slot++) row.getChildren().add(keySlot(a, slot, k[slot], row));
+        KeyTarget target = target(a);
+        for (int slot = 0; slot < 2; slot++) {
+            row.getChildren().add(keySlot(target, slot, k[slot], row, k[slot] == null ? (slot == 0 ? "None" : "+ Add") : Keybinds.text(k[slot])));
+        }
         Button reset = new Button(null, new FontIcon(Feather.ROTATE_CCW));
         reset.getStyleClass().addAll("flat", "small");
         reset.setTooltip(new Tooltip("Back to " + defaultsText(a)));
@@ -392,7 +621,7 @@ final class SettingsDialog extends Dialog<Void> {
         reset.setOnAction(e -> {
             keys.reset(a);
             keysChanged.run();
-            refreshRow(row, a);
+            refreshRow();
         });
         row.getChildren().add(reset);
         return row;
@@ -402,7 +631,7 @@ final class SettingsDialog extends Dialog<Void> {
     private Runnable refillKeys = () -> {
     };
 
-    private void refreshRow(HBox row, Keybinds.Action a) {
+    private void refreshRow() {
         refillKeys.run();
     }
 
@@ -412,14 +641,15 @@ final class SettingsDialog extends Dialog<Void> {
     }
 
     /** One binding: a keycap-like button that listens for the next key when clicked, with a small clear button. */
-    private Node keySlot(Keybinds.Action a, int slot, KeyCombination k, HBox row) {
-        Button b = new Button(k == null ? (slot == 0 ? "None" : "+ Add") : Keybinds.text(k));
+    private Node keySlot(KeyTarget a, int slot, KeyCombination k, HBox row, String text) {
+        Button b = new Button(text);
         b.getStyleClass().add("keybind-key");
+        b.setAccessibleText(a.label() + ": " + text);
         if (k == null) b.getStyleClass().add("keybind-empty");
-        List<Keybinds.Action> clash = keys.usersOf(k, a);
+        List<String> clash = a.clashes(k);
         if (!clash.isEmpty()) {
             b.getStyleClass().add("keybind-clash");
-            b.setTooltip(new Tooltip("Also: " + String.join(", ", clash.stream().map(c -> c.label).toList())));
+            b.setTooltip(new Tooltip("Also: " + String.join(", ", clash)));
         }
         b.setMinWidth(96);
         b.setFocusTraversable(false);
@@ -427,33 +657,32 @@ final class SettingsDialog extends Dialog<Void> {
             // Clicking the key again while it waits cancels, as does clicking anywhere else.
             if (listening == b) {
                 listening = null;
-                refreshRow(row, a);
+                refreshRow();
                 return;
             }
             if (listening != null) {
                 listening.getStyleClass().remove("keybind-listening");
             }
             listening = b;
-            b.setText(a.held ? "Hold a key…" : "Press a key…");
+            b.setText(a.held() ? "Hold a key…" : "Press a key…");
             b.getStyleClass().add("keybind-listening");
             b.requestFocus();
         });
         b.focusedProperty().addListener((o, was, is) -> {
             if (!is && listening == b) {
                 listening = null;
-                refreshRow(row, a);
+                refreshRow();
             }
         });
         b.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
             if (listening != b) return;
             e.consume();
             // Held actions take one key on its own, Shift, Ctrl and Alt included; the rest take a combination.
-            KeyCombination got = a.held ? Keybinds.heldFromEvent(e) : Keybinds.fromEvent(e);
+            KeyCombination got = a.held() ? Keybinds.heldFromEvent(e) : Keybinds.fromEvent(e);
             if (got == null) return;
             listening = null;
-            keys.set(a, slot, got);
-            keysChanged.run();
-            refreshRow(row, a);
+            a.set(slot, got);
+            refreshRow();
         });
         // Alt, F10 and the like must not reach the dialog's own handling while a key is being recorded.
         b.addEventFilter(javafx.scene.input.KeyEvent.KEY_RELEASED, e -> {
@@ -470,9 +699,8 @@ final class SettingsDialog extends Dialog<Void> {
         clear.setTooltip(new Tooltip("Remove this key"));
         clear.setFocusTraversable(false);
         clear.setOnAction(e -> {
-            keys.set(a, slot, null);
-            keysChanged.run();
-            refreshRow(row, a);
+            a.set(slot, null);
+            refreshRow();
         });
         box.getChildren().add(clear);
         return box;

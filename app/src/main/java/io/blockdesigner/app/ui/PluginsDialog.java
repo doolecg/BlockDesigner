@@ -49,8 +49,7 @@ final class PluginsDialog extends Dialog<Void> {
         setTitle("Plugins");
         setResizable(true);
         var dp = getDialogPane();
-        dp.getStylesheets().add(PluginsDialog.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-        dp.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        Dialogs.style(dp, dark);
 
         Label title = new Label("Plugins", FormatIcons.tile(FormatIcons.Kind.PLUGIN, 34));
         title.getStyleClass().add("export-title");

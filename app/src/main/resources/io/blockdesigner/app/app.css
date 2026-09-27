@@ -187,6 +187,16 @@
     -fx-padding: 10;
 }
 
+/* The right-hand plugin tabs: no padding of their own, plugin pages bring it (PluginHomeTab, the UI kit). */
+.plugin-side {
+    -fx-background-color: -color-bg-default;
+    -fx-padding: 0;
+}
+
+.plugin-side > .tab-pane > .tab-header-area {
+    -fx-padding: 6 6 0 6;
+}
+
 .panel-header {
     -fx-padding: 0 0 6 2;
 }
@@ -317,7 +327,7 @@
 
 .palette-tab:selected {
     -fx-background-color: -bd-accent;
-    -fx-text-fill: white;
+    -fx-text-fill: -color-fg-emphasis;
     -fx-font-weight: bold;
 }
 
@@ -329,7 +339,7 @@
 
 .chip:selected {
     -fx-background-color: -bd-accent;
-    -fx-text-fill: white;
+    -fx-text-fill: -color-fg-emphasis;
 }
 
 .palette-category {
@@ -956,6 +966,23 @@
     -fx-icon-color: -bd-accent;
 }
 
+.settings-nav-item:selected .tool-glyph {
+    -fx-stroke: -bd-accent;
+}
+
+/* "Plugins", over the nav items of plugins' own settings pages. */
+.settings-nav-heading {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+    -fx-padding: 14 12 4 12;
+}
+
+/* Headings in the Settings window: the kit's section title (sentence case), with room above. */
+.settings-section {
+    -fx-padding: 10 0 2 0;
+}
+
 .theme-card {
     -fx-padding: 10;
     -fx-border-color: -color-border-muted;
@@ -1375,70 +1402,10 @@
     -fx-text-fill: -color-fg-default;
 }
 
-/* ---------- a plugin's own tab (status, settings, what it adds) ---------- */
-.plugin-home-scroll, .plugin-home-scroll > .viewport {
-    -fx-background-color: transparent;
-}
-
-.plugin-home-name {
-    -fx-font-weight: bold;
-    -fx-font-size: 15px;
-}
-
+/* ---------- a plugin's own tab (its pages, and the Overview built with the plugin UI kit) ---------- */
 .plugin-home-description {
-    -fx-text-fill: -color-fg-muted;
-    -fx-font-size: 12px;
-}
-
-.plugin-status {
-    -fx-font-size: 11px;
-    -fx-font-weight: bold;
-    -fx-padding: 2 9 2 7;
-    -fx-background-radius: 999;
-    -fx-graphic-text-gap: 6;
-}
-
-.plugin-status-dot {
-    -fx-min-width: 7;
-    -fx-min-height: 7;
-    -fx-max-width: 7;
-    -fx-max-height: 7;
-    -fx-background-radius: 999;
-}
-
-.plugin-status-ok {
-    -fx-background-color: rgba(70, 196, 110, 0.16);
-    -fx-text-fill: #46C46E;
-}
-
-.plugin-status-ok .plugin-status-dot {
-    -fx-background-color: #46C46E;
-}
-
-.plugin-status-failed {
-    -fx-background-color: rgba(229, 72, 77, 0.16);
-    -fx-text-fill: #E5484D;
-}
-
-.plugin-status-failed .plugin-status-dot {
-    -fx-background-color: #E5484D;
-}
-
-.plugin-home-card {
-    -fx-padding: 10 12 12 12;
-    -fx-background-color: -color-bg-subtle;
-    -fx-background-radius: 10;
-}
-
-.plugin-home-section {
-    -fx-font-size: 10.5px;
-    -fx-font-weight: bold;
-    -fx-text-fill: -color-fg-muted;
-}
-
-.plugin-home-item {
-    -fx-font-weight: bold;
-    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-default;
+    -fx-font-size: 13px;
 }
 
 /* Block slots in plugin options: small hotbar slots. */
@@ -1457,9 +1424,9 @@
     -fx-font-size: 8.5px;
 }
 
-/* A plugin tab's pages (Overview and its panels), picked along the top. */
+/* A plugin tab's pages (its panels, then settings and About at the end), picked along the top. */
 .plugin-pages {
-    -fx-border-color: transparent transparent -bd-glass-border transparent;
+    -fx-border-color: transparent transparent -color-border-muted transparent;
     -fx-border-width: 0 0 1 0;
     -fx-padding: 8 10 6 10;
 }
@@ -1467,9 +1434,62 @@
 .plugin-page {
     -fx-background-color: transparent;
     -fx-background-radius: 6;
+    /* A transparent border, so the selected page's accent border doesn't move anything. */
+    -fx-border-color: transparent;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
     -fx-padding: 3 8 3 8;
-    -fx-font-size: 11.5px;
+    -fx-font-size: 12px;
     -fx-cursor: hand;
+}
+
+/* The settings and About buttons at the end of the page row. */
+.plugin-page-icon {
+    -fx-background-radius: 6;
+    -fx-padding: 4;
+    -fx-min-width: 26;
+    -fx-min-height: 26;
+}
+
+.plugin-page-icon .bd-icon-path {
+    -fx-stroke: -color-fg-muted;
+}
+
+.plugin-page-icon:hover .bd-icon-path,
+.plugin-page-icon:selected .bd-icon-path {
+    -fx-stroke: -bd-accent;
+}
+
+.toggle-button.plugin-page-icon:selected {
+    -fx-background-color: -bd-accent-soft;
+}
+
+/* A page's status dot (PluginContext.setPanelStatus): the tone's colour, with its text in the tooltip. */
+.plugin-page-status {
+    -fx-min-width: 7;
+    -fx-min-height: 7;
+    -fx-pref-width: 7;
+    -fx-pref-height: 7;
+    -fx-max-width: 7;
+    -fx-max-height: 7;
+    -fx-background-radius: 999;
+    -fx-background-color: -color-fg-subtle;
+}
+
+.plugin-page-status:accent {
+    -fx-background-color: -color-accent-emphasis;
+}
+
+.plugin-page-status:success {
+    -fx-background-color: -color-success-emphasis;
+}
+
+.plugin-page-status:warning {
+    -fx-background-color: -color-warning-emphasis;
+}
+
+.plugin-page-status:danger {
+    -fx-background-color: -color-danger-emphasis;
 }
 
 .plugin-page:hover {
@@ -1479,6 +1499,4 @@
 .plugin-page:selected {
     -fx-background-color: -bd-accent-soft;
     -fx-border-color: -bd-accent;
-    -fx-border-width: 1;
-    -fx-border-radius: 6;
 }

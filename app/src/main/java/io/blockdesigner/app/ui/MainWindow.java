@@ -88,6 +88,10 @@ public final class MainWindow {
     private SplitPane mainSplit, leftSplit;
     /** The user's key binds (Settings › Keybinds). */
     private final Keybinds keys;
+    /** Keys for plugin tools and actions (Settings › Keybinds too). */
+    private final PluginKeys pluginKeys;
+    /** The Settings window while it is open, so a plugin changing its own settings redraws its page. */
+    private SettingsDialog openSettingsDialog;
     private final BorderPane centerColumn = new BorderPane();
     private final java.util.Set<String> disabledPlugins;
     private final io.blockdesigner.app.plugins.PluginManager plugins;
@@ -101,6 +105,7 @@ public final class MainWindow {
         this.viewport = new ViewportPane(ws);
         this.keys = new Keybinds(ws.settings());
         Keybinds.install(keys);
+        this.pluginKeys = new PluginKeys(ws.settings(), keys);
         viewport.setKeybinds(keys);
         this.disabledPlugins = new java.util.LinkedHashSet<>(ws.settings().disabledPlugins);
         this.plugins = new io.blockdesigner.app.plugins.PluginManager(io.blockdesigner.app.Settings.dir().resolve("plugins"), pluginHost(), disabledPlugins,
@@ -144,7 +149,8 @@ public final class MainWindow {
         center = new StackPane(viewport, dock, loadingOverlay);
         center.getStyleClass().add("viewport-host");
 
-        rightPanel.getStyleClass().add("side-panel");
+        // Plugin pages own their padding (the UI kit's PanelScaffold); older panels get theirs from PluginHomeTab.
+        rightPanel.getStyleClass().add("plugin-side");
         rightPanel.setPrefWidth(360);
         rightPanel.setMinWidth(280);
 
@@ -172,6 +178,7 @@ public final class MainWindow {
         windowRoot.getChildren().add(startScreen);
         javafx.scene.Scene scene = new javafx.scene.Scene(windowRoot, 1560, 940);
         scene.getStylesheets().add(MainWindow.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
+        scene.getStylesheets().add(io.blockdesigner.plugin.ui.Theme.STYLESHEET);
         installShortcuts(scene);
         installDragAndDrop(scene);
         stage.setScene(scene);
@@ -323,6 +330,16 @@ public final class MainWindow {
             }
 
             @Override
+            public List<Path> resourcePacks() {
+                return ws.settings().resourcePacks.stream().map(Path::of).toList();
+            }
+
+            @Override
+            public void useResourcePacks(List<Path> packs) {
+                useResourcePacksFromPlugin(packs);
+            }
+
+            @Override
             public io.blockdesigner.core.edit.SceneEditor editor() {
                 return ws.editor();
             }
@@ -436,7 +453,70 @@ public final class MainWindow {
             public void toolOptionsChanged(io.blockdesigner.app.plugins.PluginManager.Tool tool, io.blockdesigner.plugin.OptionValues values) {
                 viewport.pluginToolOptionsChanged(tool, values);
             }
+
+            @Override
+            public io.blockdesigner.plugin.ui.OptionsForm optionsForm(io.blockdesigner.app.plugins.PluginManager.Plugin plugin,
+                                                                      io.blockdesigner.plugin.Options options,
+                                                                      io.blockdesigner.plugin.OptionValues initial,
+                                                                      java.util.function.Consumer<io.blockdesigner.plugin.OptionValues> onChange) {
+                return new OptionsEditor(initial, plugins.blocks(), ws::blockToPlace, onChange).icons(ws)
+                        .rememberExpanded(plugin.info().id() + "/form", ws.settings().expandedOptionGroups);
+            }
+
+            @Override
+            public javafx.beans.property.ReadOnlyBooleanProperty dark() {
+                return ws.darkProperty();
+            }
+
+            @Override
+            public javafx.stage.Window owner() {
+                return stage;
+            }
+
+            @Override
+            public void styleDialog(javafx.scene.control.Dialog<?> dialog) {
+                if (dialog.getOwner() == null && !dialog.isShowing()) dialog.initOwner(stage);
+                Dialogs.style(dialog.getDialogPane(), ws.darkProperty().get());
+            }
+
+            @Override
+            public void showPanel(io.blockdesigner.app.plugins.PluginManager.Plugin plugin, String panelId) {
+                PluginHomeTab home = homeTabs.get(plugin.info().id());
+                if (home == null) return;
+                reopenTab(home.tab);
+                home.showPanel(panelId);
+            }
+
+            @Override
+            public void panelStatusChanged(io.blockdesigner.app.plugins.PluginManager.Plugin plugin) {
+                PluginHomeTab home = homeTabs.get(plugin.info().id());
+                if (home != null) home.statusChanged();
+            }
+
+            @Override
+            public void openSettings(io.blockdesigner.app.plugins.PluginManager.Plugin plugin) {
+                openPluginSettings(plugin);
+            }
+
+            @Override
+            public void pluginSettingsChanged(io.blockdesigner.app.plugins.PluginManager.Plugin plugin) {
+                if (openSettingsDialog != null) openSettingsDialog.pluginSettingsChanged(plugin);
+            }
         };
+    }
+
+    /** Settings at the plugin's page; a plugin without settings shows its tab's Overview instead. */
+    private void openPluginSettings(io.blockdesigner.app.plugins.PluginManager.Plugin plugin) {
+        var o = plugin.settingsOptions();
+        if (o == null || o.isEmpty()) {
+            PluginHomeTab home = homeTabs.get(plugin.info().id());
+            if (home != null) {
+                reopenTab(home.tab);
+                home.showOverview();
+            }
+            return;
+        }
+        openSettings(plugin.info().id());
     }
 
     // ---- plugin tools -----------------------------------------------------------------------------------------
@@ -447,20 +527,9 @@ public final class MainWindow {
         else if (ws.toolProperty().get() == ToolKind.PLUGIN) ws.toolProperty().set(ToolKind.SELECT);
     }
 
-    /** The key that picks a plugin tool: the user's (settings file) or the plugin's default; null for none. */
+    /** The key that picks a plugin tool (Settings › Keybinds, else the plugin's default); null for none. */
     private KeyCombination pluginToolKey(io.blockdesigner.app.plugins.PluginManager.Tool t) {
-        String k = ws.settings().pluginToolKeys.getOrDefault(t.key(), t.tool().defaultKey());
-        if (k == null || k.isBlank()) return null;
-        try {
-            KeyCombination kc = KeyCombination.valueOf(k);
-            // A key already bound to one of BlockDesigner's own actions keeps doing that.
-            for (Keybinds.Action a : Keybinds.Action.values()) {
-                for (KeyCombination bound : keys.get(a)) if (kc.equals(bound)) return null;
-            }
-            return kc;
-        } catch (RuntimeException bad) {
-            return null;
-        }
+        return pluginKeys.tool(t);
     }
 
     private String pluginToolKeyText(io.blockdesigner.app.plugins.PluginManager.Tool t) {
@@ -468,7 +537,7 @@ public final class MainWindow {
         return k == null ? "" : Keybinds.text(k);
     }
 
-    /** Picks the plugin tool bound to this key, if any. */
+    /** Picks the plugin tool, or runs the plugin action, bound to this key, if any. */
     private boolean pluginToolShortcut(KeyEvent e) {
         for (var t : plugins.tools()) {
             KeyCombination k = pluginToolKey(t);
@@ -477,7 +546,19 @@ public final class MainWindow {
                 return true;
             }
         }
+        for (var a : plugins.actions()) {
+            KeyCombination k = pluginKeys.action(a);
+            if (k != null && k.match(e)) {
+                plugins.run(a);
+                return true;
+            }
+        }
         return false;
+    }
+
+    /** A plugin key changed in Settings: the tool dock's tooltips show the new keys. */
+    private void pluginKeysChanged() {
+        if (toolDock != null) toolDock.setPluginTools(plugins.tools(), this::pickPluginTool, this::pluginToolKeyText);
     }
 
     // ---- plugin transforms ------------------------------------------------------------------------------------
@@ -549,7 +630,7 @@ public final class MainWindow {
                 home.refresh();
                 continue;
             }
-            home = new PluginHomeTab(e.getValue(), plugins, ws::blockToPlace, homeActions());
+            home = new PluginHomeTab(e.getValue(), plugins, ws.settings().pluginPages, homeActions());
             homeTabs.put(e.getKey(), home);
             if (!ws.settings().closedPluginPanels.contains(homeKey(e.getKey()))) sideTabs.getTabs().add(home.tab);
         }
@@ -585,6 +666,16 @@ public final class MainWindow {
             public void disable(io.blockdesigner.app.plugins.PluginManager.Plugin p) {
                 plugins.setEnabled(p, false);
                 viewport.showToast(p.info().name() + " turned off · Manage plugins turns it back on");
+            }
+
+            @Override
+            public void openSettings(io.blockdesigner.app.plugins.PluginManager.Plugin p) {
+                openPluginSettings(p);
+            }
+
+            @Override
+            public String toolKey(io.blockdesigner.app.plugins.PluginManager.Tool t) {
+                return pluginToolKeyText(t);
             }
 
             @Override
@@ -902,13 +993,24 @@ public final class MainWindow {
         ws.settings().darkTheme = dark;
     }
 
-    /** The Settings window (theme, mode, general options). */
+    /** The Settings window (theme, mode, general options, keybinds, plugin pages). */
     public void openSettings() {
+        openSettings(null);
+    }
+
+    /** The Settings window, at a plugin's page when {@code pluginId} is given. */
+    private void openSettings(String pluginId) {
+        if (openSettingsDialog != null) return;
         SettingsDialog d = new SettingsDialog(stage, ws, keys, this::applyAccelerators, () -> startAssetLoading(true),
                 this::showPluginsDialog,
-                () -> checkForUpdates(true));
+                () -> checkForUpdates(true), plugins, pluginKeys, this::pluginKeysChanged, pluginId);
         d.setRestart(this::restartApp);
-        d.showAndWait();
+        openSettingsDialog = d;
+        try {
+            d.showAndWait();
+        } finally {
+            openSettingsDialog = null;
+        }
         ws.settings().save();
     }
 
@@ -1016,7 +1118,14 @@ public final class MainWindow {
             items.add(tm);
         }
         for (var a : plugins.actions()) {
-            MenuItem m = new MenuItem(a.action().label());
+            // A plain MenuItem can't have a tooltip; a label inside a CustomMenuItem can, so the description shows.
+            Label text = new Label(a.action().label());
+            KeyCombination key = pluginKeys.action(a);
+            String tip = a.action().description().isBlank() ? a.plugin().info().name() : a.action().description() + "\n" + a.plugin().info().name();
+            if (key != null) tip += " · " + Keybinds.text(key);
+            text.setTooltip(new Tooltip(tip));
+            text.setMaxWidth(Double.MAX_VALUE);
+            javafx.scene.control.CustomMenuItem m = new javafx.scene.control.CustomMenuItem(text);
             m.setOnAction(e -> plugins.run(a));
             items.add(m);
         }
@@ -1118,6 +1227,20 @@ public final class MainWindow {
         }, Platform::runLater).exceptionally(this::fail);
     }
 
+    /** A plugin asked for other resource packs: reload with the same game jar and mods and keep the choice. */
+    private void useResourcePacksFromPlugin(List<Path> packs) {
+        if (scan == null || ws.settings().gameJar == null) {
+            ws.statusProperty().set("Pick a Minecraft version first (gear icon), then the packs can be used");
+            return;
+        }
+        var saved = AssetSetupDialog.fromSettings(ws.settings(), scan);
+        if (saved.isEmpty()) return;
+        AssetSetupDialog.Choice c = saved.get();
+        ws.settings().resourcePacks = packs.stream().map(Path::toString).toList();
+        ws.settings().save();
+        loadAssets(new AssetSetupDialog.Choice(c.gameJar(), c.instanceName(), c.mods(), packs));
+    }
+
     private void loadAssets(AssetSetupDialog.Choice c) {
         loadingOverlay.setVisible(true);
         CompletableFuture.supplyAsync(() -> {
@@ -1205,19 +1328,21 @@ public final class MainWindow {
      */
     public void importFile(Path file) {
         if (!Schematics.isSupported(file)) {
-            var imp = plugins.importerFor(file);
+            var imps = plugins.importersFor(file);
             var types = ws.objects().typesFor(file);
-            if (!types.isEmpty()) {
-                Object pick = imp.isEmpty() && types.size() == 1 ? types.getFirst() : chooseImport(file, imp.orElse(null), types);
+            if (imps.size() + types.size() > 0) {
+                // Several plugins may take the same file (pixel art from a .png, a reference image…): ask which.
+                Object pick = imps.size() + types.size() == 1 ? (imps.isEmpty() ? types.getFirst() : imps.getFirst())
+                        : chooseImport(file, imps, types);
                 if (pick == null) return;
                 if (pick instanceof io.blockdesigner.app.plugins.SceneObjectStore.Registered r) {
                     openAsObject(r, file);
                     return;
                 }
-            }
-            if (imp.isPresent()) {
-                importWithPlugin(imp.get(), file);
-                return;
+                if (pick instanceof io.blockdesigner.app.plugins.PluginManager.Import imp) {
+                    importWithPlugin(imp, file);
+                    return;
+                }
             }
         }
         ws.statusProperty().set("Reading " + file.getFileName() + "…");
@@ -1248,20 +1373,50 @@ public final class MainWindow {
     }
 
     /**
-     * A file that a plugin importer and scene object types (or several types) all take, such as an image (pixel art or
-     * a reference image?): asks which. Returns the importer, the type, or null when cancelled.
+     * A file that several plugin importers and scene object types take, such as an image (pixel art, simple pixel art
+     * or a reference image?): asks which, one choice per line with the plugin it comes from. Returns the importer, the
+     * type, or null when cancelled.
      */
-    private Object chooseImport(Path file, io.blockdesigner.app.plugins.PluginManager.Import imp,
+    private Object chooseImport(Path file, List<io.blockdesigner.app.plugins.PluginManager.Import> imps,
                                 List<io.blockdesigner.app.plugins.SceneObjectStore.Registered> types) {
-        Map<String, Object> choices = new java.util.LinkedHashMap<>();
-        for (var t : types) choices.put(t.type().name(), t);
-        if (imp != null) choices.put(imp.importer().displayName(), imp);
-        javafx.scene.control.ChoiceDialog<String> d = new javafx.scene.control.ChoiceDialog<>(choices.keySet().iterator().next(), choices.keySet());
+        javafx.scene.control.ToggleGroup group = new javafx.scene.control.ToggleGroup();
+        VBox list = new VBox(8);
+        java.util.function.BiConsumer<Object, String[]> add = (choice, text) -> {
+            javafx.scene.control.RadioButton rb = new javafx.scene.control.RadioButton(text[0]);
+            rb.setToggleGroup(group);
+            rb.setUserData(choice);
+            rb.setWrapText(true);
+            Label sub = new Label(text[1]);
+            sub.getStyleClass().add("bd-caption");
+            sub.setWrapText(true);
+            sub.setPadding(new Insets(0, 0, 0, 26));
+            list.getChildren().add(new VBox(2, rb, sub));
+            if (group.getSelectedToggle() == null) rb.setSelected(true);
+        };
+        for (var imp : imps) {
+            add.accept(imp, new String[]{imp.importer().displayName(), "Blocks, placed like a schematic · " + imp.plugin().info().name()});
+        }
+        for (var t : types) {
+            String from = t.owner() instanceof io.blockdesigner.app.plugins.PluginManager.Plugin p ? " · " + p.info().name() : "";
+            add.accept(t, new String[]{t.type().name(), "A scene object in the project" + from});
+        }
+        javafx.scene.control.Dialog<ButtonType> d = new javafx.scene.control.Dialog<>();
         d.initOwner(stage);
         d.setTitle("Import " + file.getFileName());
-        d.setHeaderText("Import " + file.getFileName() + " as…");
-        d.setContentText("As");
-        return d.showAndWait().map(choices::get).orElse(null);
+        d.setHeaderText(null);
+        d.setGraphic(null);
+        Dialogs.style(d.getDialogPane(), ws.darkProperty().get());
+        d.getDialogPane().getStyleClass().add("bd-dialog");
+        Label title = new Label("Import " + file.getFileName() + " as…");
+        title.getStyleClass().add("bd-page-title");
+        VBox body = new VBox(12, title, list);
+        body.setPrefWidth(420);
+        d.getDialogPane().setContent(body);
+        ButtonType go = new ButtonType("Import", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().setAll(ButtonType.CANCEL, go);
+        d.getDialogPane().lookupButton(go).getStyleClass().add("accent");
+        return d.showAndWait().filter(b -> b == go).map(b -> group.getSelectedToggle() == null ? null : group.getSelectedToggle().getUserData())
+                .orElse(null);
     }
 
     /** Hands a file to a plugin's scene object type (a reference image from a picture, say). */
@@ -1283,16 +1438,47 @@ public final class MainWindow {
         io.blockdesigner.plugin.OptionValues values = plugins.optionStore().load(key, importer.options(), plugins.blocks());
         if (!importer.options().isEmpty()) {
             OptionsEditor editor = new OptionsEditor(values, plugins.blocks(), () -> ws.selectedBlockProperty().get(), v -> {
-            }).icons(ws);
+            }).icons(ws).rememberExpanded(key, ws.settings().expandedOptionGroups);
             javafx.scene.control.Dialog<ButtonType> d = new javafx.scene.control.Dialog<>();
             d.initOwner(stage);
             d.setTitle(importer.displayName());
-            d.setHeaderText("Import " + file.getFileName());
-            d.getDialogPane().getStylesheets().add(MainWindow.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-            d.getDialogPane().getStyleClass().addAll("app-root", ws.darkProperty().get() ? "dark" : "light");
-            editor.setPrefWidth(380);
-            d.getDialogPane().setContent(editor);
-            d.getDialogPane().getButtonTypes().setAll(new ButtonType("Import", ButtonBar.ButtonData.OK_DONE), ButtonType.CANCEL);
+            d.setHeaderText(null);
+            d.setGraphic(null);
+            Dialogs.style(d.getDialogPane(), ws.darkProperty().get());
+            d.getDialogPane().getStyleClass().add("bd-dialog");
+            d.setResizable(true);
+            Label title = new Label(importer.displayName());
+            title.getStyleClass().add("bd-page-title");
+            title.setWrapText(true);
+            Label sub = new Label("Import " + file.getFileName());
+            sub.getStyleClass().add("bd-caption");
+            // Many options (a pixel art generator's) scroll inside the dialog rather than making it taller than the screen.
+            javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(editor);
+            scroll.setFitToWidth(true);
+            scroll.setHbarPolicy(javafx.scene.control.ScrollPane.ScrollBarPolicy.NEVER);
+            scroll.getStyleClass().addAll("bd-scroll", "edge-to-edge");
+            scroll.setMaxHeight(520);
+            scroll.setPrefViewportHeight(Math.min(520, editor.prefHeight(420) + 4));
+            VBox body = new VBox(12, new VBox(2, title, sub), scroll);
+            body.setPrefWidth(420);
+            d.getDialogPane().setContent(body);
+            // The form's real height is known only once it is laid out: the dialog follows it (up to 520 px), also when
+            // an advanced group is opened.
+            boolean[] first = {true};
+            editor.heightProperty().addListener((o, was, h) -> {
+                double want = Math.min(520, h.doubleValue() + 4);
+                if (h.doubleValue() <= 0 || Math.abs(scroll.getPrefViewportHeight() - want) < 1) return;
+                scroll.setPrefViewportHeight(want);
+                var window = d.getDialogPane().getScene() == null ? null : d.getDialogPane().getScene().getWindow();
+                if (window == null || !window.isShowing()) return;
+                double before = window.getHeight();
+                window.sizeToScene();
+                if (first[0]) window.setY(Math.max(0, window.getY() - (window.getHeight() - before) / 2));   // still centred
+                first[0] = false;
+            });
+            ButtonType go = new ButtonType("Import", ButtonBar.ButtonData.OK_DONE);
+            d.getDialogPane().getButtonTypes().setAll(ButtonType.CANCEL, go);
+            d.getDialogPane().lookupButton(go).getStyleClass().add("accent");
             var choice = d.showAndWait();
             if (choice.isEmpty() || choice.get().getButtonData() != ButtonBar.ButtonData.OK_DONE) return;
             values = editor.values();
@@ -1778,7 +1964,7 @@ public final class MainWindow {
             if (files == null || files.isEmpty()) return;
             for (File f : files) {
                 if (f.getName().endsWith("." + ProjectFile.EXTENSION)) openProject(f.toPath());
-                else if (Schematics.isSupported(f.toPath()) || plugins.importerFor(f.toPath()).isPresent()
+                else if (Schematics.isSupported(f.toPath()) || !plugins.importersFor(f.toPath()).isEmpty()
                         || !ws.objects().typesFor(f.toPath()).isEmpty()) importFile(f.toPath());
             }
             e.setDropCompleted(true);

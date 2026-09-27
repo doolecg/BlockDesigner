@@ -32,8 +32,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Renders the example plugin's transform dialogs and panel (plugin API 2) to PNGs under build/ui-snapshots, dark and
- * light. Opens real windows, so it only runs with the environment variable UI_SNAPSHOTS=1.
+ * Renders the example plugin's transform dialogs and panel (plugin API 2), and the plugin UI kit (API 6: a component
+ * gallery at 280, 360 and 440 px, a plugin tab's Overview, a plugin's Settings page, Keybinds with plugin keys, grouped
+ * options in a dialog) to PNGs under build/ui-snapshots, dark and light. Opens real windows, so it only runs with the
+ * environment variable UI_SNAPSHOTS=1.
  */
 class PluginUiSnapshotsIT {
     @TempDir
@@ -54,7 +56,10 @@ class PluginUiSnapshotsIT {
         Path plugins = dir.resolve("plugins");
         Files.createDirectories(plugins);
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(Path.of(System.getProperty("blockdesigner.paletteToolsDir")), "palette-tools*.jar")) {
-            for (Path p : ds) Files.copy(p, plugins.resolve("palette-tools.jar"));
+            // The newest one: builds of earlier versions stay in build/libs next to it.
+            Path newest = null;
+            for (Path p : ds) if (newest == null || Files.getLastModifiedTime(p).compareTo(Files.getLastModifiedTime(newest)) > 0) newest = p;
+            if (newest != null) Files.copy(newest, plugins.resolve("palette-tools.jar"));
         }
         CompletableFuture<Void> done = new CompletableFuture<>();
         Platform.runLater(() -> {
@@ -126,7 +131,204 @@ class PluginUiSnapshotsIT {
         host.applyCss();
         host.layout();
         save(host.snapshot(null, null), out.resolve("plugin-panel-palette" + suffix + ".png"));
+
+        // ---- API 6: the UI kit
+        for (int w : new int[]{280, 360, 440}) save(inPanel(gallery(), w, dark), out.resolve("kit-gallery-" + w + suffix + ".png"));
+        var palette = pm.find("palette-tools").orElseThrow();
+        palette.context().registerSettings(groupedOptions(), v -> {
+        });
+        palette.context().setPanelStatus("palette", io.blockdesigner.plugin.ui.Tone.SUCCESS, "Counting the selection");
+        java.util.Map<String, String> pages = new java.util.HashMap<>();
+        pages.put("palette-tools", PluginHomeTab.OVERVIEW);
+        PluginHomeTab home = new PluginHomeTab(palette, pm, pages, homeActions());
+        for (int w : new int[]{300, 440}) {
+            save(inPanel(home.tab.getContent(), w, dark), out.resolve("plugin-overview-" + w + suffix + ".png"));
+        }
+        home.showPanel("palette");
+        save(inPanel(home.tab.getContent(), 360, dark), out.resolve("plugin-page-bar" + suffix + ".png"));
+        Keybinds keys = new Keybinds(ws.settings());
+        SettingsDialog sd = new SettingsDialog(null, ws, keys, () -> {
+        }, () -> {
+        }, () -> {
+        }, () -> {
+        }, pm, new PluginKeys(ws.settings(), keys), null, "palette-tools");
+        snapshotDialog(sd, out.resolve("settings-plugin-page" + suffix + ".png"), false);
+        sd.getDialogPane().lookupAll(".settings-nav-item").stream()
+                .filter(n -> n instanceof javafx.scene.control.ToggleButton tb && "Keybinds".equals(tb.getText()))
+                .findFirst().ifPresent(n -> ((javafx.scene.control.ToggleButton) n).fire());
+        sd.getDialogPane().lookupAll(".search-field").stream().filter(f -> f instanceof javafx.scene.control.TextField)
+                .findFirst().ifPresent(f -> ((javafx.scene.control.TextField) f).setText("palette"));
+        snapshotDialog(sd, out.resolve("settings-keybinds-plugins" + suffix + ".png"), true);
+
+        javafx.scene.control.Dialog<javafx.scene.control.ButtonType> importDialog = new javafx.scene.control.Dialog<>();
+        importDialog.setHeaderText(null);
+        Dialogs.style(importDialog.getDialogPane(), dark);
+        importDialog.getDialogPane().getStyleClass().add("bd-dialog");
+        OptionsEditor editor = new OptionsEditor(groupedOptions().defaults(), pm.blocks(), () -> null, v -> {
+        });
+        javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(editor);
+        scroll.setFitToWidth(true);
+        scroll.getStyleClass().addAll("bd-scroll");
+        scroll.setPrefViewportHeight(420);
+        javafx.scene.control.Label title = new javafx.scene.control.Label("Pixel art from a picture (Pixel Art Generator)");
+        title.getStyleClass().add("bd-page-title");
+        javafx.scene.layout.VBox body = new javafx.scene.layout.VBox(12, title, scroll);
+        body.setPrefWidth(420);
+        importDialog.getDialogPane().setContent(body);
+        importDialog.getDialogPane().getButtonTypes().setAll(javafx.scene.control.ButtonType.CANCEL,
+                new javafx.scene.control.ButtonType("Import", javafx.scene.control.ButtonBar.ButtonData.OK_DONE));
+        snapshotDialog(importDialog, out.resolve("import-dialog-grouped" + suffix + ".png"), true);
         pm.shutdown();
+    }
+
+    /** Options laid out with API 6 metadata: groups, an advanced group, help, units, enabledWhen. */
+    private static io.blockdesigner.plugin.Options groupedOptions() {
+        return io.blockdesigner.plugin.Options.builder()
+                .choice("mode", "Mode", List.of("Flat", "Relief", "Model"), "Flat")
+                .group("Shape")
+                .integer("width", "Width", 64, 1, 512).unit("blocks").help("How wide the art is; the height follows the picture.")
+                .choice("orientation", "Stands", List.of("Upright", "Lying flat"), "Upright")
+                .toggle("hollow", "Hollow inside", false)
+                .integer("wall", "Wall thickness", 1, 1, 8).unit("blocks").enabledWhen("hollow")
+                .group("Blocks")
+                .choice("blocks", "Blocks", List.of("Concrete", "Wool", "Terracotta", "Everything"), "Concrete")
+                .integer("maxBlocks", "Most kinds", 0, 0, 64).help("0: any number")
+                .group("Background")
+                .decimal("tolerance", "Tolerance", 0.1, 0, 0.4).unit("%").help("How close to the background colour counts as background.")
+                .toggle("trim", "Trim the empty edges", true)
+                .advanced("Picture adjustments")
+                .decimal("brightness", "Brightness", 0, -1, 1)
+                .decimal("contrast", "Contrast", 0, -1, 1)
+                .build();
+    }
+
+    /** A page of every kit component, as a plugin would build it. */
+    private static javafx.scene.Node gallery() {
+        io.blockdesigner.plugin.ui.Form form = new io.blockdesigner.plugin.ui.Form();
+        javafx.scene.control.ComboBox<String> scope = new javafx.scene.control.ComboBox<>();
+        scope.getItems().setAll("The selection", "Visible layers", "The active layer");
+        scope.setValue("Visible layers");
+        form.row("Count in", scope);
+        javafx.scene.control.Spinner<Integer> height = new javafx.scene.control.Spinner<>(1, 512, 16);
+        height.setPrefWidth(88);
+        form.row("Height", height).unit("blocks").help("New pictures are this many blocks tall.");
+        form.row("Seed", new javafx.scene.control.TextField("12ab")).error("A seed should be a whole number.");
+        javafx.scene.control.CheckBox live = new javafx.scene.control.CheckBox("Send changes live");
+        form.row(live);
+        form.row("Delay", new javafx.scene.control.TextField("2")).enabledWhen(live.selectedProperty());
+        var badges = new javafx.scene.layout.FlowPane(6, 6);
+        for (io.blockdesigner.plugin.ui.Tone t : io.blockdesigner.plugin.ui.Tone.values()) {
+            badges.getChildren().add(new io.blockdesigner.plugin.ui.StatusBadge(t, t.name().charAt(0) + t.name().substring(1).toLowerCase()));
+        }
+        io.blockdesigner.plugin.ui.Banner banner = new io.blockdesigner.plugin.ui.Banner();
+        banner.show(io.blockdesigner.plugin.ui.Tone.DANGER, "Couldn't reach the game. Is BlockCompanion running?", "Retry", () -> {
+        });
+        io.blockdesigner.plugin.ui.ItemList<String> list = new io.blockdesigner.plugin.ui.ItemList<>(s -> io.blockdesigner.plugin.ui.ItemRow.of(s)
+                .swatch(0xFF8A8F98).meta(s.length() * 7 + " of 120 · " + (s.length() % 2 == 0 ? "done" : "missing"),
+                        s.length() % 2 == 0 ? io.blockdesigner.plugin.ui.Tone.SUCCESS : io.blockdesigner.plugin.ui.Tone.NEUTRAL)
+                .trailing(io.blockdesigner.plugin.ui.Controls.caption(s.length() + "×"),
+                        io.blockdesigner.plugin.ui.Controls.iconButton(io.blockdesigner.plugin.ui.Icon.CHECK, "Mark as gathered", null)));
+        list.getItems().setAll("Stone bricks", "Oak planks", "Spruce log with a very long name that has to be cut", "Glass");
+        list.visibleRows(2, 6);
+        var icons = new javafx.scene.layout.FlowPane(4, 4);
+        for (io.blockdesigner.plugin.ui.Icon i : io.blockdesigner.plugin.ui.Icon.values()) {
+            icons.getChildren().add(io.blockdesigner.plugin.ui.Controls.iconButton(i, i.name(), null));
+        }
+        io.blockdesigner.plugin.ui.Section adv = new io.blockdesigner.plugin.ui.Section("Advanced",
+                io.blockdesigner.plugin.ui.Controls.hint("Collapsed until opened.")).collapsible(false);
+        return new io.blockdesigner.plugin.ui.PanelScaffold()
+                .top(new io.blockdesigner.plugin.ui.Segmented<>(List.of("Picture", "Regions", "Blocks"), s -> s))
+                .add(new io.blockdesigner.plugin.ui.Section("Count", form)
+                                .actions(io.blockdesigner.plugin.ui.Controls.iconButton(io.blockdesigner.plugin.ui.Icon.REFRESH, "Count again", null)),
+                        new io.blockdesigner.plugin.ui.Section("Status", badges, banner).badge(
+                                new io.blockdesigner.plugin.ui.StatusBadge(io.blockdesigner.plugin.ui.Tone.SUCCESS, "Connected")),
+                        new io.blockdesigner.plugin.ui.Section("Items", io.blockdesigner.plugin.ui.Controls.search("Filter blocks…"), list),
+                        new io.blockdesigner.plugin.ui.Section("Nothing yet", new io.blockdesigner.plugin.ui.EmptyState(
+                                io.blockdesigner.plugin.ui.Icon.IMAGE, "No picture open.").hint("Open a picture or drop one here.")
+                                .action(io.blockdesigner.plugin.ui.Controls.primary("Open picture…", null))),
+                        new io.blockdesigner.plugin.ui.Section("Icons", icons), adv)
+                .footer(new io.blockdesigner.plugin.ui.ActionBar(io.blockdesigner.plugin.ui.Controls.button("Copy list", "Copy", null),
+                        io.blockdesigner.plugin.ui.Controls.button("Save CSV…", "Save", null), io.blockdesigner.plugin.ui.Controls.spacer(),
+                        io.blockdesigner.plugin.ui.Controls.danger("Reset…", "Reset", null)));
+    }
+
+    /** Lays a node out as the right-hand panel would at this width (as tall as its content) and snapshots it. */
+    private static WritableImage inPanel(javafx.scene.Node node, double width, boolean dark) {
+        StackPane host = new StackPane(node);
+        host.getStyleClass().addAll("app-root", "plugin-side", dark ? "dark" : "light");
+        host.getStylesheets().addAll(PluginUiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm(),
+                io.blockdesigner.plugin.ui.Theme.STYLESHEET);
+        javafx.scene.Scene measure = new javafx.scene.Scene(host, width, 1600);
+        host.applyCss();
+        host.layout();
+        // A panel that scrolls (a PanelScaffold) is shown as tall as its content, so the whole page is in the picture.
+        double h = Math.max(320, Math.min(1600, Math.max(host.prefHeight(width), contentHeight(node, width))));
+        measure.setRoot(new javafx.scene.Group());
+        new javafx.scene.Scene(host, width, h);
+        host.applyCss();
+        host.layout();
+        return host.snapshot(null, null);
+    }
+
+    private static double contentHeight(javafx.scene.Node node, double width) {
+        if (node instanceof io.blockdesigner.plugin.ui.PanelScaffold s) {
+            double h = 0;
+            for (javafx.scene.Node c : s.getChildren()) {
+                if (c instanceof javafx.scene.control.ScrollPane sp && sp.getContent() instanceof javafx.scene.layout.Region r) h += r.prefHeight(width);
+                else if (c instanceof javafx.scene.layout.Region r && c.isManaged()) h += r.prefHeight(width);
+            }
+            return h;
+        }
+        if (node instanceof javafx.scene.Parent p) {
+            double h = 0;
+            for (javafx.scene.Node c : p.getChildrenUnmodifiable()) h = Math.max(h, contentHeight(c, width));
+            return h + 60;
+        }
+        return 0;
+    }
+
+    private static PluginHomeTab.Actions homeActions() {
+        return new PluginHomeTab.Actions() {
+            public void runAction(PluginManager.Action a) {
+            }
+
+            public void pickTool(PluginManager.Tool t) {
+            }
+
+            public void openTransform(PluginManager.Transform t) {
+            }
+
+            public void managePlugins() {
+            }
+
+            public void disable(PluginManager.Plugin p) {
+            }
+
+            public void openSettings(PluginManager.Plugin p) {
+            }
+
+            public String toolKey(PluginManager.Tool t) {
+                return "Shift+P";
+            }
+
+            public boolean isShowing(javafx.scene.control.Tab tab) {
+                return true;
+            }
+
+            public void reveal(javafx.scene.control.Tab tab) {
+            }
+        };
+    }
+
+    private static void snapshotDialog(javafx.scene.control.Dialog<?> d, Path out, boolean close) throws Exception {
+        d.show();
+        d.getDialogPane().applyCss();
+        d.getDialogPane().layout();
+        save(d.getDialogPane().snapshot(null, null), out);
+        if (close) {
+            d.setResult(null);
+            d.close();
+        }
     }
 
     private static PluginHost host(Workspace ws) {

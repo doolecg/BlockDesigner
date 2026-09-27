@@ -17,8 +17,19 @@ public final class PluginApi {
      * choice ({@link Options.Builder#showWhen}); a tool can leave the left button to block selection
      * ({@link PluginTool#selects}); plugins can read and fill the hotbar, draw block icons, and pick and set up their
      * own tools ({@link PluginContext#hotbar}, {@link PluginContext#blockIcon}, {@link PluginContext#setToolOptions}).
+     * <br>6: plugins can read and change the resource packs layered on the Minecraft assets
+     * ({@link PluginContext#resourcePacks}, {@link PluginContext#useResourcePacks}), e.g. to show blocks with the
+     * textures a game uses; and the plugin UI kit: the components in {@code io.blockdesigner.plugin.ui}
+     * ({@code PanelScaffold}, {@code Section}, {@code Form}, {@code ActionBar}, {@code StatusBadge}, {@code Banner},
+     * {@code EmptyState}, {@code ItemList}, {@code Segmented}, {@code Controls}, {@code Icon}) and
+     * {@link PluginContext#ui} (the app's options form, dialogs, dark or light), option
+     * {@link Options.Builder#group groups}, {@link Options.Builder#help help}, {@link Options.Builder#unit units} and
+     * {@link Options.Builder#enabledWhen}, settings on the plugin's page of the Settings window
+     * ({@link PluginContext#updateSettings}, {@link PluginContext#openSettings}), page status dots and navigation
+     * ({@link PluginContext#setPanelStatus}, {@link PluginContext#showPanel}). Tool and action keys can be changed in
+     * Settings › Keybinds.
      */
-    public static final int VERSION = 5;
+    public static final int VERSION = 6;
 
     /** Name of the descriptor file at the root of a plugin jar. */
     public static final String DESCRIPTOR = "blockdesigner-plugin.json";

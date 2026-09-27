@@ -216,8 +216,8 @@ public final class ExportDialog extends Dialog<ExportDialog.Outcome> {
         for (PluginManager.Export e : pluginExporters) choices.add(new PluginChoice(e));
 
         var dp = getDialogPane();
-        dp.getStylesheets().add(ExportDialog.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-        dp.getStyleClass().addAll("app-root", ws.darkProperty().get() ? "dark" : "light", "export-dialog");
+        Dialogs.style(dp, ws.darkProperty().get());
+        dp.getStyleClass().add("export-dialog");
 
         // ---- shared controls
         version.getItems().setAll(McVersion.builtIn().reversed());

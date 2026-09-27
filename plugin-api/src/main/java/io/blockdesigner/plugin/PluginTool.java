@@ -29,7 +29,8 @@ public interface PluginTool {
 
     /**
      * The key that picks the tool, in JavaFX's {@code KeyCombination} form ({@code "Shift+K"}, {@code "J"}), or null for
-     * none. A key the user already has bound to something else is left alone. Users can change it in the settings file.
+     * none. A key the user already has bound to something else is left alone. Users change it in Settings › Keybinds
+     * (API 6; before that only in the settings file).
      */
     default String defaultKey() {
         return null;

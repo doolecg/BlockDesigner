@@ -3,12 +3,12 @@ plugins {
     alias(libs.plugins.javafx)
 }
 
-// Only PluginPanel and PanelContext touch JavaFX. The app provides it at runtime, so plugins (and this jar) only
-// compile against it.
+// Panels and the UI kit (io.blockdesigner.plugin.ui) use JavaFX. The app provides it at runtime, so plugins (and this
+// jar) only compile against it; the tests load the kit's classes, so they get it too.
 javafx {
     version = libs.versions.javafx.get()
     modules = listOf("javafx.controls")
-    configuration = "compileOnly"
+    configurations = arrayOf("compileOnly", "testImplementation")
 }
 
 dependencies {

@@ -94,6 +94,10 @@ public final class PluginManager {
         }
     }
 
+    /** A page's status dot (API 6): its tone and the text of its tooltip. */
+    public record PanelStatus(io.blockdesigner.plugin.ui.Tone tone, String text) {
+    }
+
     /** A panel together with the plugin that added it. */
     public record Panel(Plugin plugin, PluginPanel panel) {
         /** {@code plugin/panel-id}, unique across plugins. */
@@ -126,6 +130,8 @@ public final class PluginManager {
         private OptionValues settingsValues;
         private Consumer<OptionValues> settingsListener;
         private Context context;
+        /** Status dots on its pages, by panel id (API 6); set before or after a page is built. */
+        private final Map<String, PanelStatus> panelStatus = new LinkedHashMap<>();
         /** The last scene object failure shown as a toast (a failing draw repeats every frame). */
         private String lastObjectError;
 
@@ -311,13 +317,29 @@ public final class PluginManager {
         return out;
     }
 
-    /** The importer for a file, by its extension. */
+    /** The first importer for a file, by its extension (see {@link #importersFor} for all of them). */
     public Optional<Import> importerFor(Path file) {
+        return importersFor(file).stream().findFirst();
+    }
+
+    /** Every importer that takes the file's extension, in plugin order (several plugins may read .png, say). */
+    public List<Import> importersFor(Path file) {
         String n = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        List<Import> out = new ArrayList<>();
         for (Import i : importers()) {
-            for (String ext : i.importer().extensions()) if (n.endsWith("." + ext.toLowerCase(java.util.Locale.ROOT))) return Optional.of(i);
+            for (String ext : i.importer().extensions()) {
+                if (n.endsWith("." + ext.toLowerCase(java.util.Locale.ROOT))) {
+                    out.add(i);
+                    break;
+                }
+            }
         }
-        return Optional.empty();
+        return out;
+    }
+
+    /** The status dot a plugin set on one of its pages, if any (API 6). */
+    public Optional<PanelStatus> panelStatus(Plugin p, String panelId) {
+        return Optional.ofNullable(p.panelStatus.get(panelId));
     }
 
     public List<Panel> panels() {
@@ -367,8 +389,7 @@ public final class PluginManager {
         host.toast("✖ " + p.info().name() + ": " + (t.getMessage() == null ? t.toString() : t.getMessage()));
     }
 
-    /** Runs a plugin's menu action; an exception is logged against the plugin and shown as a toast. */
-    /** New values for a plugin's settings (from its tab): kept, and passed to the plugin. */
+    /** New values for a plugin's settings (from the Settings window): kept, and passed to the plugin. */
     public void setSettings(Plugin p, OptionValues values) {
         if (p.settingsOptions == null || values.equals(p.settingsValues)) return;
         p.settingsValues = values;
@@ -389,6 +410,7 @@ public final class PluginManager {
         }
     }
 
+    /** Runs a plugin's menu action; an exception is logged against the plugin and shown as a toast. */
     public void run(Action a) {
         try {
             a.action().action().run();
@@ -568,6 +590,7 @@ public final class PluginManager {
         if (!p.objectTypes.isEmpty()) objects.unregister(p);
         p.objectTypes.clear();
         p.lastObjectError = null;
+        p.panelStatus.clear();
         events.removeAll(p);
         p.context = null;
         if (p.loader != null) {
@@ -619,9 +642,28 @@ public final class PluginManager {
 
     // ---- the context handed to each plugin -------------------------------------------------------------------
 
+    /**
+     * Where a plugin's remembered form keeps its values: {@code "<plugin>/<name>"}, the same key an importer's or
+     * exporter's options use for {@code "importer/<id>"} and {@code "exporter/<id>"} (API 6).
+     */
+    static String formKey(Plugin p, String rememberAs) {
+        if (rememberAs == null) return null;
+        if (!FORM_NAME.matcher(rememberAs).matches())
+            throw new IllegalArgumentException("Remembered form names use A-Z, a-z, 0-9, _ . - and /: '" + rememberAs + "'");
+        return p.info.id() + "/" + rememberAs;
+    }
+
+    private static final Pattern FORM_NAME = Pattern.compile("[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*");
+
+    /** The host, for the plugin UI (package-private: AppPluginUi). */
+    PluginHost host() {
+        return host;
+    }
+
     private final class Context implements PluginContext {
         private final Plugin p;
         private SceneObjects sceneObjects;
+        private io.blockdesigner.plugin.ui.PluginUi ui;
 
         Context(Plugin p) {
             this.p = p;
@@ -862,6 +904,56 @@ public final class PluginManager {
             if (v == null) throw new IllegalArgumentException("setToolOptions: the change gave no values");
             optionStore.save(key, v);
             host.toolOptionsChanged(t, v);
+        }
+
+        @Override
+        public List<java.nio.file.Path> resourcePacks() {
+            return List.copyOf(host.resourcePacks());
+        }
+
+        @Override
+        public void useResourcePacks(List<java.nio.file.Path> packs) {
+            List<java.nio.file.Path> keep = new ArrayList<>();
+            for (java.nio.file.Path pack : packs) if (pack != null && java.nio.file.Files.exists(pack)) keep.add(pack.toAbsolutePath().normalize());
+            host.useResourcePacks(keep);
+        }
+
+        @Override
+        public io.blockdesigner.plugin.ui.PluginUi ui() {
+            if (ui == null) ui = new AppPluginUi(PluginManager.this, p);
+            return ui;
+        }
+
+        @Override
+        public void showPanel(String panelId) {
+            host.showPanel(p, panelId);
+        }
+
+        @Override
+        public void setPanelStatus(String panelId, io.blockdesigner.plugin.ui.Tone tone, String text) {
+            java.util.Objects.requireNonNull(panelId, "panelId");
+            PanelStatus before = p.panelStatus.get(panelId);
+            PanelStatus now = tone == null ? null : new PanelStatus(tone, text == null ? "" : text);
+            if (java.util.Objects.equals(before, now)) return;
+            if (now == null) p.panelStatus.remove(panelId);
+            else p.panelStatus.put(panelId, now);
+            host.panelStatusChanged(p);
+        }
+
+        @Override
+        public void openSettings() {
+            host.openSettings(p);
+        }
+
+        @Override
+        public void updateSettings(java.util.function.UnaryOperator<OptionValues> change) {
+            if (p.settingsOptions == null) throw new IllegalStateException("updateSettings needs registerSettings first");
+            OptionValues v = change.apply(p.settingsValues);
+            if (v == null) throw new IllegalArgumentException("updateSettings: the change gave no values");
+            if (v.options() != p.settingsOptions) v = OptionValues.fromStrings(p.settingsOptions, v.toStrings(), catalog);
+            if (v.equals(p.settingsValues)) return;
+            setSettings(p, v);
+            host.pluginSettingsChanged(p);
         }
 
         private Tool tool(String id) {

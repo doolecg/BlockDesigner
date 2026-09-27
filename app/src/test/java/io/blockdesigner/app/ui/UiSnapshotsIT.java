@@ -66,7 +66,7 @@ class UiSnapshotsIT {
                         }, () -> {
                         }, () -> {
                         }, () -> {
-                        });
+                        }, null, null, null, null);
                         // General opens first; the theme cards are on Appearance, and Keybinds is checked once.
                         if (t == AppTheme.values()[0]) {
                             settings.keybinds.put("SHUFFLE", "Alt+X|R");

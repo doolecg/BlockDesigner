@@ -34,22 +34,21 @@ final class UpdateDialog extends Dialog<Void> {
 
     private Thread worker;
 
+    /** A newer version for a per-user AppData install: updating also moves it to Program Files (the .msi). */
+    private final boolean move;
+
     /**
      * @param readyToQuit asked before quitting (e.g. to save the project); false cancels the install
      * @param quit        closes BlockDesigner once the installer is waiting for it
      * @param skip        remembers that the user doesn't want this version
      */
-    /** A newer version for a per-user AppData install: updating also moves it to Program Files (the .msi). */
-    private final boolean move;
-
     UpdateDialog(Window owner, boolean dark, Updater updater, Updater.Release release, BooleanSupplier readyToQuit,
                  Runnable quit, Consumer<String> skip, Consumer<String> browser) {
         initOwner(owner);
         setTitle("Update available");
         setResizable(true);
         var dp = getDialogPane();
-        dp.getStylesheets().add(UpdateDialog.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-        dp.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        Dialogs.style(dp, dark);
 
         this.move = Updater.offersMove(release);
         Label title = new Label("BlockDesigner " + release.version() + " is available",

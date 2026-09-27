@@ -1,3 +1,41 @@
+# BlockDesigner 0.4.24
+
+Plugins look and work more alike: their main settings are in the Settings window, their keys can be changed like BlockDesigner's own, and their tabs are tidier and easier to read. Plugins can also switch the resource packs BlockDesigner shows blocks with, so Resource Tracker can show your build with the same textures as your game.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.24.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.24.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.24-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+**Plugins:** the updated plugins (AI Builder 0.2.0, Palette Tools 1.2.0, Pixel Art Generator 0.2.0, Reference Planes 1.2.0, Resource Tracker 1.3.0, Terrain Generator 0.2.0) need this version. Plugins you already have keep working.
+
+## New
+- **Plugin settings in the Settings window.** A plugin's main settings, the ones you set once, have their own page under **Plugins** in Settings, with Reset to defaults. What you change while working stays on the plugin's tab. The gear on a plugin's tab and the **Open settings…** button on its Overview open it.
+- **Keys for plugin tools and actions.** Settings › Keybinds has a group for each plugin: give its tools and its Plugins-menu actions any key, clear one, or reset it. Keys that clash show in red.
+- **Choose between importers.** When two plugins can import the same kind of file (a `.png`, say), Import and drag and drop ask which one to use instead of always picking the first.
+- **Status dots on plugin pages.** A plugin can show how a page stands on its button, for example Resource Tracker's link to your game.
+- **Tooltips in the Plugins menu.** Each action says what it does.
+
+## Changed
+- **Plugin tabs open on their first page** (or the one you used last). What a plugin adds, its version and its description are on the Overview, behind the info button at the end of the page bar. The Overview lists what you can use first, and what the plugin is and whether it runs at the bottom.
+- **Settings headings** are in sentence case, like the rest of the app.
+- **Plugin options read better everywhere** (transform, Import and Export windows, the tool options bar): grouped under headings, with a line of help, units after numbers, and an exact value box next to each slider. Rarely used options are folded away.
+- The Import window scrolls when a plugin has many options.
+- Dialogs of BlockDesigner and plugins now all follow your theme and light or dark mode the same way.
+
+## For plugin makers
+- **Plugin API 6:** `PluginContext.resourcePacks()` lists the resource packs on top of the Minecraft assets, and `useResourcePacks(packs)` reloads with other ones and keeps them as the user's choice.
+- **API 6 also brings a UI kit** (`io.blockdesigner.plugin.ui`): `PanelScaffold`, `Section`, `Form`, `ActionBar`, `StatusBadge`, `Banner`, `EmptyState`, `ItemList`, `Segmented`, `Controls` and Feather icons, in BlockDesigner's look in every theme, plus `ctx.ui()` for the app's options form, remembered forms and small dialogs. `Options` gets groups, advanced groups, help, units and `enabledWhen`. `ctx.showPanel`, `ctx.setPanelStatus`, `ctx.openSettings` and `ctx.updateSettings` are new. PLUGINS.md, the API reference and the wiki describe all of it; panels that don't use the kit look as before.
+
+---
+
 # BlockDesigner 0.4.23
 
 Projects are now saved in an open format that doesn't depend on any mod, the same one BlockCompanion will use in the game. There's also a new guide for plugin makers.

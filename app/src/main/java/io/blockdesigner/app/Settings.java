@@ -98,6 +98,12 @@ public final class Settings {
     public List<String> closedPluginPanels = new ArrayList<>();
     /** Keys for plugin tools ("plugin/tool" to a key such as "Shift+K", "" for none), overriding the plugin's default. */
     public java.util.Map<String, String> pluginToolKeys = new java.util.LinkedHashMap<>();
+    /** Keys for plugin actions ("plugin/action label" to a key); actions have none unless the user gives one. */
+    public java.util.Map<String, String> pluginActionKeys = new java.util.LinkedHashMap<>();
+    /** The page each plugin's tab was left on: plugin id to a panel id, or "overview". */
+    public java.util.Map<String, String> pluginPages = new java.util.LinkedHashMap<>();
+    /** Advanced option groups the user opened ("<options key>#<group title>"); the rest start collapsed. */
+    public List<String> expandedOptionGroups = new ArrayList<>();
 
     // ---- Export window (remembered between exports) ----
     /** Card chosen last: a format id, "datapack", or "plugin:<plugin>/<exporter>". */
@@ -278,6 +284,9 @@ public final class Settings {
         hotbar.clear();
         pluginOptions.clear();
         pluginToolKeys.clear();
+        pluginActionKeys.clear();
+        pluginPages.clear();
+        expandedOptionGroups.clear();
         closedPluginPanels.clear();
         disabledPlugins.clear();
         exportFolders.clear();

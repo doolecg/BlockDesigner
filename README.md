@@ -271,13 +271,15 @@ Commands take one slash and work on every visible, unlocked layer:
 
 Plugins are `.jar` files that add schematic formats, exporters, importers, menu actions, `/commands`, transforms with a live preview, side panels and tools. Manage them under **Plugins (puzzle icon) › Manage plugins…**, where you can install, enable or disable, reload and uninstall them. Plugins run with the same access as BlockDesigner itself, so only install ones you trust.
 
+Each running plugin has a tab on the right with its pages; the info button on the tab shows what it adds. A plugin's settings are on its page under **Plugins** in **Settings**, and its tools and Plugins-menu actions can be given keys in **Settings › Keybinds**. When two plugins can import the same kind of file, Import asks which one to use.
+
 Each plugin lives in its own repository and is released there, separately from BlockDesigner:
 
 | Plugin | What it does | Needs |
 |---|---|---|
-| **[Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes)** | Reference images in the scene, like Blender's: move, rotate and scale them, pick the views they show in, set opacity and UV. Listed in Layers as REFERENCE | 0.4.12 |
-| **[Resource Tracker](https://github.com/doolecg/BlockDesigner-ResourceTracker)** | The materials a build needs as items (stacks and shulker boxes), what you have gathered and what is left, saved with each project | 0.4.17 |
-| **[Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools)** | Weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool | 0.4.4 |
+| **[Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes)** | Reference images in the scene, like Blender's: move, rotate and scale them, pick the views they show in, set opacity and UV. Listed in Layers as REFERENCE | 0.4.24 |
+| **[Resource Tracker](https://github.com/doolecg/BlockDesigner-ResourceTracker)** | The materials a build needs as items (stacks and shulker boxes), what you have gathered and what is left, saved with each project | 0.4.24 |
+| **[Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools)** | Weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool | 0.4.24 |
 
 Download a plugin's `.jar` from its releases page, then install it with **Plugins › Manage plugins… › Install…**.
 

@@ -1,6 +1,6 @@
 # Plugin API reference
 
-Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugin-api/src/main/java/io/blockdesigner/plugin`](../plugin-api/src/main/java/io/blockdesigner/plugin)), with its members. The Javadoc in the sources has the details; [PLUGINS.md](../PLUGINS.md) is the guide with worked examples, and [plugin-api-v2.md](plugin-api-v2.md) is the design record.
+Every public type in `io.blockdesigner.plugin` and `io.blockdesigner.plugin.ui` (the `plugin-api` module, [`plugin-api/src/main/java/io/blockdesigner/plugin`](../plugin-api/src/main/java/io/blockdesigner/plugin)), with its members. The Javadoc in the sources has the details; [PLUGINS.md](../PLUGINS.md) is the guide with worked examples, and [plugin-api-v2.md](plugin-api-v2.md) is the design record.
 
 **API** is the `"api"` version a plugin must declare in `blockdesigner-plugin.json` to use the type. Types from `core` that the API uses (`BlockState`, `BlockPos`, `Box`, `Structure`, `Layer`, `Scene`, `SceneEditor`, `WorldEdit.World`, `SchematicFormat`, `BlockFamily`, `McVersion`) are in the `core` jar.
 
@@ -8,7 +8,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 
 | Type | Kind | API | What it is |
 |---|---|---|---|
-| [`PluginApi`](#pluginapi) | class | 1 | The API version (`VERSION = 3`) and the manifest file name |
+| [`PluginApi`](#pluginapi) | class | 1 | The API version (`VERSION = 6`) and the manifest file name |
 | [`BlockDesignerPlugin`](#blockdesignerplugin) | interface | 1 | A plugin's entry point |
 | [`PluginInfo`](#plugininfo) | record | 1 | What the manifest says about a plugin |
 | [`PluginContext`](#plugincontext) | interface | 1 (parts 2) | The plugin's handle on BlockDesigner: registration, the scene, edits, feedback |
@@ -40,6 +40,7 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | [`Drawing`](#drawing) | interface | 3 | What an object draws: images on patches, lines |
 | [`ImageData`](#imagedata) | class | 3 | ARGB pixels for `Drawing.image` |
 | [`ViewInfo`](#viewinfo) | record | 3 | How the 3D view looks at the scene: ortho, axis view, eye, target |
+| [UI kit](#api-6-the-ui-kit-ioblockdesignerpluginui) (`PanelScaffold`, `Section`, `Form`, `ActionBar`, `StatusBadge`, `Banner`, `EmptyState`, `ItemList`, `ItemRow`, `Segmented`, `Controls`, `Icon`, `Theme`, `Tone`, `PluginUi`, `OptionsForm`) | classes, interfaces | 6 | Pages and dialogs in BlockDesigner's look |
 
 ## Core
 
@@ -103,6 +104,15 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `Optional<Image> blockIcon(BlockState block)` | 5 | The block's icon as the block list and hotbar draw it (JavaFX `Image`); empty while no assets are loaded. |
 | `void pickTool(String toolId)` | 5 | Picks one of this plugin's tools, as its key or button does. |
 | `void setToolOptions(String toolId, UnaryOperator<OptionValues> change)` | 5 | Changes one of this plugin's tools' remembered options; its options bar follows when it is active. |
+| `void registerSettings(Options options, Consumer<OptionValues> onChange)` | 4 | The plugin's settings: its page in the Settings window (from 0.4.24; the tab before). `onChange` runs once straight away and after every change. Once, from `enable`. |
+| `OptionValues settings()` | 4 | The current settings. |
+| `List<Path> resourcePacks()` | 6 | The resource packs on the Minecraft assets, lowest priority first. |
+| `void useResourcePacks(List<Path> packs)` | 6 | Reloads the assets with these packs, kept as the user's choice. |
+| `PluginUi ui()` | 6 | The app's options form, dialogs, owner window and dark mode, for the plugin's own pages. |
+| `void showPanel(String panelId)` | 6 | Opens the plugin's tab at one of its pages (reopening the tab if closed); an unknown id opens the tab. |
+| `void setPanelStatus(String panelId, Tone tone, String text)` | 6 | A status dot on a page's button, `text` as its tooltip; a null tone removes it. Works before the page is built. |
+| `void openSettings()` | 6 | Opens the Settings window at the plugin's page (the tab's Overview when it has no settings). |
+| `void updateSettings(UnaryOperator<OptionValues> change)` | 6 | Changes the settings as if the user had: saved, `onChange` called, an open Settings page redrawn. |
 
 ## API 1 extension points
 
@@ -153,6 +163,9 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `OptionValues defaults()` | Values with every option at its default. |
 | `List<Condition> conditions(String key)` | API 5: when the option shows (every condition must hold); empty for always. |
 | `boolean shown(String key, OptionValues values)` | API 5: whether the option shows with these values. Hidden options keep their values. |
+| `List<Group> groups()` | API 6: the headings, in order; options before the first `group` form an untitled group. `record Group(String title, boolean advanced, List<String> keys)`. |
+| `Optional<String> help(String key)`, `Optional<String> unit(String key)` | API 6: the option's help line and unit. |
+| `Optional<String> enabledWhen(String key)`, `boolean enabled(String key, OptionValues values)` | API 6: the toggle an option depends on, and whether it is on. |
 
 `record Condition(String choiceKey, Set<String> values)`: holds while the choice option `choiceKey` is one of `values`.
 
@@ -169,6 +182,11 @@ Every public type in `io.blockdesigner.plugin` (the `plugin-api` module, [`plugi
 | `text(String key, String label, String defaultValue)` | Text field |
 | `file(String key, String label, List<String> extensions)` | File field with Browse (extensions without the dot; empty for any) |
 | `showWhen(String choiceKey, String... values)` | API 5: shows the option added just before only while an earlier choice option is one of `values`. Call it more than once and every condition must hold. Older BlockDesigners show the option always. |
+| `group(String title)`, `advanced(String title)` | API 6: a heading over the options that follow; `advanced` draws it folded. Empty groups are dropped. |
+| `help(String text)` | API 6: a line of help under the option added last. |
+| `unit(String unit)` | API 6: the unit after a number added last (`"blocks"`, `"px"`, `"°"`); `"%"` on a decimal in 0..1 shows it ×100. |
+| `enabledWhen(String toggleKey)` | API 6: greys the option added last out while an earlier toggle is off. |
+| `option(Option o)` | API 6: adds an option record as it is (copying from other `Options`). |
 
 From 0.4.17, block and block-mix options show as small hotbar-style slots with the block's icon (click for the held block, drop a block on it, right-click removes one from a mix, the wheel changes its share); a pencil button edits the same value as text.
 
@@ -472,3 +490,35 @@ Typed getters throw `IllegalArgumentException` for an unknown key or the wrong t
 ### ViewInfo
 
 `public record ViewInfo(boolean ortho, Optional<Side> side, Vec3 eye, Vec3 forward, Vec3 target)` — `side` is the axis view the camera is at (empty for a free view); `isOrthoSide(Side)` checks for one orthographic axis view. `enum Side { FRONT, BACK, RIGHT, LEFT, TOP, BOTTOM }`, with `facing()`: the rotation that turns something drawn facing +Z towards that view, upright.
+
+## API 6: the UI kit (`io.blockdesigner.plugin.ui`)
+
+Plain JavaFX classes in the plugin API jar; at runtime they come from the installed BlockDesigner, so pages match the app.
+Each attaches the kit's stylesheet (`bd.css`) itself. [PLUGINS.md](../PLUGINS.md#building-panels-with-the-ui-kit) has
+the guide and examples.
+
+| Type | Kind | What it is |
+|---|---|---|
+| `PanelScaffold` | class | A page: `top(...)` (sticky), `add(...)` (scrolling content), `grow(node)` (takes the free height), `footer(...)` (sticky), `empty(EmptyState)` + `showEmptyProperty()`, `narrowProperty()` / `isNarrow()` (below 300 px). |
+| `Section` | class | A heading and content: `add`, `grow`, `actions(...)`, `badge(StatusBadge)`, `collapsible(expanded)`, `expandedProperty()`, `titleLabel()`. |
+| `Form` | class | Label / control rows: `row(label, control)`, `row(fullWidth)`, `rows()`; `Form.Row`: `help`, `unit`, `error`, `enabledWhen`, `shownWhen`, `label()`, `control()`. |
+| `ActionBar` | class | Up to three buttons; the accent one grows; stacked when narrow. |
+| `StatusBadge` | class | Dot + text in a `Tone`: `new StatusBadge(tone, text)`, `set(tone, text)`, `tone()`. |
+| `Banner` | class | A message with an optional action: `show(tone, message)`, `show(tone, message, actionText, action)`, `hide()`, `message()`. |
+| `EmptyState` | class | Icon, sentence, `hint(text)`, up to two `action(button)`. |
+| `ItemList<T>` | class | A `ListView` whose rows fit the width: `new ItemList<>(item -> ItemRow)` or own cells (`wire(cell, item)`), `empty`, `visibleRows(min, max)`, `onOpen`, `onDelete`, `menu`. |
+| `ItemRow` | class | `of(title)`, `meta(text[, tone])`, `image`, `swatch`, `leading`, `below`, `trailing(...)` (≤ 3), `tooltip`, `node()`. |
+| `Segmented<T>` | class | Mutually exclusive choices side by side: `valueProperty()`, `getValue()`, `setValue(v)`. |
+| `Controls` | class | `primary`, `button`, `danger`, `iconButton`, `toggle`, `busy`, `hint`, `caption`, `pathCaption`, `link`, `search`, `blockIcon`, `spacer`, `show`. |
+| `Icon` | enum | Feather icons: `node()` (16 px), `node(size)`, `path()`. |
+| `Theme` | class | `STYLESHEET`, spacing `XS SM MD LG XL`, `LABEL_MIN/PREF/MAX`, `NARROW`, `ROW`; `attach(node)`, `root(node)`. |
+| `Tone` | enum | `NEUTRAL`, `ACCENT`, `SUCCESS`, `WARNING`, `DANGER`; `pseudoClass()`, `apply(node, tone)`. |
+| `PluginUi` | interface | From `ctx.ui()`: `optionsForm(options, rememberAs, onChange)`, `darkProperty()`, `isDark()`, `owner()`, `style(dialog)`, `confirm`, `askText`, `choose`, `copyText`, `open`. |
+| `OptionsForm` | interface | The app's form: `node()`, `values()`, `setValues(values)`, `reset()`. |
+
+Stable style classes: `bd-root`, `bd-scaffold`, `bd-top`, `bd-content`, `bd-footer`, `bd-section`, `bd-section-header`,
+`bd-section-title`, `bd-hint`, `bd-caption`, `bd-form`, `bd-form-label`, `bd-action-bar`, `bd-badge`, `bd-banner`,
+`bd-empty`, `bd-list`, `bd-row`, `bd-row-title`, `bd-row-meta`, `bd-segmented`, `bd-segment`, `bd-block-slot`, `bd-icon`,
+`bd-card`, `bd-frame`, `bd-mono`, `bd-search`, `bd-progress`, `bd-inline-field`, `bd-dialog`; pseudo-classes `:narrow`,
+`:error`, `:accent`, `:success`, `:warning`, `:danger`, `:busy`. Icons: Feather (MIT), licence in
+`io/blockdesigner/plugin/ui/FEATHER-LICENSE.txt`.

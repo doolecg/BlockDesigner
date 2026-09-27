@@ -34,7 +34,10 @@ Useful pieces that work without the app:
 - For `TransformContext`, `ToolContext`, `PluginContext` or `BlockCatalog`, write small fakes in your tests, or use
   `java.lang.reflect.Proxy` for the methods you don't care about. They are interfaces, so this is easy, but
   BlockDesigner's real implementations (the block catalog's families and variants, for example) are not in the API
-  jars, so a fake only tests your side.
+  jars, so a fake only tests your side. A `Proxy` fake of `PluginContext` should answer the API 6 methods your
+  `enable` calls: `registerSettings`, `updateSettings` and `setPanelStatus` can do nothing, and `ui()` can return null
+  when the test builds no JavaFX nodes (AI Builder's `PluginEnableTest` does this). Keep code that needs no toolkit
+  (migrations, formatting) out of classes that import JavaFX, so plain tests can run it.
 
 A jar-content test is worth having (from Terrain Generator's `PluginPartsTest`): after `./gradlew jar`, open the jar
 and check `blockdesigner-plugin.json` is at the root, your main class is there, and nothing from

@@ -45,12 +45,13 @@ grouped by purpose:
 |---|---|
 | About you | `info()` (your parsed manifest: id, name, version, author, description, main class, api, updates), `dataFolder()`, `log(message)` |
 | Register | `registerFormat`, `registerExporter`, `registerAction`, `registerCommand` (API 1); `registerTransform`, `registerPanel`, `registerImporter`, `registerTool` (2); `registerObjectType` (3); `registerSettings` (4) |
+| Your UI | `ui()` (the kit's app side: options forms, dialogs, owner window, dark mode), `showPanel(id)`, `setPanelStatus(id, tone, text)` (API 6) |
 | Listen | `on(eventType, listener)` returns a `Subscription` (API 2) |
 | Read the project | `scene()`, `activeLayer()`, `selectedLayers()`, `targetVersion()`; `selection()` (API 2) |
 | Edit the project | `editWorld(label, edit)`, `editor()`, `addLayer(name, blocks)` |
 | Blocks and assets | `blocks()`, `assets()` (API 2) |
 | Scene objects | `objects()` (API 3) |
-| Settings | `settings()` (API 4) |
+| Settings | `settings()` (API 4); `updateSettings(change)`, `openSettings()` (API 6) |
 | Feedback | `status(message)`, `toast(message)` |
 | Threads | `runOnUiThread(task)` |
 | Hotbar and tools | `hotbar()`, `setHotbar(blocks)`, `blockIcon(block)`, `pickTool(id)`, `setToolOptions(id, change)` (API 5) |

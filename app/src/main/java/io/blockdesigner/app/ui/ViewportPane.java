@@ -4622,7 +4622,7 @@ public final class ViewportPane extends StackPane {
         if (s == null || s.tool().tool().options().isEmpty()) return;
         Label title = new Label(s.tool().tool().name());
         title.getStyleClass().add("brush-title");
-        OptionsEditor editor = new OptionsEditor(s.options(), plugins.blocks(), () -> ws.selectedBlockProperty().get(), s::setOptions).icons(ws);
+        OptionsEditor editor = new OptionsEditor(OptionsEditor.Look.COMPACT, s.options(), plugins.blocks(), () -> ws.selectedBlockProperty().get(), s::setOptions).icons(ws);
         editor.setPrefWidth(320);
         pluginToolBar.getChildren().addAll(title, editor);
     }

@@ -173,8 +173,8 @@ public final class DatapackDialog extends Dialog<ButtonType> {
         initOwner(owner);
         setTitle("Worldgen data pack");
         setResizable(true);
-        getDialogPane().getStylesheets().add(DatapackDialog.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-        getDialogPane().getStyleClass().addAll("app-root", ws.darkProperty().get() ? "dark" : "light", "datapack-dialog");
+        Dialogs.style(getDialogPane(), ws.darkProperty().get());
+        getDialogPane().getStyleClass().add("datapack-dialog");
         boolean dark = ws.darkProperty().get();
 
         // ---- Pack

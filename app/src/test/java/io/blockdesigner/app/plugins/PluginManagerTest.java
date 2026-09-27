@@ -51,6 +51,42 @@ class PluginManagerTest {
     private PluginManager pm;
     /** Transforms the host was asked to open (by /transform). */
     private final List<String> opened = new ArrayList<>();
+    /** What plugins asked of the host through the API 6 UI calls, in order. */
+    private final List<String> uiCalls = new ArrayList<>();
+    /** The forms the host made (API 6), last one last. */
+    private final List<FakeForm> forms = new ArrayList<>();
+
+    /** A form without JavaFX: remembers what it was given, and lets the test play the user. */
+    static final class FakeForm implements io.blockdesigner.plugin.ui.OptionsForm {
+        OptionValues values;
+        final Consumer<OptionValues> onChange;
+
+        FakeForm(OptionValues initial, Consumer<OptionValues> onChange) {
+            this.values = initial;
+            this.onChange = onChange;
+        }
+
+        void userSets(OptionValues v) {
+            values = v;
+            onChange.accept(v);
+        }
+
+        public javafx.scene.Node node() {
+            return null;
+        }
+
+        public OptionValues values() {
+            return values;
+        }
+
+        public void setValues(OptionValues v) {
+            values = v;
+        }
+
+        public void reset() {
+            userSets(values.options().defaults());
+        }
+    }
 
     private final PluginHost host = new PluginHost() {
         public Scene scene() {
@@ -98,6 +134,29 @@ class PluginManagerTest {
 
         public void openTransform(PluginManager.Transform t) {
             opened.add(t.transform().id());
+        }
+
+        public io.blockdesigner.plugin.ui.OptionsForm optionsForm(PluginManager.Plugin plugin, io.blockdesigner.plugin.Options options,
+                                                                  OptionValues initial, Consumer<OptionValues> onChange) {
+            FakeForm f = new FakeForm(initial, onChange);
+            forms.add(f);
+            return f;
+        }
+
+        public void showPanel(PluginManager.Plugin plugin, String panelId) {
+            uiCalls.add("showPanel " + plugin.info().id() + " " + panelId);
+        }
+
+        public void panelStatusChanged(PluginManager.Plugin plugin) {
+            uiCalls.add("status " + plugin.info().id());
+        }
+
+        public void openSettings(PluginManager.Plugin plugin) {
+            uiCalls.add("openSettings " + plugin.info().id());
+        }
+
+        public void pluginSettingsChanged(PluginManager.Plugin plugin) {
+            uiCalls.add("settingsChanged " + plugin.info().id());
         }
     };
 
@@ -350,6 +409,117 @@ class PluginManagerTest {
         assertThat(s.get(1, 0, 0).path()).endsWith("_concrete");
         assertThat(s.get(0, 1, 0)).as("top row of the image is the top of the art").isEqualTo(s.get(1, 0, 0));
         assertThat(progress).containsExactly(0.5, 1.0);
+    }
+
+    // ---- API 6: plugin UI ------------------------------------------------------------------------------------------
+
+    private PluginManager.Plugin palette() {
+        return pm.find("palette-tools").orElseThrow();
+    }
+
+    @Test
+    void updateSettingsKeepsTheValuesTellsThePluginAndTheHost() {
+        var ctx = palette().context();
+        io.blockdesigner.plugin.Options o = io.blockdesigner.plugin.Options.builder()
+                .group("Counting").toggle("mobs", "Count mobs", false).integer("rows", "Rows", 4, 1, 9).build();
+        List<OptionValues> heard = new ArrayList<>();
+        ctx.registerSettings(o, heard::add);
+        assertThat(heard).hasSize(1);
+        ctx.updateSettings(v -> v.with("mobs", true));
+        assertThat(heard).hasSize(2);
+        assertThat(heard.getLast().toggle("mobs")).isTrue();
+        assertThat(ctx.settings().toggle("mobs")).isTrue();
+        assertThat(pm.optionStore().load("palette-tools/settings/tab", o, pm.blocks()).toggle("mobs")).as("kept").isTrue();
+        assertThat(uiCalls).containsExactly("settingsChanged palette-tools");
+        ctx.updateSettings(v -> v.with("mobs", true));
+        assertThat(heard).as("no change, no call").hasSize(2);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> pm.find("hello").orElseThrow().context().updateSettings(v -> v))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void rememberedFormsShareTheImportersValues() {
+        var ctx = palette().context();
+        var importer = pm.importers().getFirst().importer();
+        String key = OptionStore.key("palette-tools", "importer", importer.id());
+        OptionValues saved = importer.options().defaults();
+        String someInt = importer.options().all().stream().filter(x -> x instanceof io.blockdesigner.plugin.Options.IntegerOption)
+                .findFirst().orElseThrow().key();
+        var opt = (io.blockdesigner.plugin.Options.IntegerOption) importer.options().get(someInt).orElseThrow();
+        saved = saved.with(someInt, opt.max());
+        pm.optionStore().save(key, saved);
+
+        List<OptionValues> heard = new ArrayList<>();
+        var form = ctx.ui().optionsForm(importer.options(), "importer/" + importer.id(), heard::add);
+        assertThat(form.values().integer(someInt)).as("starts from the Import window's values").isEqualTo(opt.max());
+        forms.getLast().userSets(form.values().with(someInt, opt.min()));
+        assertThat(heard).hasSize(1);
+        assertThat(pm.optionStore().load(key, importer.options(), pm.blocks()).integer(someInt)).as("saved for the importer").isEqualTo(opt.min());
+        form.setValues(form.values().with(someInt, opt.max()));
+        assertThat(heard).as("setValues doesn't call onChange").hasSize(1);
+        assertThat(pm.optionStore().load(key, importer.options(), pm.blocks()).integer(someInt)).isEqualTo(opt.max());
+
+        var unremembered = ctx.ui().optionsForm(importer.options(), null, v -> {
+        });
+        assertThat(unremembered.values()).isEqualTo(importer.options().defaults());
+        for (String bad : List.of("", "/x", "a//b", "a\\b", "sp ace", "x/")) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> ctx.ui().optionsForm(importer.options(), bad, v -> {
+            })).as(bad).isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(PluginManager.formKey(palette(), "panel/v2")).isEqualTo("palette-tools/panel/v2");
+    }
+
+    @Test
+    void panelStatusWorksBeforeThePanelIsBuiltAndCanBeCleared() {
+        var ctx = palette().context();
+        ctx.setPanelStatus("not-built-yet", io.blockdesigner.plugin.ui.Tone.SUCCESS, "Connected to 2 games");
+        assertThat(pm.panelStatus(palette(), "not-built-yet")).contains(
+                new PluginManager.PanelStatus(io.blockdesigner.plugin.ui.Tone.SUCCESS, "Connected to 2 games"));
+        ctx.setPanelStatus("not-built-yet", io.blockdesigner.plugin.ui.Tone.SUCCESS, "Connected to 2 games");
+        assertThat(uiCalls).as("the same status twice tells the host once").containsExactly("status palette-tools");
+        ctx.setPanelStatus("not-built-yet", null, null);
+        assertThat(pm.panelStatus(palette(), "not-built-yet")).isEmpty();
+        assertThat(uiCalls).hasSize(2);
+        ctx.setPanelStatus("x", io.blockdesigner.plugin.ui.Tone.DANGER, "Failed");
+        pm.setEnabled(palette(), false);
+        assertThat(pm.panelStatus(palette(), "x")).as("gone with the plugin").isEmpty();
+    }
+
+    @Test
+    void showPanelAndOpenSettingsReachTheHost() {
+        var ctx = palette().context();
+        ctx.showPanel("palette");
+        ctx.openSettings();
+        assertThat(uiCalls).containsExactly("showPanel palette-tools palette", "openSettings palette-tools");
+    }
+
+    @Test
+    void importersForListsEveryImporterOfAnExtension() {
+        Path png = dir.resolve("a.PNG");
+        assertThat(pm.importersFor(png)).hasSize(1);
+        pm.find("hello").orElseThrow().context().registerImporter(new io.blockdesigner.plugin.PluginImporter() {
+            public String id() {
+                return "pictures";
+            }
+
+            public String displayName() {
+                return "Pictures as blocks";
+            }
+
+            public List<String> extensions() {
+                return List.of("jpg", "png");
+            }
+
+            public List<ImportedLayer> importFile(Path file, OptionValues options, io.blockdesigner.plugin.Progress progress,
+                                                  io.blockdesigner.plugin.BlockCatalog blocks) {
+                return List.of();
+            }
+        });
+        assertThat(pm.importersFor(png)).extracting(PluginManager.Import::key)
+                .containsExactlyInAnyOrder("palette-tools/pixel_art", "hello/pictures");
+        assertThat(pm.importersFor(dir.resolve("b.jpg"))).extracting(PluginManager.Import::key).containsExactly("hello/pictures");
+        assertThat(pm.importersFor(dir.resolve("c.litematic"))).isEmpty();
+        assertThat(pm.importerFor(png)).isPresent();
     }
 
     @Test

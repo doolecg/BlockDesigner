@@ -93,4 +93,57 @@ public interface PluginHost {
     /** A plugin changed a tool's remembered options: the active tool's options bar should follow. */
     default void toolOptionsChanged(PluginManager.Tool tool, io.blockdesigner.plugin.OptionValues values) {
     }
+
+    // ---- API 6 ------------------------------------------------------------------------------------------------
+
+    /** The resource packs layered on the assets, lowest priority first. */
+    default List<java.nio.file.Path> resourcePacks() {
+        return List.of();
+    }
+
+    /** Reloads the assets with these resource packs and keeps them in the settings. */
+    default void useResourcePacks(List<java.nio.file.Path> packs) {
+    }
+
+    // ---- API 6 UI ---------------------------------------------------------------------------------------------
+
+    /**
+     * The app's options form for a plugin's panel, showing {@code initial} and calling {@code onChange} after each
+     * user change; null where there is no UI (tests).
+     */
+    default io.blockdesigner.plugin.ui.OptionsForm optionsForm(PluginManager.Plugin plugin, io.blockdesigner.plugin.Options options,
+                                                               io.blockdesigner.plugin.OptionValues initial,
+                                                               Consumer<io.blockdesigner.plugin.OptionValues> onChange) {
+        return null;
+    }
+
+    /** True while the app is dark. */
+    default javafx.beans.property.ReadOnlyBooleanProperty dark() {
+        return new javafx.beans.property.SimpleBooleanProperty(false);
+    }
+
+    /** The main window, for plugins' choosers and dialogs; null where there is none. */
+    default javafx.stage.Window owner() {
+        return null;
+    }
+
+    /** Gives a plugin's dialog the app's look (owner, stylesheets, font, dark or light). */
+    default void styleDialog(javafx.scene.control.Dialog<?> dialog) {
+    }
+
+    /** Opens the plugin's tab at one of its panels (unknown id: the tab as it was). */
+    default void showPanel(PluginManager.Plugin plugin, String panelId) {
+    }
+
+    /** A plugin changed the status dot of one of its pages. */
+    default void panelStatusChanged(PluginManager.Plugin plugin) {
+    }
+
+    /** Opens the Settings window at the plugin's page (or its tab's Overview when it has no settings). */
+    default void openSettings(PluginManager.Plugin plugin) {
+    }
+
+    /** A plugin changed its own settings: an open Settings page should redraw them. */
+    default void pluginSettingsChanged(PluginManager.Plugin plugin) {
+    }
 }

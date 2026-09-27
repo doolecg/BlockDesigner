@@ -10,6 +10,8 @@ This guide covers setting up a plugin project, the manifest, installing and test
 - [API 1 extension points](#api-1-extension-points): [commands](#commands) · [actions](#menu-actions) · [exporters](#exporters) · [schematic formats](#schematic-formats) · [editing the scene](#reading-and-editing-the-scene)
 - [API 2 extension points](#api-2-extension-points): [options](#options-parameters-without-writing-ui) · [transforms](#transforms) · [panels](#panels) · [tools](#tools) · [importers](#importers) · [richer exporters](#exporters-options-summary-progress) · [scene events](#scene-events) · [block catalog](#the-block-catalog) · [asset access](#asset-access) · [Bedrock NBT](#bedrock-nbt)
 - [API 3 extension points](#api-3-extension-points): [scene objects](#scene-objects)
+- [API 4 extension points](#api-4-extension-points): [settings](#settings-in-the-settings-window) · [API 5](#api-5-extension-points): [selection tools](#tools-that-work-on-the-selection) · [conditional options](#options-that-show-only-for-some-choices) · [hotbar and icons](#hotbar-icons-and-your-own-tools)
+- [API 6 extension points](#api-6-extension-points): [resource packs](#resource-packs) · [the UI kit](#building-panels-with-the-ui-kit) · [options: groups, help, units](#options-groups-help-units-and-enabledwhen) · [settings](#settings-updatesettings-and-opensettings) · [keys](#keys) · [page status and navigation](#page-status-and-navigation) · [dialogs](#dialogs) · [remembered forms](#remembered-forms) · [theming](#theming)
 - [Rules of the road](#rules-of-the-road) · [Limits and what's not supported yet](#limits-and-whats-not-supported-yet)
 
 ## What a plugin can add
@@ -25,18 +27,21 @@ This guide covers setting up a plugin project, the manifest, installing and test
 | `registerTool(PluginTool)` | 2 | A button in the tool dock over the viewport; mouse, wheel and keys go to your handler |
 | `registerImporter(PluginImporter)` | 2 | Import (file filter, drag and drop) for files that aren't schematics, such as images |
 | `registerObjectType(SceneObjectType)` | 3 | Things in the scene that aren't blocks (reference images, guides): rows in the Layers panel, drawn in the 3D view, moved by the Move / Rotate tools, a right-click menu, saved in the project |
-| `registerSettings(Options, onChange)` | 4 | Settings at the top of the plugin's own tab, kept between runs |
+| `registerSettings(Options, onChange)` | 4 | The plugin's page in the Settings window (from 0.4.24; the tab's Overview before), kept between runs |
+| `ui()`, `showPanel`, `setPanelStatus`, `openSettings`, `updateSettings` | 6 | The UI kit and the app's forms and dialogs for your panels, a status dot on a page button, jumping to a page or to the plugin's settings |
 
 API 2 also adds exporter options, summaries and progress; declarative `Options`; scene events (`ctx.on(...)`); the block catalog (`ctx.blocks()`); and asset access (`ctx.assets()`). API 3 adds scene objects (`ctx.objects()`).
 
 When a plugin is disabled, or fails while enabling, BlockDesigner removes everything it registered.
 
 **Every plugin gets its own tab** on the right, whatever API it declares, so users can see it's running, and from
-0.4.17 it is the only tab a plugin gets. Its **Overview** page shows its name, version and a Running (or Failed)
-status, its description, its settings (API 4), and everything it registered, each with a button to use it: actions,
-tools, transforms and panels, plus its commands, formats, importers, exporters and object types. A **Turn off** button
-disables it. The plugin's panels are further pages of the same tab, picked in a row of buttons along the top. Users can
-close the tab like any other.
+0.4.17 it is the only tab a plugin gets. Its panels are the tab's pages, picked in a row of buttons along the top; the
+tab opens on the page used last (the first one at first). At the end of that row are a gear (when the plugin has
+settings: it opens the plugin's page in the Settings window) and an info button for the **Overview**. The Overview
+lists everything the plugin registered, each with a button to use it (actions, tools, transforms, panels, plus its
+commands, formats, importers, exporters and object types) and an **Open settings…** button, then at the bottom its
+name, version, a Running (or Failed) badge and its description, with **Manage plugins…** and **Turn off**. A plugin
+without panels shows just the Overview. Users can close the tab like any other.
 
 ## Getting started
 
@@ -111,7 +116,7 @@ Put `blockdesigner-plugin.json` at the root of the jar (in Gradle, `src/main/res
   "author": "BlockDesigner",
   "description": "Example plugin for API 2: weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool.",
   "main": "com.example.palette.PaletteToolsPlugin",
-  "api": 2
+  "api": 6
 }
 ```
 
@@ -123,13 +128,16 @@ Put `blockdesigner-plugin.json` at the root of the jar (in Gradle, `src/main/res
 | `version`, `author`, `description` | no | Shown in the Plugins window and the install prompt. |
 | `api` | no | The plugin API version the plugin needs (defaults to `1`). |
 
-**API versions.** The current API is **3** (`PluginApi.VERSION`).
+**API versions.** The current API is **6** (`PluginApi.VERSION`, BlockDesigner 0.4.24).
 
 - `"api": 1`: commands, menu actions, exporters, schematic formats and scene edits (`editWorld`, `editor()`, `addLayer`).
 - `"api": 2`: everything in API 1 plus options, scene events, the block catalog, asset access, transforms, panels, tools, importers, and options / summary / progress for exporters.
 - `"api": 3`: everything in API 2 plus scene objects (`registerObjectType`, `ctx.objects()`).
+- `"api": 4`: plugin settings (`registerSettings`, `ctx.settings()`).
+- `"api": 5`: tools that work on the selection, options shown for some choices (`showWhen`), the hotbar and block icons.
+- `"api": 6`: resource packs, and the UI kit (`io.blockdesigner.plugin.ui`, `ctx.ui()`), option groups, help and units, page status and navigation, settings in the Settings window.
 
-Declare the lowest version whose features you use. BlockDesigner refuses plugins that ask for a newer API than it has (they show as *needs a newer BlockDesigner* in the Plugins window) and keeps loading older ones, so API 1 and 2 plugins run unchanged on an API 3 BlockDesigner.
+Declare the lowest version whose features you use. BlockDesigner refuses plugins that ask for a newer API than it has (they show as *needs a newer BlockDesigner* in the Plugins window) and keeps loading older ones, so older plugins run unchanged on a newer BlockDesigner.
 
 ### Updates: `"updates"`
 
@@ -384,14 +392,16 @@ final class WeatheringTransform implements PluginTransform {
 
 ### Panels
 
-A `PluginPanel` is a tab in the right-hand panel with your own JavaFX content. Users can close it (it stays closed next time) and reopen it from the bar on the window's right edge. Build nodes only in `create`, which runs the first time the panel is shown; never in `enable` or a constructor, because the plugin is enabled before any panel is shown. Release timers and listeners in `dispose`.
+A `PluginPanel` is a page of the plugin's tab in the right-hand panel, with your own JavaFX content. Build nodes only in `create`, which runs the first time the page is shown; never in `enable` or a constructor, because the plugin is enabled before any panel is shown. Release timers and listeners in `dispose`.
 
-Condensed from [`PalettePanel.java`](examples/palette-tools/src/main/java/com/example/palette/PalettePanel.java), which lists the blocks of the selection with colour swatches and counts:
+From API 6, build the page with the UI kit's `PanelScaffold` (see [the UI kit](#building-panels-with-the-ui-kit)): it owns the padding and spacing, so the page lines up with BlockDesigner's own and every other plugin. A node that isn't a `PanelScaffold` gets the 10 px padding panels always had. Condensed from Palette Tools' Palette page, which lists the blocks of the selection with their icons and counts:
 
 ```java
 final class PalettePanel implements PluginPanel {
     private final List<Subscription> subscriptions = new ArrayList<>();
+    private final ObservableList<Entry> entries = FXCollections.observableArrayList();
     private PanelContext panel;
+    private Label status;
     private boolean stale = true;
 
     public String id() { return "palette"; }
@@ -402,13 +412,17 @@ final class PalettePanel implements PluginPanel {
         PluginContext ctx = context.plugin();
         subscriptions.add(ctx.on(SceneEvent.BlocksChanged.class, e -> changed()));
         subscriptions.add(ctx.on(SceneEvent.SelectionChanged.class, e -> changed()));
-        context.onShown(() -> { if (stale) refresh(); });   // each time the tab comes into view
-        Label heading = new Label();
-        heading.setStyle("-fx-text-fill: -color-fg-muted; -fx-font-size: 11px;");   // theme colour
-        VBox root = new VBox(8, heading, /* rows */ new VBox(2));
-        root.setPadding(new Insets(10));
+        context.onShown(() -> { if (stale) refresh(); });   // each time the page comes into view
+        ItemList<Entry> list = new ItemList<Entry>(e -> ItemRow.of(e.name()).image(e.icon())
+                        .trailing(Controls.caption(String.format("%,d", e.count()))))
+                .empty(new EmptyState(Icon.INFO, "No blocks here.").hint("Build something, or select blocks to count them."));
+        list.setItems(entries);
+        status = Controls.caption("");
         refresh();
-        return root;
+        return new PanelScaffold()
+                .add(Controls.search("Filter blocks"))   // controls at the top
+                .grow(list)                               // the list takes the free height
+                .footer(status);                          // status at the bottom
     }
 
     private void changed() {
@@ -429,9 +443,9 @@ final class PalettePanel implements PluginPanel {
 }
 ```
 
-`PanelContext` has `plugin()`, `isShowing()`, `onShown(Runnable)`, `setBadge(String)` (null or empty removes it) and `reveal()` (opens the panel and selects its tab). `icon()` takes 16×16 SVG path data like transforms; without one, the tab gets a puzzle-piece glyph.
+`PanelContext` has `plugin()`, `isShowing()`, `onShown(Runnable)`, `setBadge(String)` (null or empty removes it) and `reveal()` (opens the panel and selects its tab). `icon()` takes 16×16 SVG path data like transforms; without one, the page gets a puzzle-piece glyph.
 
-**Theming.** To follow every theme, light and dark, style with the theme's looked-up colours instead of fixed ones:
+**Theming.** Style with the theme's looked-up colours instead of fixed ones (API 6 plugins: see [Theming](#theming) for the kit's classes, which do this for you):
 
 | Colour | Use |
 |---|---|
@@ -676,9 +690,10 @@ final class ReferenceImage implements SceneObject {
 
 ## API 4 extension points
 
-### Settings in the plugin's tab
+### Settings in the Settings window
 
-`ctx.registerSettings(options, onChange)` puts settings at the top of the plugin's tab. They use the same `Options`
+`ctx.registerSettings(options, onChange)` gives the plugin a page in BlockDesigner's Settings window, under
+**Plugins** (from 0.4.24; before that they were at the top of the plugin's tab). They use the same `Options`
 as transforms and tools, so BlockDesigner draws the controls (sliders, check boxes, choices, block pickers) and a
 **Reset to defaults** button, and keeps the values between runs. `onChange` runs on the JavaFX thread with the current
 values, once straight away and after every change; `ctx.settings()` reads them at any time. Register once, from
@@ -722,6 +737,141 @@ Options.builder()
 a block's icon for your panels. `ctx.pickTool(id)` picks one of your tools and `ctx.setToolOptions(id, v -> ...)`
 changes its options, for example from a list of presets in a panel.
 
+## API 6 extension points
+
+Plugins that use these declare `"api": 6` (BlockDesigner 0.4.24 and later).
+
+### Resource packs
+
+`ctx.resourcePacks()` lists the resource packs layered on the Minecraft assets, lowest priority first (zip files or
+folders). `ctx.useResourcePacks(packs)` reloads the assets with other packs on top of the same game jar and mods, and
+keeps them as the user's choice (as if picked in Settings). Loading runs in the background; the view shows the new
+textures when it is done, and missing files are skipped. Resource Tracker uses it to show blocks with the textures a
+game uses:
+
+```java
+ctx.useResourcePacks(List.of(Path.of("C:/Users/me/AppData/Roaming/.minecraft/resourcepacks/Faithful.zip")));
+```
+
+A plugin that should also load on older BlockDesigners can call it by reflection and declare a lower `api`:
+`PluginContext.class.getMethod("useResourcePacks", List.class)` throws `NoSuchMethodException` there.
+
+### Building panels with the UI kit
+
+The package `io.blockdesigner.plugin.ui` holds ready-made pieces in BlockDesigner's look. They are plain JavaFX classes
+in the plugin API jar, and at runtime they come from the installed BlockDesigner, so a plugin's pages always match the
+app. Each one attaches the kit's stylesheet itself, and owns its spacing: a page built from them has no pixel numbers.
+
+| Piece | What it is |
+|---|---|
+| `PanelScaffold` | The page: a sticky `top(...)` (a scope row, a preview), the content column from `add(...)` (scrolls as one), or a `grow(node)` that takes the free height (a list, a chat), and a sticky `footer(...)` (a `Banner`, progress, the `ActionBar`). `empty(EmptyState)` with `showEmptyProperty()` replaces the content. Below 300 px it sets `:narrow` (`narrowProperty()`). |
+| `Section` | A heading (sentence case) and its content; `actions(...)` puts icon buttons or links on the right of the heading, `badge(StatusBadge)` after the title, `collapsible(expanded)` folds it (one level only). |
+| `Form` | Labels on the left (one width per form, 96–140 px), controls on the right; `row(label, control)` or a full-width `row(node)`, then `.help(text)`, `.unit("blocks")`, `.error(message)`, `.enabledWhen(...)`, `.shownWhen(...)`. Narrow forms put the labels above. Controls that fill the width share one column for their units. |
+| `ActionBar` | Up to three buttons for the section or page (the accent one grows); `Controls.spacer()` pushes the rest right. Stacks the buttons when narrow. |
+| `StatusBadge` | A dot and a word in a `Tone`: "Running", "Connected", "Failed". Never colour alone. |
+| `Banner` | A message next to what it's about, with an optional action: `show(Tone.DANGER, "Couldn't read it", "Open another…", this::choose)`; hidden until shown. |
+| `EmptyState` | An icon, one sentence, a hint and up to two buttons, for a list or page with nothing in it yet. |
+| `ItemList` / `ItemRow` | A virtualised list whose rows fit the width: `ItemRow.of(title).image(icon)` or `.swatch(argb)`, `.meta(text, tone)`, `.below(node)`, up to three `.trailing(...)`. `visibleRows(min, max)` makes it as tall as its rows; `onOpen`, `onDelete`, `menu` add Enter / double-click, Delete and a right-click menu. Your own cell factory works too. |
+| `Segmented` | A few mutually exclusive views side by side ("Picture / Regions / Blocks"). |
+| `Controls` | `primary`, `button`, `danger`, `iconButton(Icon, tooltip, action)` (tooltip required), `toggle`, `busy(button, true)`, `hint`, `caption`, `pathCaption`, `link`, `search`, `blockIcon(icon, colour, size)`, `spacer`, `show(node, shown)`. |
+| `Icon` | Feather icons (`ADD`, `CHECK`, `CLOSE`, `COPY`, `EDIT`, `FOLDER`, `IMAGE`, `INFO`, `LINK`, `PAPERCLIP`, `REFRESH`, `SAVE`, `SEARCH`, `SEND`, `SETTINGS`, `SHUFFLE`, `TRASH`, `UNDO`, `WARNING`…) drawn in the text colour: `Icon.REFRESH.node()`. |
+| `Theme` | The spacing steps (`XS 4`, `SM 8`, `MD 12`, `LG 16`, `XL 24`), `NARROW`, `STYLESHEET`, and `root(node)` for a window of your own. |
+
+Keep one layout order on every page: the page's controls at the top in the order they're used (most used first, related
+fields together, advanced ones last, folded), and status and descriptions at the bottom: what it's doing, what went
+wrong, what it is. Only set-once settings belong in the Settings window; options used while working stay on the page.
+
+```java
+Form form = new Form();
+form.row("Count in", scopeBox);
+Section count = new Section("Count", form)
+        .actions(Controls.iconButton(Icon.REFRESH, "Count again", this::recount));
+Banner banner = new Banner();
+PanelScaffold page = new PanelScaffold()
+        .add(count)
+        .grow(new Section("Items", search).grow(list))
+        .footer(banner, totals, new ActionBar(Controls.button("Copy list", null, this::copy),
+                Controls.spacer(), Controls.danger("Reset…", "Forget what you gathered", this::reset)));
+```
+
+`ctx.ui().optionsForm(options, rememberAs, onChange)` gives the app's own form for some `Options` (the one in the
+transform dialog and the Import window, with block slots, icons, groups, help and units) to put on a page.
+
+### Options: groups, help, units and enabledWhen
+
+API 6 adds metadata to `Options`, which every form that draws them shows (the Settings window, transform and Import
+dialogs, the tool options bar, `ui().optionsForm`):
+
+```java
+Options.builder()
+        .group("Shape")                                   // a heading over the options that follow
+        .integer("width", "Width", 64, 4, 512).unit("blocks")
+        .help("The picture is scaled to this many blocks across.")
+        .toggle("hollow", "Hollow", false)
+        .integer("wall", "Wall", 1, 1, 8).unit("blocks").enabledWhen("hollow")   // greyed out while Hollow is off
+        .group("Background")
+        .decimal("tolerance", "Tolerance", 0.08, 0, 0.4).unit("%")               // a fraction, shown as a percentage
+        .advanced("Picture adjustments")                  // a group drawn folded
+        .decimal("contrast", "Contrast", 1, 0, 2)
+        .build();
+```
+
+`help`, `unit` and `enabledWhen` apply to the option added last; `unit` only to numbers, and `"%"` only to a decimal
+between 0 and 1. `option(Option)` adds an option record as it is (to combine the options of several transforms; copy
+their `help`, `unit` and `enabledWhen` too). Read them with `groups()`, `help(key)`, `unit(key)`, `enabledWhen(key)`
+and `enabled(key, values)`. Advanced groups remember whether the user opened them.
+
+### Settings: updateSettings and openSettings
+
+A plugin's settings (`registerSettings`) are on its page in the Settings window, under **Plugins**, with a **Reset to
+defaults** button. The tab's gear and the Overview's **Open settings…** button open that page; `ctx.openSettings()`
+does too (to the Overview for a plugin without settings). `ctx.updateSettings(v -> v.with("mobs", true))` changes
+them as if the user had: they are saved, `onChange` runs and an open Settings window redraws. Use it for a control on a
+page that shows the same value, and to move settings a plugin used to keep in its own file over once.
+
+### Keys
+
+A tool's `defaultKey()` and every `PluginAction` can be given a key by the user in **Settings › Keybinds**, where each
+plugin has its own group; actions have no key by default. A key BlockDesigner itself uses wins, and clashes show in red.
+
+### Page status and navigation
+
+`ctx.setPanelStatus(panelId, Tone.SUCCESS, "Connected to 2 games")` puts a coloured dot on a page's button, with the
+text as its tooltip; `null` as the tone removes it. It works before the page was ever built, so a background job can
+show how it stands. `ctx.showPanel(panelId)` opens the plugin's tab at one of its pages (reopening the tab if it was
+closed), for a link from one page to another or from a scene object's menu.
+
+### Dialogs
+
+`ctx.ui()` gives dialogs in the app's look, owned by the main window, in the current theme:
+
+- `confirm(title, message, confirmLabel, destructive)`: `destructive` draws the button red and keeps Cancel the
+  default, so Enter doesn't delete;
+- `askText(title, label, initial)` and `choose(title, label, choices, initial)`;
+- `style(new Dialog<ButtonType>())` for a dialog of your own (add `bd-dialog` to its pane for the kit's padding);
+- `owner()` for file choosers, `copyText(text, toast)`, `open(path)` (a file with its app, a folder in Explorer, off
+  the UI thread), `darkProperty()`.
+
+### Remembered forms
+
+`ui().optionsForm(options, "panel", onChange)` keeps the form's values in BlockDesigner's settings between runs, under
+the plugin's id. `"importer/<id>"` and `"exporter/<id>"` share the values of the plugin's importer or exporter with
+that id, so a page and the Import window show the same settings. `null` keeps nothing: fill it with `setValues`.
+
+### Theming
+
+The kit uses only the theme's looked-up colours, so it follows all six themes, light and dark; so should your own
+nodes. Use the kit's style classes rather than inline styles. These are stable: `bd-root`, `bd-scaffold`, `bd-top`,
+`bd-content`, `bd-footer`, `bd-section`, `bd-section-header`, `bd-section-title`, `bd-hint`, `bd-caption`, `bd-form`,
+`bd-form-label`, `bd-action-bar`, `bd-badge`, `bd-banner`, `bd-empty`, `bd-list`, `bd-row`, `bd-row-title`,
+`bd-row-meta`, `bd-segmented`, `bd-segment`, `bd-block-slot`, `bd-icon`, `bd-card`, `bd-frame`, `bd-mono`,
+`bd-search`, `bd-progress`, `bd-inline-field`, `bd-dialog`; and the pseudo-classes `:narrow`, `:error`, `:accent`,
+`:success`, `:warning`, `:danger`, `:busy`. `Tone.apply(node, tone)` sets the tone pseudo-class on any node
+(`NEUTRAL`, `ACCENT`, `SUCCESS`, `WARNING`, `DANGER`), for example a caption that turns green when something is done.
+
+The kit's icons are from [Feather](https://feathericons.com) by Cole Bemis (MIT licence, included in the API jar as
+`io/blockdesigner/plugin/ui/FEATHER-LICENSE.txt`).
+
 ## Rules of the road
 
 - **Threads:** every call into a plugin (`enable`, actions, commands, transforms, panels, tools, events, exporter `summary`) runs on the JavaFX thread. `PluginExporter.export` and `PluginImporter.importFile` run on a background thread; exporters get their own copies of the layers. Do long work on your own thread and come back with `ctx.runOnUiThread(...)` before you touch the scene.
@@ -734,7 +884,8 @@ changes its options, for example from a list of presets in a panel.
 ## Limits and what's not supported yet
 
 - Panels are pages of the plugin's tab on the right; `PluginPanel.Dock` is not used, so there is no left or bottom dock yet.
-- Plugin tool keys aren't in Settings › Keybinds; they can be changed in `settings.json` (`pluginToolKeys`). A default key BlockDesigner already uses is ignored.
+- Plugin tool and action keys are set in Settings › Keybinds; a default key BlockDesigner already uses is ignored.
+- There is no secret (password) option kind: API keys and the like need a field of the plugin's own.
 - Plugin tools don't receive input in flight mode.
 - `/transform <id>` only opens the dialog; applying straight from the command line with options isn't supported.
 - Preview ghosts are drawn translucent over the old blocks rather than replacing them in the view.

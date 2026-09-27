@@ -5,7 +5,8 @@ A plugin has four places to keep things, depending on what the data belongs to.
 | What | Where | Kept by | Removed when |
 |---|---|---|---|
 | Your own files (caches, per-project side data, downloads) | `ctx.dataFolder()` | you | never by BlockDesigner (not on uninstall either) |
-| User settings shown in your tab (API 4) | `settings.json`, `pluginOptions` | BlockDesigner | Settings › reset everything |
+| User settings, on your page in the Settings window (API 4) | `settings.json`, `pluginOptions` | BlockDesigner | Settings › reset everything |
+| A page's remembered form (`ui().optionsForm(..., "panel", ...)`, API 6) | `settings.json`, `pluginOptions` | BlockDesigner | as above |
 | Last options of your transforms, tools, exporters, importers (API 2) | `settings.json`, `pluginOptions` | BlockDesigner | as above |
 | State that belongs to a build | the project (`.bdproj`) through scene objects (API 3) | BlockDesigner | when the object is deleted |
 
@@ -24,7 +25,7 @@ and doesn't travel with the project file.
 
 Jackson (`com.fasterxml.jackson.databind`, 2.20) is available at runtime for JSON; declare it `compileOnly`.
 
-## Settings in your tab (API 4)
+## Settings in the Settings window (API 4)
 
 ```java
 ctx.registerSettings(Options.builder()
@@ -33,7 +34,10 @@ ctx.registerSettings(Options.builder()
         .build(), v -> { height = v.decimal("height"); snap = v.toggle("snap"); });
 ```
 
-- BlockDesigner draws the controls at the top of the plugin's tab, with **Reset to defaults**.
+- BlockDesigner draws the controls on the plugin's page in the Settings window (under Plugins), with **Reset to
+  defaults**; from API 6 with the options' groups, help and units. (Before 0.4.24 they were at the top of the tab.)
+- `ctx.updateSettings(v -> v.with("mobs", true))` (API 6) changes them as if the user had: saved, `onChange` called,
+  an open Settings window redrawn. Use it to move settings you kept in your own file over once.
 - The values are saved in the app's `settings.json`, in the `pluginOptions` map under the key
   `<plugin id>/settings/tab`, as text (`OptionValues.toStrings()`).
 - On `registerSettings` the saved values are loaded (missing or no longer valid ones fall back to the defaults) and
@@ -53,7 +57,12 @@ values per feature in `pluginOptions` under keys like `palette-tools/transform/w
 Your tool can change its own remembered options with `ctx.setToolOptions(toolId, v -> v.with("height", 8))` (API 5).
 
 Plugin tool key binds are in `settings.json` under `pluginToolKeys`, keyed `<plugin id>/<tool id>`, e.g.
-`"palette-tools/wall": "J"`.
+`"palette-tools/wall": "J"`, and action keys under `pluginActionKeys`, keyed `<plugin id>/<action label>`; users set
+both in Settings › Keybinds (`""` means no key).
+
+A page's form from `ctx.ui().optionsForm(options, rememberAs, onChange)` (API 6) is kept under
+`<plugin id>/<rememberAs>`. `"importer/<id>"` and `"exporter/<id>"` are the keys of the plugin's importer and exporter
+options, so a page and the Import window share one set of values (Pixel Art Generator does this).
 
 ## State saved in the project (API 3)
 

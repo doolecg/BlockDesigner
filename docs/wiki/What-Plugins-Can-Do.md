@@ -40,8 +40,7 @@ Short examples of each feature are on [Registering features](Registering-Feature
 These come from the "Limits" section of PLUGINS.md and the code:
 
 - Panels only go in the plugin's tab on the right. `PluginPanel.dock()` exists in the API but is not used.
-- Plugin tool keys can't be changed in Settings › Keybinds, only in `settings.json` (`pluginToolKeys`). A default key
-  BlockDesigner already uses is ignored.
+- There is no secret (password) option kind; API keys need a field of the plugin's own on one of its pages.
 - Plugin tools get no input in flight mode.
 - `/transform <id>` opens the transform's dialog; it can't apply with options straight from the command line.
 - Transforms change blocks only.

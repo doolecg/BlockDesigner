@@ -53,8 +53,7 @@ final class LootTableEditor extends Dialog<LootTableEditor.Result> {
         initOwner(owner);
         setTitle(existing == null ? "New loot table" : "Edit loot table");
         setResizable(true);
-        getDialogPane().getStylesheets().add(LootTableEditor.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-        getDialogPane().getStyleClass().addAll("app-root", ws.darkProperty().get() ? "dark" : "light");
+        Dialogs.style(getDialogPane(), ws.darkProperty().get());
         ids = itemIds(ws.assets());
 
         TextField name = new TextField(existing == null ? "" : existing.name());

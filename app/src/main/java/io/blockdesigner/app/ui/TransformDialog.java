@@ -65,8 +65,7 @@ final class TransformDialog extends Dialog<Void> {
         setTitle(t.name());
         setResizable(true);
         var dp = getDialogPane();
-        dp.getStylesheets().add(TransformDialog.class.getResource("/io/blockdesigner/app/app.css").toExternalForm());
-        dp.getStyleClass().addAll("app-root", ws.darkProperty().get() ? "dark" : "light");
+        Dialogs.style(dp, ws.darkProperty().get());
 
         Label title = new Label(t.name(), ToolIcons.plugin(t.icon(), 22));
         title.getStyleClass().add("export-title");

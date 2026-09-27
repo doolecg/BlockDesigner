@@ -178,8 +178,11 @@ ctx.objects().add("marker", "Spawn", new Pose(new Vec3(0, 64, 0), new Vec3(0, 0,
 
 ## Settings (API 4)
 
-Settings drawn at the top of the plugin's tab, with Reset to defaults, kept between runs. `onChange` runs once
-straight away with the saved values and after every change. Register once.
+The plugin's page in the Settings window (from 0.4.24; before that the top of the plugin's tab), with Reset to
+defaults, kept between runs. `onChange` runs once straight away with the saved values and after every change.
+Register once. Put only set-once settings there (defaults, connections, behaviour); options used while working
+belong on the plugin's pages. `ctx.updateSettings(change)` changes them as if the user had, `ctx.openSettings()` opens
+the page (API 6).
 
 ```java
 ctx.registerSettings(Options.builder()
@@ -189,6 +192,19 @@ ctx.registerSettings(Options.builder()
 ```
 
 More on where the values live: [Storing data and settings](Storing-Data-And-Settings.md).
+
+## Pages built with the UI kit (API 6)
+
+From API 6 a panel's `create` returns a `PanelScaffold` from `io.blockdesigner.plugin.ui`, filled with `Section`s,
+`Form`s, an `ItemList` and an `ActionBar`, so it looks like BlockDesigner's own pages without any pixel numbers.
+Controls go at the top, status and descriptions at the bottom. `ctx.setPanelStatus(panelId, tone, text)` puts a dot on
+the page's button (even before it is built), `ctx.showPanel(panelId)` opens it, and `ctx.ui()` gives dialogs and the
+app's options form. See PLUGINS.md, [Building panels with the UI kit](https://github.com/doolecg/BlockDesigner/blob/main/PLUGINS.md#building-panels-with-the-ui-kit).
+
+## Keys
+
+Users give tools and Plugins-menu actions keys in Settings › Keybinds, in a group per plugin. `PluginTool.defaultKey()`
+is the tool's key until they change it; actions have none by default.
 
 ## Options (API 2)
 

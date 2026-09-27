@@ -1,6 +1,10 @@
 package io.blockdesigner.plugin;
 
-/** A {@link PluginPanel}'s handle on its tab. Use from the JavaFX thread. */
+/**
+ * A {@link PluginPanel}'s handle on its page of the plugin's tab. Use from the JavaFX thread. To open another of the
+ * plugin's pages, or show a status dot on a page button, see {@link PluginContext#showPanel} and
+ * {@link PluginContext#setPanelStatus} (API 6).
+ */
 public interface PanelContext {
 
     /** The plugin's context, for the scene, events and edits. */
@@ -15,9 +19,9 @@ public interface PanelContext {
      */
     void onShown(Runnable action);
 
-    /** A short text next to the tab's title, such as a count; {@code null} or empty removes it. */
+    /** A short text on the page's button, such as a count; {@code null} or empty removes it. */
     void setBadge(String text);
 
-    /** Opens the panel if it was closed and selects its tab. */
+    /** Opens the plugin's tab (reopening it if it was closed) at this page. */
     void reveal();
 }

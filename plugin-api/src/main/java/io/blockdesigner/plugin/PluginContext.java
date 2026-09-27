@@ -48,7 +48,11 @@ public interface PluginContext {
      */
     void registerTransform(PluginTransform transform);
 
-    /** Adds a panel (a closable tab on the right). Since API 2. */
+    /**
+     * Adds a panel: a page of the plugin's own tab on the right, picked in the row of pages along its top (the tab
+     * opens on the first one). Build it with {@code io.blockdesigner.plugin.ui.PanelScaffold} to match the app.
+     * Since API 2.
+     */
     void registerPanel(PluginPanel panel);
 
     /** Adds an importer for files that aren't schematics (Import window and drag and drop). Since API 2. */
@@ -64,10 +68,11 @@ public interface PluginContext {
     void registerObjectType(SceneObjectType type);
 
     /**
-     * Adds settings to the plugin's own tab on the right. Every enabled plugin has that tab: it shows the plugin is
-     * running and lists what it adds; these settings go at the top of it. BlockDesigner draws a control per option,
-     * keeps the values between runs, and calls {@code onChange} on the JavaFX thread with the current values, once
-     * straight away and again after every change (including "Reset to defaults"). Call it once. Since API 4.
+     * Adds the plugin's settings. They are shown on the plugin's own page in the Settings window (API 6; before that,
+     * at the top of the Overview of the plugin's tab), with a "Reset to defaults" button; the Overview links to them.
+     * BlockDesigner draws a control per option (with the options' groups, help and units), keeps the values between
+     * runs, and calls {@code onChange} on the JavaFX thread with the current values, once straight away and again
+     * after every change (including "Reset to defaults" and {@link #updateSettings}). Call it once. Since API 4.
      */
     void registerSettings(Options options, Consumer<OptionValues> onChange);
 
@@ -159,4 +164,52 @@ public interface PluginContext {
      * options bar and handler follow straight away. Since API 5.
      */
     void setToolOptions(String toolId, java.util.function.UnaryOperator<OptionValues> change);
+
+    // ---- resource packs (API 6) ------------------------------------------------------------------------------
+
+    /**
+     * The resource packs layered on the Minecraft assets (game jar and mods), lowest priority first: zip files or
+     * folders. Since API 6.
+     */
+    List<Path> resourcePacks();
+
+    /**
+     * Reloads the Minecraft assets with these resource packs (lowest priority first) on top of the game jar and mods,
+     * and keeps them as the user's choice. Loading happens in the background; the view shows the new textures when it
+     * is done. Missing files are skipped. Since API 6.
+     */
+    void useResourcePacks(List<Path> packs);
+
+    // ---- plugin UI (API 6) -----------------------------------------------------------------------------------
+
+    /**
+     * The app's help for the plugin's own panels and dialogs: its options form, dark or light, the main window, and
+     * dialogs in the app's look. The components themselves are in {@code io.blockdesigner.plugin.ui}. Since API 6.
+     */
+    io.blockdesigner.plugin.ui.PluginUi ui();
+
+    /**
+     * Opens the plugin's tab at one of its panels, by the panel's id (reopening the tab if the user closed it); an
+     * unknown id opens the tab as it was. Since API 6.
+     */
+    void showPanel(String panelId);
+
+    /**
+     * A status dot on a panel's page button, coloured by {@code tone}, with {@code text} as its tooltip ("Connected
+     * to 2 games"); a null tone removes it. Works before the panel is first shown. Since API 6.
+     */
+    void setPanelStatus(String panelId, io.blockdesigner.plugin.ui.Tone tone, String text);
+
+    /**
+     * Opens the Settings window at this plugin's page (for a plugin without {@link #registerSettings settings}, its
+     * tab's Overview). Since API 6.
+     */
+    void openSettings();
+
+    /**
+     * Changes the {@link #registerSettings registered settings} as if the user had: the new values are kept,
+     * {@code onChange} runs and an open Settings page redraws. For a setting also offered on a panel (a provider
+     * picker, say), or to move settings the plugin used to keep itself. Since API 6.
+     */
+    void updateSettings(java.util.function.UnaryOperator<OptionValues> change);
 }
