@@ -1,3 +1,24 @@
+# BlockDesigner 0.4.27
+
+You can now install or update mods in the game BlockDesigner takes its textures from while BlockDesigner is open.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.27.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.27.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.27-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## Fixed
+- **Mods no longer locked by BlockDesigner:** it used to hold every mod, resource pack and game jar it took textures from open, so Windows wouldn't let you delete or replace them while it ran. Resource Tracker's Install mod failed with "BlockCompanion jar is in use", and so did updating those mods in a launcher. Now they can be deleted, renamed or replaced at any time, and BlockDesigner keeps showing the textures it loaded.
+
+---
+
 # BlockDesigner 0.4.26
 
 Edit a schematic from your game: in BlockCompanion, pick **Edit in BlockDesigner** on a loaded schematic and it opens here as your project (with Resource Tracker), ready to change.

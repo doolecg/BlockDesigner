@@ -2,14 +2,15 @@ package io.blockdesigner.assets;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.ProviderNotFoundException;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /** A read-only tree of resource files: a game/mod jar, a resource-pack zip, or a folder. Paths use '/' separators. */
@@ -48,15 +49,13 @@ public interface AssetSource extends Closeable {
         Path cache = Path.of(System.getProperty("java.io.tmpdir"), "blockdesigner-jarjar");
         for (String name : zip.list("META-INF/")) {
             if (!name.endsWith(".jar") || !(name.startsWith("META-INF/jarjar/") || name.startsWith("META-INF/jars/"))) continue;
-            ZipEntry e = zip.zip.getEntry(name);
+            Path entry = zip.zip.getPath(name);
             String file = name.substring(name.lastIndexOf('/') + 1);
-            Path target = cache.resolve(e.getSize() + "-" + e.getTime() + "-" + file);
+            Path target = cache.resolve(Files.size(entry) + "-" + Files.getLastModifiedTime(entry).toMillis() + "-" + file);
             if (!Files.isRegularFile(target)) {
                 Files.createDirectories(cache);
                 Path tmp = Files.createTempFile(cache, "nested", ".tmp");
-                try (var in = zip.zip.getInputStream(e)) {
-                    Files.copy(in, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                }
+                Files.copy(entry, tmp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
             // Only nested jars that carry assets matter for rendering; libraries are skipped cheaply.
@@ -71,13 +70,21 @@ public interface AssetSource extends Closeable {
         }
     }
 
+    /**
+     * A jar or zip, read through a zip file system: unlike {@link ZipFile}, it doesn't lock the file on Windows, so a
+     * game's mods and packs can be deleted, renamed or updated while BlockDesigner shows their textures.
+     */
     final class Zip implements AssetSource {
         private final Path path;
-        private final ZipFile zip;
+        private final FileSystem zip;
 
         public Zip(Path path) throws IOException {
             this.path = path;
-            this.zip = new ZipFile(path.toFile());
+            try {
+                this.zip = FileSystems.newFileSystem(path);
+            } catch (ProviderNotFoundException e) {
+                throw new IOException("not a zip: " + path.getFileName(), e);
+            }
         }
 
         @Override
@@ -86,23 +93,19 @@ public interface AssetSource extends Closeable {
         }
 
         @Override
-        public synchronized Optional<byte[]> read(String p) throws IOException {
-            ZipEntry e = zip.getEntry(p);
-            if (e == null || e.isDirectory()) return Optional.empty();
-            try (var in = zip.getInputStream(e)) {
-                return Optional.of(in.readAllBytes());
-            }
+        public Optional<byte[]> read(String p) throws IOException {
+            Path f = zip.getPath(p);
+            if (!Files.isRegularFile(f)) return Optional.empty();
+            return Optional.of(Files.readAllBytes(f));
         }
 
         @Override
-        public synchronized List<String> list(String prefix) {
-            List<String> out = new ArrayList<>();
-            Enumeration<? extends ZipEntry> en = zip.entries();
-            while (en.hasMoreElements()) {
-                ZipEntry e = en.nextElement();
-                if (!e.isDirectory() && e.getName().startsWith(prefix)) out.add(e.getName());
+        public List<String> list(String prefix) throws IOException {
+            Path base = zip.getPath("/" + prefix.substring(0, prefix.lastIndexOf('/') + 1));
+            if (!Files.isDirectory(base)) return List.of();
+            try (Stream<Path> s = Files.walk(base)) {
+                return s.filter(Files::isRegularFile).map(f -> f.toString().substring(1)).filter(n -> n.startsWith(prefix)).toList();
             }
-            return out;
         }
 
         @Override
