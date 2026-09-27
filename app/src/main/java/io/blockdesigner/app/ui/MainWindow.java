@@ -1789,6 +1789,10 @@ public final class MainWindow {
                 case SELECT_BY_TYPE -> viewport::openSelectByTypeAtAim;
                 case SELECT_ALL -> listFocused ? null : viewport::selectAllInActive;
                 case DESELECT -> viewport::deselectBlocks;
+                // Not in a focused list (the console copies its lines); text fields never get here.
+                case COPY -> listFocused ? null : viewport::copySelectedBlocks;
+                case CUT -> listFocused ? null : viewport::cutSelectedBlocks;
+                case PASTE -> listFocused ? null : viewport::pasteClipboard;
                 case COPY_TO_LAYER -> viewport::copySelectionToNewLayer;
                 case MOVE_TO_LAYER -> viewport::moveSelectionToNewLayer;
                 case FILL_SELECTION -> viewport::replaceSelectionWithHeld;

@@ -280,6 +280,8 @@ public final class ViewportPane extends StackPane {
     private final List<BlockPos> placingRelative = new ArrayList<>();
     private BlockPos placementNudge = BlockPos.ORIGIN;
     private Runnable placementDone;
+    /** The ghost being placed is the clipboard (Ctrl+V): placing it writes into the active layer instead of adding a layer. */
+    private boolean pasting;
 
     // slice view: null shows everything; otherwise the current Y level (alone, or with everything below it)
     private Integer sliceY;
@@ -1185,7 +1187,8 @@ public final class ViewportPane extends StackPane {
         if (e.getButton() == MouseButton.PRIMARY && isGizmoTool() && placing.isEmpty()) {
             Gizmo.Handle h = gizmo.hit(e.getX(), e.getY());
             if (h != null) {
-                beginGizmoDrag(h, e.getX(), e.getY());
+                // Ctrl as the drag starts duplicates what it moves (Blender's Shift+D); held later, it snaps scene objects.
+                beginGizmoDrag(h, e.getX(), e.getY(), e.isShortcutDown());
                 return;
             }
         }
@@ -1356,6 +1359,12 @@ public final class ViewportPane extends StackPane {
             }
         }
         if (e.getButton() == MouseButton.MIDDLE && click) pickBlock();
+        if (e.getButton() == MouseButton.SECONDARY && click && !placing.isEmpty()) {
+            // Right-click drops what is being placed (an import or a paste), like Esc.
+            cancelPlacement();
+            dragButton = null;
+            return;
+        }
         if (e.getButton() == MouseButton.SECONDARY && click && placing.isEmpty() && showObjectMenu(e)) {
             dragButton = null;
             return;
@@ -2307,6 +2316,8 @@ public final class ViewportPane extends StackPane {
                     item(String.format("Delete %,d block%s", n, n == 1 ? "" : "s"), "Del", this::deleteSelectedBlocks),
                     item("Replace with " + (held == null ? "held block" : BlockInfoHud.name(ws.assets(), held)), null, this::replaceSelection),
                     item("Fix fence, wall, redstone and stair shapes", null, this::fixSelectionShapes),
+                    item("Copy", keyOrNull(Keybinds.Action.COPY), this::copySelectedBlocks),
+                    item("Cut", keyOrNull(Keybinds.Action.CUT), this::cutSelectedBlocks),
                     item("Copy to new layer", keyOrNull(Keybinds.Action.COPY_TO_LAYER), this::copySelectionToLayer),
                     item("Move to new layer", keyOrNull(Keybinds.Action.MOVE_TO_LAYER), this::moveSelectionToNewLayer),
                     item("Move to active layer" + (ws.activeLayerProperty().get() == null ? "" : " (" + ws.activeLayerProperty().get().name() + ")"),
@@ -2314,6 +2325,7 @@ public final class ViewportPane extends StackPane {
                     item("Move or rotate", keyOrNull(Keybinds.Action.TOOL_MOVE), () -> ws.toolProperty().set(ToolKind.MOVE)),
                     item("Clear selection", keyOrNull(Keybinds.Action.CANCEL), this::clearBlockSelection));
         }
+        if (worldEdit.hasClipboard()) contextMenu.getItems().add(item("Paste", keyOrNull(Keybinds.Action.PASTE), this::pasteClipboard));
         if (layer != null) {
             if (!contextMenu.getItems().isEmpty()) contextMenu.getItems().add(new javafx.scene.control.SeparatorMenuItem());
             contextMenu.getItems().addAll(
@@ -2473,6 +2485,153 @@ public final class ViewportPane extends StackPane {
         ws.scene().setActive(made.getLast());
         ws.selectedLayers().setAll(made);
         showToast(made.size() == 1 ? "Copied to " + made.getFirst().name() : "Copied to " + made.size() + " new layers");
+    }
+
+    // ---- clipboard ----------------------------------------------------------------------------------------------
+
+    /** Ctrl+C: copies the selected blocks and mobs to the clipboard, which BlockEdit's /paste shares. */
+    public void copySelectedBlocks() {
+        var c = selectionClipboard();
+        if (c == null) return;
+        worldEdit.setClipboard(c);
+        showToast("Copied " + clipboardSize(c) + keyNote(Keybinds.Action.PASTE, "pastes"));
+    }
+
+    /** Ctrl+X: copies the selection, then deletes it as one undo step (blocks in locked layers are copied but stay). */
+    public void cutSelectedBlocks() {
+        if (gizmoDrag != null) return;
+        var c = selectionClipboard();
+        if (c == null) return;
+        worldEdit.setClipboard(c);
+        deleteSelectedBlocks("Cut selection");
+        showToast("Cut " + clipboardSize(c) + keyNote(Keybinds.Action.PASTE, "pastes"));
+    }
+
+    /**
+     * The selected blocks (turned the way the world shows them, block entity data kept) and selected entities,
+     * relative to the lowest corner of their bounds; null, with a toast, when nothing is selected.
+     */
+    private io.blockdesigner.core.worldedit.WorldEdit.Clipboard selectionClipboard() {
+        java.util.Map<BlockPos, BlockState> blocks = new java.util.LinkedHashMap<>();
+        java.util.Map<BlockPos, io.blockdesigner.core.nbt.CompoundTag> nbt = new java.util.HashMap<>();
+        List<io.blockdesigner.core.model.StructureEntity> mobs = new ArrayList<>();
+        BlockTransformer bt = BlockTransformer.defaults();
+        for (var e : blockSel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l == null) continue;
+            for (long packed : e.getValue()) {
+                BlockPos p = BlockPos.unpack(packed);
+                BlockState st = l.structure().get(p);
+                if (st.isAir()) continue;
+                BlockPos w = l.toWorld(p);
+                blocks.put(w, bt.apply(st, l.transform()));
+                var be = l.structure().blockEntity(p);
+                if (be != null) nbt.put(w, be.copy());
+            }
+        }
+        for (var e : entitySel.entrySet()) {
+            Layer l = ws.scene().find(e.getKey()).orElse(null);
+            if (l != null) for (var m : e.getValue()) mobs.add(worldEntity(l, m));
+        }
+        if (blocks.isEmpty() && mobs.isEmpty()) {
+            showToast("Select some blocks first" + keyNote(Keybinds.Action.TOOL_SELECT, "is Select mode"));
+            return null;
+        }
+        int x = Integer.MAX_VALUE, y = Integer.MAX_VALUE, z = Integer.MAX_VALUE;
+        for (BlockPos p : blocks.keySet()) {
+            x = Math.min(x, p.x());
+            y = Math.min(y, p.y());
+            z = Math.min(z, p.z());
+        }
+        for (var m : mobs) {
+            x = Math.min(x, (int) Math.floor(m.x()));
+            y = Math.min(y, (int) Math.floor(m.y()));
+            z = Math.min(z, (int) Math.floor(m.z()));
+        }
+        BlockPos min = new BlockPos(x, y, z);
+        java.util.Map<BlockPos, BlockState> rb = new java.util.LinkedHashMap<>();
+        java.util.Map<BlockPos, io.blockdesigner.core.nbt.CompoundTag> rn = new java.util.HashMap<>();
+        blocks.forEach((p, st) -> rb.put(p.subtract(min), st));
+        nbt.forEach((p, t) -> rn.put(p.subtract(min), t));
+        return new io.blockdesigner.core.worldedit.WorldEdit.Clipboard(rb, rn, mobs.stream().map(m -> m.translated(-min.x(), -min.y(), -min.z())).toList());
+    }
+
+    /** "1,234 blocks and 2 entities" (air left out: a /copy keeps the air of its box). */
+    private static String clipboardSize(io.blockdesigner.core.worldedit.WorldEdit.Clipboard c) {
+        long n = c.blocks().values().stream().filter(s -> !s.isAir()).count();
+        int ne = c.entities().size();
+        String blocks = String.format("%,d block%s", n, n == 1 ? "" : "s");
+        return ne == 0 ? blocks : blocks + String.format(" and %d entit%s", ne, ne == 1 ? "y" : "ies");
+    }
+
+    /**
+     * Ctrl+V: the clipboard follows the mouse as a ghost, like an import being placed (R or Alt+scroll turns it); a
+     * click puts it into the active layer as one undo step and selects it, so the Move tool can carry on from there.
+     */
+    public void pasteClipboard() {
+        var c = worldEdit.clipboard();
+        if (c == null) {
+            showToast("The clipboard is empty" + keyNote(Keybinds.Action.COPY, "copies the selected blocks"));
+            return;
+        }
+        if (gizmoDrag != null) return;
+        Layer active = ws.activeLayerProperty().get();
+        if (active != null && (active.locked() || !active.visible())) {
+            showToast(active.name() + (active.locked() ? " is locked" : " is hidden") + " · pick another layer to paste into");
+            return;
+        }
+        io.blockdesigner.core.model.Structure s = new io.blockdesigner.core.model.Structure();
+        c.blocks().forEach((p, st) -> {
+            if (!st.isAir()) s.set(p, st);
+        });
+        c.nbt().forEach((p, t) -> {
+            if (!s.get(p).isAir()) s.setBlockEntity(p, t.copy());
+        });
+        c.entities().forEach(m -> s.addEntity(m.copy()));
+        if (s.isEmpty()) {
+            showToast("The clipboard only holds air");
+            return;
+        }
+        setFly(false);
+        cancelPlacement();
+        pasting = true;
+        beginPlacement(List.of(new Layer("Clipboard", s)), null);
+    }
+
+    /** Writes the pasted ghost into the active layer (a new one when there is none), as one undo step, and selects it. */
+    private void commitPaste() {
+        Layer ghost = placing.getFirst();
+        ws.scene().remove(ghost);
+        placing.clear();
+        placingRelative.clear();
+        placementDone = null;
+        pasting = false;
+        Layer[] into = {ws.activeLayerProperty().get()};
+        if (into[0] != null && into[0].locked()) {
+            showToast(into[0].name() + " is locked · nothing pasted");
+            return;
+        }
+        java.util.Set<Long> cells = new java.util.HashSet<>();
+        BlockTransformer bt = BlockTransformer.defaults();
+        editLayers("Paste", null, into[0], le -> {
+            if (into[0] == null) into[0] = newLayer();
+            Layer t = into[0];
+            ghost.structure().forEachBlock((x, y, z, st) -> {
+                BlockPos w = ghost.toWorld(x, y, z);
+                le.setIn(t, w, bt.apply(st, ghost.transform()), ghost.structure().blockEntity(new BlockPos(x, y, z)));
+                cells.add(t.toLocal(w).pack());
+            });
+            var mobs = ghost.structure().entities().stream()
+                    .map(m -> SceneEditor.toLocal(t, t.transform().inverse(), worldEntity(ghost, m))).toList();
+            if (!mobs.isEmpty()) ws.editor().editEntities(t, "Paste", null, list -> list.addAll(mobs));
+        });
+        blockSel.clear();
+        entitySel.clear();
+        if (!cells.isEmpty()) blockSel.put(into[0].id(), cells);
+        selectOnly(into[0]);
+        selectionChanged();
+        showToast("Pasted " + clipboardSize(worldEdit.clipboard()) + " into " + into[0].name()
+                + keyNote(Keybinds.Action.TOOL_MOVE, "moves them") + keyNote(Keybinds.Action.PASTE, "pastes again"));
     }
 
     // ---- view cube, axis views and projection ------------------------------------------------------------------
@@ -2667,6 +2826,9 @@ public final class ViewportPane extends StackPane {
         java.util.Map<Layer, Layer> lifted;
         /** The selection before the drag, restored on cancel. */
         java.util.Map<String, java.util.Set<Long>> selBefore;
+        /** A Ctrl-drag of layers: the active and selected layers before the copies were made, restored on cancel. */
+        Layer activeBefore;
+        List<Layer> layersBefore;
         /** Dragging a plugin scene object instead (freely, not by whole blocks or quarter turns). */
         io.blockdesigner.app.plugins.ObjectDrag object;
         /** The object drag is a Scale tool drag. */
@@ -2739,7 +2901,12 @@ public final class ViewportPane extends StackPane {
         gizmo.update(mode, pivot, camera, getWidth(), getHeight(), gizmoHot, gizmoDrag == null ? null : gizmoDrag.handle);
     }
 
-    private void beginGizmoDrag(Gizmo.Handle h, double x, double y) {
+    /**
+     * Starts a gizmo drag on the selected blocks or layers. With {@code duplicate} (Ctrl) they are copied first and the
+     * drag carries the copy, the originals staying put; the copy and the drag are one undo step. Scene objects aren't
+     * duplicated (Ctrl snaps them instead).
+     */
+    private void beginGizmoDrag(Gizmo.Handle h, double x, double y, boolean duplicate) {
         if (objectTarget() != null) {
             beginObjectDrag(h, x, y);
             return;
@@ -2771,16 +2938,33 @@ public final class ViewportPane extends StackPane {
             if (h.kind() == Gizmo.Kind.AXIS && Math.abs(d.startT) < 0.1f * gizmo.size()) d.startT = gizmo.size();
         }
         String verb = scale ? "Scale" : h.kind() == Gizmo.Kind.RING ? "Rotate" : "Move";
+        if (duplicate) verb = "Duplicate and " + verb.toLowerCase(java.util.Locale.ROOT);
         gizmoDrag = d;
         if (selection) {
             // The selected blocks float in their own layers while dragged, and go back into their layers on release.
             ws.editor().undoStack().beginGroup(verb + " selection");
             d.selBefore = copySelection();
-            d.lifted = liftSelection();
+            d.lifted = liftSelection(duplicate);
             d.layers = List.copyOf(d.lifted.keySet());
+            if (duplicate) showToast("Duplicate selection");
         } else {
-            d.layers = layers;
             ws.editor().undoStack().beginGroup(layers.size() == 1 ? verb + " " + layers.getFirst().name() : verb + " layers");
+            if (duplicate) {
+                // Copies just above the originals (as Duplicate layers makes them) become the dragged, selected layers.
+                d.activeBefore = ws.activeLayerProperty().get();
+                d.layersBefore = List.copyOf(ws.selectedLayers());
+                List<Layer> made = new ArrayList<>();
+                for (Layer l : layers) {
+                    Layer copy = l.duplicate(l.name() + " copy");
+                    ws.editor().addLayer(copy, ws.scene().indexOf(l) + 1);
+                    made.add(copy);
+                }
+                ws.scene().setActive(made.getLast());
+                ws.selectedLayers().setAll(made);
+                showToast(made.size() == 1 ? "Duplicate " + layers.getFirst().name() : "Duplicate " + made.size() + " layers");
+                layers = made;
+            }
+            d.layers = layers;
         }
         if (scale) {
             d.scaleFrom = new java.util.LinkedHashMap<>();
@@ -2999,10 +3183,15 @@ public final class ViewportPane extends StackPane {
         // A lifted selection always changed the layers, so it is always undone.
         if (d.lifted != null) dropSelection(d.lifted);
         ws.editor().undoStack().endGroup();
-        if (d.changed || d.lifted != null) ws.editor().undoStack().undo();
+        if (d.changed || d.lifted != null || d.layersBefore != null) ws.editor().undoStack().undo();
         if (d.selBefore != null) {
             blockSel.clear();
             blockSel.putAll(d.selBefore);
+        }
+        if (d.layersBefore != null) {
+            // The copies are gone again: the originals are the active and selected layers once more.
+            if (d.activeBefore != null) ws.scene().setActive(d.activeBefore);
+            ws.selectedLayers().setAll(d.layersBefore);
         }
         showToast("Cancelled");
         requestRedraw();
@@ -3247,11 +3436,14 @@ public final class ViewportPane extends StackPane {
         return SelectionTransfer.transfer(ws.editor(), blockSel, dest, label);
     }
 
-    /** Lifts the selected blocks into a floating layer per source layer; returns floating layer → source. */
-    private java.util.Map<Layer, Layer> liftSelection() {
+    /**
+     * Lifts the selected blocks into a floating layer per source layer ({@code copy}: copies them there, leaving the
+     * originals); returns floating layer → source.
+     */
+    private java.util.Map<Layer, Layer> liftSelection(boolean copy) {
         java.util.Map<Layer, Layer> lifted = new java.util.LinkedHashMap<>();
         Layer active = ws.activeLayerProperty().get();
-        var sel = transferSelection(src -> {
+        var sel = SelectionTransfer.transfer(ws.editor(), blockSel, src -> {
             if (!src.visible()) return null;
             Layer f = new Layer(src.name() + " (moving)", new io.blockdesigner.core.model.Structure());
             f.setOffset(src.offset());
@@ -3260,7 +3452,7 @@ public final class ViewportPane extends StackPane {
             ws.editor().addLayer(f, ws.scene().indexOf(src) + 1);
             lifted.put(f, src);
             return f;
-        }, "Lift selection");
+        }, copy ? "Copy selection" : "Lift selection", copy);
         // Only the floating blocks are selected (and so outlined) while they move.
         blockSel.clear();
         sel.forEach((id, cells) -> {
@@ -5236,8 +5428,12 @@ public final class ViewportPane extends StackPane {
 
     /** Deletes the selected blocks as one undo step. */
     private void deleteSelectedBlocks() {
+        deleteSelectedBlocks("Delete selection");
+    }
+
+    private void deleteSelectedBlocks(String label) {
         int[] n = {0, 0};
-        editLayers("Delete selection", null, null, le -> {
+        editLayers(label, null, null, le -> {
             for (var e : blockSel.entrySet()) {
                 Layer l = ws.scene().find(e.getKey()).orElse(null);
                 if (l == null || l.locked()) continue;
@@ -5256,7 +5452,7 @@ public final class ViewportPane extends StackPane {
                 if (l == null || l.locked()) continue;
                 var gone = java.util.Set.copyOf(e.getValue());
                 n[1] += gone.size();
-                ws.editor().editEntities(l, "Delete selection", null, list -> list.removeAll(gone));
+                ws.editor().editEntities(l, label, null, list -> list.removeAll(gone));
             }
         });
         blockSel.clear();
@@ -5320,7 +5516,7 @@ public final class ViewportPane extends StackPane {
             return;
         }
         showToast("Click to place" + keyNote(Keybinds.Action.PLACE, "places") + " · " + (keyText(Keybinds.Action.ROTATE_PLACEMENT).isEmpty() ? "" : keyText(Keybinds.Action.ROTATE_PLACEMENT) + " or ")
-                + "Alt+scroll rotate · Ctrl/Shift+scroll adjust" + keyNote(Keybinds.Action.CANCEL, "cancels"));
+                + "Alt+scroll rotate · Ctrl/Shift+scroll adjust" + keyNote(Keybinds.Action.CANCEL, "or right-click cancels"));
         requestFocus();
     }
 
@@ -5357,6 +5553,10 @@ public final class ViewportPane extends StackPane {
 
     private void commitPlacement() {
         if (placing.isEmpty()) return;
+        if (pasting) {
+            commitPaste();
+            return;
+        }
         for (Layer l : placing) {
             l.setGhost(false);
             ws.scene().firePropertiesChanged(l);
@@ -5377,7 +5577,8 @@ public final class ViewportPane extends StackPane {
         placing.clear();
         placingRelative.clear();
         placementDone = null;
-        showToast("Placement cancelled");
+        showToast(pasting ? "Paste cancelled" : "Placement cancelled");
+        pasting = false;
     }
 
     public boolean isPlacing() {
@@ -5586,6 +5787,7 @@ public final class ViewportPane extends StackPane {
             hint(h, "Rotate", Keybinds.Action.ROTATE_PLACEMENT);
             h.add(KeyHints.Hint.of("Rotate", "Alt", "Wheel"));
             hint(h, "Cancel", Keybinds.Action.CANCEL);
+            h.add(KeyHints.Hint.of("Cancel", "RMB"));
         } else if (shapeDrag != null) {
             h.add(KeyHints.Hint.of((shapeDrag.breaking ? "Break the " : "Place the ") + shapeDrag.shape.label.toLowerCase(java.util.Locale.ROOT),
                     shapeDrag.breaking ? "LMB" : "RMB"));
@@ -5631,24 +5833,30 @@ public final class ViewportPane extends StackPane {
                     hint(h, "BlockEdit command", Keybinds.Action.COMMAND_BAR);
                     if (!blockSel.isEmpty()) {
                         hint(h, "Move / rotate them", Keybinds.Action.TOOL_MOVE);
+                        hint(h, "Copy", Keybinds.Action.COPY);
+                        hint(h, "Cut", Keybinds.Action.CUT);
                         hint(h, "Move to new layer", Keybinds.Action.MOVE_TO_LAYER);
                         hint(h, "Delete", Keybinds.Action.DELETE);
                         hint(h, "Clear selection", Keybinds.Action.CANCEL);
                     }
+                    if (worldEdit.hasClipboard()) hint(h, "Paste", Keybinds.Action.PASTE);
                 }
                 case MOVE -> {
                     h.add(KeyHints.Hint.of(movableSelection() ? "Move the selected blocks" : "Drag arrow / square", "LMB"));
+                    if (objectTarget() == null) h.add(KeyHints.Hint.of("Duplicate and move", "Ctrl", "LMB"));
                     h.add(KeyHints.Hint.of("Nudge", "Ctrl", "Wheel"));
                     hint(h, "Rotate tool", Keybinds.Action.TOOL_ROTATE);
                     hint(h, "Scale tool", Keybinds.Action.TOOL_SCALE);
                 }
                 case ROTATE -> {
                     h.add(KeyHints.Hint.of(movableSelection() ? "Turn the selected blocks" : "Drag a ring", "LMB"));
+                    if (objectTarget() == null) h.add(KeyHints.Hint.of("Duplicate and turn", "Ctrl", "LMB"));
                     hint(h, "Move tool", Keybinds.Action.TOOL_MOVE);
                     hint(h, "Scale tool", Keybinds.Action.TOOL_SCALE);
                 }
                 case SCALE -> {
                     h.add(KeyHints.Hint.of(movableSelection() ? "Scale the selected blocks" : "Drag a square / the centre", "LMB"));
+                    if (objectTarget() == null) h.add(KeyHints.Hint.of("Duplicate and scale", "Ctrl", "LMB"));
                     h.add(KeyHints.Hint.of("Cancel", "RMB"));
                     hint(h, "Move tool", Keybinds.Action.TOOL_MOVE);
                     hint(h, "Rotate tool", Keybinds.Action.TOOL_ROTATE);

@@ -30,6 +30,12 @@ final class SelectionTransfer {
      * undoable (call inside an undo group for one step). Returns the selection afterwards.
      */
     static Map<String, Set<Long>> transfer(SceneEditor editor, Map<String, Set<Long>> selection, Function<Layer, Layer> dest, String label) {
+        return transfer(editor, selection, dest, label, false);
+    }
+
+    /** As {@link #transfer(SceneEditor, Map, Function, String)}, but with {@code keep} the sources keep their blocks (a copy). */
+    static Map<String, Set<Long>> transfer(SceneEditor editor, Map<String, Set<Long>> selection, Function<Layer, Layer> dest, String label,
+                                           boolean keep) {
         BlockTransformer bt = BlockTransformer.defaults();
         Map<Layer, List<Moved>> into = new LinkedHashMap<>();
         Map<Layer, Set<Long>> from = new LinkedHashMap<>();
@@ -50,7 +56,7 @@ final class SelectionTransfer {
                 CompoundTag nbt = src.structure().blockEntity(p);
                 list.add(new Moved(src.toWorld(p), bt.apply(st, src.transform()), nbt == null ? null : nbt.copy()));
             }
-            from.put(src, e.getValue());
+            if (!keep) from.put(src, e.getValue());
         }
         // Clear the sources first, so blocks moved within one layer can land on each other's old places.
         from.forEach((src, cells) -> {

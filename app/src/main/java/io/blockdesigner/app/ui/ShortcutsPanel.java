@@ -73,6 +73,8 @@ final class ShortcutsPanel extends VBox {
                     {"{SELECT_BY_TYPE}", "Select or replace blocks by type"},
                     {"{SELECT_ALL} / {DESELECT}", "Select every block of the active layer / deselect"},
                     {"{TOOL_MOVE} / {TOOL_ROTATE} / {TOOL_SCALE}", "With blocks selected: move / rotate / scale just those blocks within their layer"},
+                    {"{COPY} / {CUT}", "Copy / cut the selected blocks (and selected mobs); /paste pastes them too"},
+                    {"{PASTE}", "Paste: the copy follows the mouse, click puts it in the active layer and selects it; right-click or {CANCEL} cancels"},
                     {"{COPY_TO_LAYER}", "Copy the selected blocks to a new layer"},
                     {"{MOVE_TO_LAYER}", "Move the selected blocks to a new layer"},
                     {"Shift+right-click", "Menu: move the selected blocks to the active layer"},

@@ -87,6 +87,19 @@ class WorldEditTest {
     }
 
     @Test
+    void theClipboardIsSharedWithTheApp() {
+        assertThat(we.clipboard()).isNull();
+        // What the app's Ctrl+C copied /paste pastes, and what /copy copied the app can read back.
+        we.setClipboard(new WorldEdit.Clipboard(Map.of(new BlockPos(0, 0, 0), STONE, new BlockPos(0, 1, 0), DIRT), Map.of(), java.util.List.of()));
+        we.setPos1(new BlockPos(5, 5, 5));
+        run("//paste");
+        assertThat(blocks).containsEntry(new BlockPos(5, 5, 5), STONE).containsEntry(new BlockPos(5, 6, 5), DIRT);
+        box(5, 5, 5, 5, 6, 5);
+        run("//copy");
+        assertThat(we.clipboard().blocks()).containsEntry(new BlockPos(0, 1, 0), DIRT).hasSize(2);
+    }
+
+    @Test
     void stackRepeatsAndMoveCarriesTheRegion() {
         box(0, 0, 0, 1, 1, 1);
         run("//set stone");

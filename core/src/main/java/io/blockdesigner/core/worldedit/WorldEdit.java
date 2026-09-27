@@ -219,6 +219,24 @@ public final class WorldEdit {
         return clipboard != null;
     }
 
+    /**
+     * What is on the clipboard: blocks (air included after a {@code /copy}), their block entity data and entities, all
+     * relative to the paste point. The app's Ctrl+C / Ctrl+V share it, so {@code /paste} pastes what Ctrl+C copied.
+     */
+    public record Clipboard(Map<BlockPos, BlockState> blocks, Map<BlockPos, CompoundTag> nbt, List<StructureEntity> entities) {
+    }
+
+    /** The clipboard, or null when nothing has been copied. */
+    public Clipboard clipboard() {
+        return clipboard == null ? null : new Clipboard(clipboard, clipboardNbt, clipboardEntities);
+    }
+
+    public void setClipboard(Clipboard c) {
+        clipboard = new LinkedHashMap<>(c.blocks());
+        clipboardNbt = new HashMap<>(c.nbt());
+        clipboardEntities = List.copyOf(c.entities());
+    }
+
     // ---- running commands ------------------------------------------------------------------------------------
 
     public Result run(String line, Context c) {

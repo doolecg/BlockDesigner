@@ -1,3 +1,31 @@
+# BlockDesigner 0.4.25
+
+Copy, cut and paste blocks, and duplicate as you drag: hold Ctrl when you grab the Move, Rotate or Scale gizmo and you move a copy, leaving the original where it was.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.25.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.25.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.25-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Copy, cut and paste blocks** (default Ctrl+C, Ctrl+X, Ctrl+V; change them in Settings › Keybinds). Copy takes the selected blocks with their contents (chests, signs…) and any selected mobs. Cut copies them and deletes them in one undo step; blocks in locked layers are copied but stay.
+- **Pasting follows the mouse.** After Ctrl+V the copied blocks hang under the cursor like an import: R or Alt+scroll turns them, a click or Enter puts them into the active layer, Esc or right-click cancels. The pasted blocks are then selected, ready for the Move gizmo.
+- **Copy, Cut and Paste in the Shift+right-click menu** when blocks are selected or the clipboard holds something.
+- **Duplicate as you drag.** Hold Ctrl as you press an arrow, square, the centre or a ring of the Move, Rotate or Scale gizmo: the selected blocks (or the selected layers) are copied and the drag moves, turns or scales the copy. It's one undo step, and right-click or Esc during the drag takes the copy away again.
+
+## Changed
+- **BlockEdit shares the clipboard.** `//copy` and `//cut` fill the same clipboard as Ctrl+C, so `//paste` works after Ctrl+C and Ctrl+V after `//copy`.
+- **Right-click cancels placing** an import or a paste, as Esc does.
+
+---
+
 # BlockDesigner 0.4.24
 
 Plugins look and work more alike: their main settings are in the Settings window, their keys can be changed like BlockDesigner's own, and their tabs are tidier and easier to read. Plugins can also switch the resource packs BlockDesigner shows blocks with, so Resource Tracker can show your build with the same textures as your game.

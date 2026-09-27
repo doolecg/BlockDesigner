@@ -31,6 +31,9 @@ public final class Keybinds {
     public enum Action {
         UNDO(Group.FILE, "Undo", "Shortcut+Z"),
         REDO(Group.FILE, "Redo", "Shortcut+Y", "Shortcut+Shift+Z"),
+        COPY(Group.FILE, "Copy the selected blocks", "Shortcut+C"),
+        CUT(Group.FILE, "Cut the selected blocks", "Shortcut+X"),
+        PASTE(Group.FILE, "Paste (click to place)", "Shortcut+V"),
         SAVE(Group.FILE, "Save", "Shortcut+S"),
         SAVE_AS(Group.FILE, "Save as", "Shortcut+Shift+S"),
         OPEN(Group.FILE, "Open", "Shortcut+O"),

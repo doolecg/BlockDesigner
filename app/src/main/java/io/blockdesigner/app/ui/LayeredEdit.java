@@ -137,6 +137,14 @@ final class LayeredEdit implements WorldEdit.World, AutoCloseable {
         written.add(p);
     }
 
+    /** {@link #setIn(Layer, BlockPos, BlockState)} with exactly this block entity data (null for none). */
+    void setIn(Layer l, BlockPos p, BlockState st, CompoundTag blockEntity) {
+        if (l.locked()) return;
+        if (!layers.contains(l)) layers.add(l);
+        write(l, p, st, blockEntity, true);
+        written.add(p);
+    }
+
     private void write(Layer l, BlockPos p, BlockState st, CompoundTag nbt, boolean exactNbt) {
         SceneEditor.BlockSession s = sessions.computeIfAbsent(l, x -> ws.editor().edit(x, label, mergeKey));
         BlockPos lp = l.toLocal(p);

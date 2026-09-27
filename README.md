@@ -188,6 +188,8 @@ These are the default keys. **Every keyboard shortcut can be rebound in Settings
 | Shift+right-click or Menu key | Context menu |
 | Alt+T | Select or replace by type |
 | Ctrl+A / Alt+A | Select every block of the active layer / deselect |
+| Ctrl+C / Ctrl+X | Copy / cut the selection (shares the clipboard with /copy and /paste) |
+| Ctrl+V | Paste: the copy follows the mouse, click to put it in the active layer (it stays selected), right-click or Esc cancels |
 | Ctrl+J / Ctrl+Shift+J | Copy / move the selection to a new layer |
 | Ctrl+R | Fill the selection with the held block |
 | Delete | Delete the selected blocks |
