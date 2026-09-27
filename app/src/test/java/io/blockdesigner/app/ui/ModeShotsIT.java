@@ -120,6 +120,43 @@ class ModeShotsIT {
                 save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("plugin-tab-" + i + ".png"));
             }
         }
+        // The brush in Replace mode with the dome shape, and its settings popup.
+        fx(() -> {
+            ws.toolProperty().set(Workspace.ToolKind.BRUSH);
+            settings.brushSize = 5;
+            BrushPopup.setShape(settings, io.blockdesigner.core.edit.Sculpt.Shape.DOME);
+            window.viewport().toggleBrushReplace();
+            var f = ViewportPane.class.getDeclaredField("brushPopup");
+            f.setAccessible(true);
+            BrushPopup p = (BrushPopup) f.get(window.viewport());
+            p.sync();
+            var at = window.viewport().localToScreen(40, 90);
+            p.show(window.stage(), at.getX(), at.getY());
+            return null;
+        });
+        Thread.sleep(1500);
+        save(fx(() -> {
+            var f = ViewportPane.class.getDeclaredField("brushPopup");
+            f.setAccessible(true);
+            return ((BrushPopup) f.get(window.viewport())).getScene().getRoot().snapshot(null, null);
+        }), dir.resolve("brush-popup.png"));
+        save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("brush-replace.png"));
+        fx(() -> {
+            var f = ViewportPane.class.getDeclaredField("brushPopup");
+            f.setAccessible(true);
+            ((BrushPopup) f.get(window.viewport())).hide();
+            return null;
+        });
+        // Side-on orthographic views get a wall grid behind the build.
+        for (Keybinds.Action view : new Keybinds.Action[]{Keybinds.Action.VIEW_FRONT, Keybinds.Action.VIEW_RIGHT}) {
+            fx(() -> {
+                window.viewport().cameraKey(view);
+                window.viewport().setOrtho(true);
+                return null;
+            });
+            Thread.sleep(2000);
+            save(fx(() -> window.stage().getScene().snapshot(null)), dir.resolve("ortho-" + view.name().toLowerCase() + ".png"));
+        }
         // The console, bottom left: a few lines of each kind, then open.
         fx(() -> {
             io.blockdesigner.app.ConsoleLog.install();

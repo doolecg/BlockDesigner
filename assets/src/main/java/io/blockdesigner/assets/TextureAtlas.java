@@ -193,7 +193,7 @@ public final class TextureAtlas {
             Optional<byte[]> bytes = assets.read(path);
             if (bytes.isEmpty()) continue;
             try {
-                BufferedImage img = ImageIO.read(new ByteArrayInputStream(bytes.get()));
+                BufferedImage img = ImagePixels.read(bytes.get());
                 if (img == null) continue;
                 int w = img.getWidth();
                 Optional<byte[]> mcmeta = assets.read(path + ".mcmeta");

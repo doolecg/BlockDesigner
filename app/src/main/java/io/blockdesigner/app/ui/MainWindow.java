@@ -1594,7 +1594,7 @@ public final class MainWindow {
                 case TOOL_BRUSH -> () -> ws.toolProperty().set(ToolKind.BRUSH);
                 case TOOL_ERASER -> () -> ws.toolProperty().set(ToolKind.ERASER);
                 case SHUFFLE -> this::toggleShuffle;
-                case REPLACE_MODE -> placing ? null : this::toggleReplace;
+                case REPLACE_MODE -> placing ? null : tool == ToolKind.BRUSH ? viewport::toggleBrushReplace : this::toggleReplace;
                 case CLEAR_HOTBAR -> () -> {
                     ws.clearHotbar();
                     viewport.showToast("Hotbar cleared");
@@ -1623,7 +1623,7 @@ public final class MainWindow {
                 case BRUSH_WEAKER -> brush ? () -> viewport.stepBrushStrength(-1) : null;
                 case BRUSH_STRONGER -> brush ? () -> viewport.stepBrushStrength(1) : null;
                 case BRUSH_MODE_1, BRUSH_MODE_2, BRUSH_MODE_3, BRUSH_MODE_4, BRUSH_MODE_5, BRUSH_MODE_6, BRUSH_MODE_7, BRUSH_MODE_8,
-                     BRUSH_MODE_9, BRUSH_MODE_10 -> brush ? () -> viewport.setBrushMode(a.ordinal() - Keybinds.Action.BRUSH_MODE_1.ordinal()) : null;
+                     BRUSH_MODE_9, BRUSH_MODE_10, BRUSH_MODE_11 -> brush ? () -> viewport.setBrushMode(a.ordinal() - Keybinds.Action.BRUSH_MODE_1.ordinal()) : null;
                 case HOTBAR_1, HOTBAR_2, HOTBAR_3, HOTBAR_4, HOTBAR_5, HOTBAR_6, HOTBAR_7, HOTBAR_8, HOTBAR_9 -> () -> {
                     int slot = a.ordinal() - Keybinds.Action.HOTBAR_1.ordinal();
                     // Over a block in the palette the key fills that slot, like Minecraft's creative inventory.

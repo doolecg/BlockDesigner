@@ -1,3 +1,34 @@
+# BlockDesigner 0.4.20
+
+The paint brush gets a Replace mode, five new shapes and soft noise for natural-looking strokes. Stone and other grey textures are no longer too bright, side views get their own grid, and symmetry now switches on and off with M.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.20.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.20.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.20-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Replace mode for the paint brush.** Paints over existing blocks with the held block and leaves air alone, so it only recolours what's there. Shuffle works with it. With the brush, **Shift+X** switches it on and back (the same key as Build mode's replace), or pick it from the Mode menu (default Alt+−).
+- **Five new brush shapes:** Cylinder, Dome (sits on the surface you paint), Diamond, Disc (a flat circle) and Splatter (soft, ragged patches), alongside Sphere and Cube. Pick one from the **Shape** menu in the brush bar or the brush settings. Each has its own outline in the view.
+- **Brush noise.** A **Noise** slider in the brush bar roughens the brush's edge with soft, rolling noise for natural-looking rock and terrain. It works with every shape and mode. In the full brush settings, **Bumps** sets how big the lumps are, and ↻ picks a new pattern. Going over a spot again gives the same lumps, so strokes don't fill in.
+- **Grids for side views.** In the front, back, left and right orthographic views, a grid now stands on the wall behind the build, with a line at ground level, instead of the ground grid you'd only see edge-on.
+
+## Changed
+- **Symmetry starts off and M switches it on and off.** It is off every time BlockDesigner opens; your mirror planes and centre are remembered. The symmetry settings moved to **Alt+M** (and the viewport's symmetry button). Shift+M still centres it on the aimed block. All rebindable in Settings › Keybinds.
+- **Splatter** uses the same soft noise, so it makes patches instead of scattered single blocks.
+
+## Fixed
+- **Stone and other grey textures were too bright.** Textures saved in greyscale (stone, andesite, some ores and many mod textures) came out far lighter than in the game. They now match, in the view and in the block icons.
+
+---
+
 # BlockDesigner 0.4.19
 
 A console at the very bottom left: everything BlockDesigner says, the errors behind a problem, plugin logs and your WorldEdit commands, in one place you can search and copy from.

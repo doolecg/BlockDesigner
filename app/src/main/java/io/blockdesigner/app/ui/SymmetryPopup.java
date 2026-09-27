@@ -170,9 +170,11 @@ final class SymmetryPopup extends Popup {
     private final Label hint = new Label();
 
     void setKeys(java.util.function.Function<Keybinds.Action, String> keyText) {
-        String open = keyText.apply(Keybinds.Action.SYMMETRY), centre = keyText.apply(Keybinds.Action.SYMMETRY_CENTRE);
+        String toggle = keyText.apply(Keybinds.Action.SYMMETRY), open = keyText.apply(Keybinds.Action.SYMMETRY_SETTINGS),
+                centre = keyText.apply(Keybinds.Action.SYMMETRY_CENTRE);
         hint.setText("Shapes, placing and breaking in Build mode are repeated in every copy."
-                + (open.isEmpty() ? "" : " " + open + " opens this;") + (centre.isEmpty() ? "" : " " + centre + " centres on the aimed block."));
+                + (toggle.isEmpty() ? "" : " " + toggle + " switches it on and off;") + (open.isEmpty() ? "" : " " + open + " opens this;")
+                + (centre.isEmpty() ? "" : " " + centre + " centres on the aimed block."));
     }
 
     void sync() {

@@ -457,14 +457,29 @@ public final class ViewportRenderer implements AutoCloseable {
             glDepthMask(false);
             gridShader.use();
             gridShader.setMat4("uViewProj", vp);
-            float ext = Math.max(64f, Math.min(1024f, dist(r.eye(), r.gridCenter()[0], r.gridY(), r.gridCenter()[1]) * 3f));
-            gridShader.set("uCenter", r.gridCenter()[0], r.gridY(), r.gridCenter()[1]);
+            FrameRequest.GridPlane plane = r.gridPlane() == null ? FrameRequest.GridPlane.GROUND : r.gridPlane();
+            float cy = plane.ground() ? r.gridY() : plane.centerY();
+            float ext = Math.max(64f, Math.min(1024f, dist(r.eye(), r.gridCenter()[0], cy, r.gridCenter()[1]) * 3f));
+            gridShader.set("uCenter", r.gridCenter()[0], cy, r.gridCenter()[1]);
             gridShader.set("uExtent", ext);
-            gridShader.set("uHeight", r.gridY());
+            gridShader.set("uNormal", plane.normal());
+            gridShader.set("uHeight", plane.ground() ? r.gridY() : plane.at());
             gridShader.setRgb("uMinorColor", theme.gridMinor());
             gridShader.setRgb("uMajorColor", theme.gridMajor());
-            gridShader.setRgb("uAxisXColor", theme.axisX());
-            gridShader.setRgb("uAxisZColor", theme.axisZ());
+            if (plane.ground()) {
+                // The world's X and Z axes through the origin.
+                gridShader.setRgb("uLine1Color", theme.axisX());
+                gridShader.setRgb("uLine2Color", theme.axisZ());
+                gridShader.set("uLine1At", 0f);
+                gridShader.set("uLine2At", 0f);
+            } else {
+                // A wall: the ground line (the grid's height) in the colour of the axis it runs along, and the vertical
+                // axis through the origin in the gizmo's Y green.
+                gridShader.setRgb("uLine1Color", plane.normal() == 0 ? theme.axisZ() : theme.axisX());
+                gridShader.setRgb("uLine2Color", 0x46C46E);
+                gridShader.set("uLine1At", r.gridY());
+                gridShader.set("uLine2At", 0f);
+            }
             glBindVertexArray(gridVao);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             glEnable(GL_CULL_FACE);

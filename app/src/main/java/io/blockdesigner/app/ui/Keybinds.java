@@ -57,7 +57,8 @@ public final class Keybinds {
         CLEAR_HOTBAR(Group.BUILD, "Clear the hotbar", "Shift+C"),
         COMMAND_BAR(Group.BUILD, "WorldEdit command line", "T", "Slash"),
         SHAPE_WHEEL(Group.BUILD, true, "Shape wheel (hold)", "Alt"),
-        SYMMETRY(Group.BUILD, "Symmetry settings", "M"),
+        SYMMETRY(Group.BUILD, "Symmetry on / off", "M"),
+        SYMMETRY_SETTINGS(Group.BUILD, "Symmetry settings", "Alt+M"),
         SYMMETRY_CENTRE(Group.BUILD, "Put the symmetry centre on the aimed block", "Shift+M"),
         DELETE(Group.BUILD, "Delete the selection (Build mode: empty the held hotbar slot)", "Delete", "Backspace"),
         CANCEL(Group.BUILD, "Cancel / clear the selection / back to Select", "Esc"),
@@ -116,6 +117,8 @@ public final class Keybinds {
         BRUSH_MODE_8(Group.BRUSH, "Brush mode: Lower", "Alt+8"),
         BRUSH_MODE_9(Group.BRUSH, "Brush mode: Flatten", "Alt+9"),
         BRUSH_MODE_10(Group.BRUSH, "Brush mode: Slope", "Alt+0"),
+        // Follows BRUSH_MODE_10: the brush modes are looked up by their order. With the brush, Replace mode (Shift+X) also switches to it.
+        BRUSH_MODE_11(Group.BRUSH, "Brush mode: Replace", "Alt+Minus"),
 
         FRAME_ALL(Group.CAMERA, "Frame everything", "Home"),
         FRAME_ACTIVE(Group.CAMERA, "Frame the active layer", "Decimal"),

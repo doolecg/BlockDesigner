@@ -33,7 +33,9 @@ final class BrushPopup extends Popup {
     private final Map<Sculpt.Mode, ToggleButton> modes = new EnumMap<>(Sculpt.Mode.class);
     private final Slider size = new Slider(1, BrushBar.MAX_SIZE, 1), strength = new Slider(1, 5, 2);
     private final Label sizeValue = new Label(), strengthValue = new Label();
-    private final ToggleButton sphere = new ToggleButton("Sphere"), cube = new ToggleButton("Cube");
+    private final Slider noise = new Slider(0, 100, 0), noiseScale = new Slider(2, 32, 8);
+    private final Label noiseValue = new Label(), noiseScaleValue = new Label();
+    private final Map<Sculpt.Shape, ToggleButton> shapes = new EnumMap<>(Sculpt.Shape.class);
     private boolean syncing;
     /** The current key for each mode (Settings › Keybinds), and the labels and hint that show keys. */
     private java.util.function.Function<Keybinds.Action, String> keyText = a -> "";
@@ -79,20 +81,21 @@ final class BrushPopup extends Popup {
             i++;
         }
 
-        ToggleGroup shapes = new ToggleGroup();
-        for (ToggleButton t : new ToggleButton[]{sphere, cube}) {
+        ToggleGroup shapeGroup = new ToggleGroup();
+        javafx.scene.layout.FlowPane shapeChips = new javafx.scene.layout.FlowPane(4, 4);
+        for (Sculpt.Shape sh : Sculpt.Shape.values()) {
+            ToggleButton t = new ToggleButton(sh.label);
             t.getStyleClass().addAll("chip", "small");
-            t.setToggleGroup(shapes);
+            t.setToggleGroup(shapeGroup);
             t.setFocusTraversable(false);
+            t.setTooltip(new javafx.scene.control.Tooltip(sh.description));
+            t.setOnAction(e -> {
+                setShape(settings, sh);
+                update();
+            });
+            shapes.put(sh, t);
+            shapeChips.getChildren().add(t);
         }
-        sphere.setOnAction(e -> {
-            settings.brushCube = false;
-            update();
-        });
-        cube.setOnAction(e -> {
-            settings.brushCube = true;
-            update();
-        });
 
         for (Slider s : new Slider[]{size, strength}) {
             s.setMajorTickUnit(1);
@@ -112,13 +115,47 @@ final class BrushPopup extends Popup {
             update();
         });
 
+        // Noise: soft, low-frequency bumps on the shape's edge, their size, and a new pattern.
+        noise.setMajorTickUnit(10);
+        noise.setMinorTickCount(0);
+        noise.setSnapToTicks(true);
+        noiseScale.setMajorTickUnit(1);
+        noiseScale.setMinorTickCount(0);
+        noiseScale.setSnapToTicks(true);
+        for (Slider s : new Slider[]{noise, noiseScale}) {
+            s.setFocusTraversable(false);
+            HBox.setHgrow(s, Priority.ALWAYS);
+        }
+        noise.setTooltip(new javafx.scene.control.Tooltip("Roughens the brush's edge with soft noise, for natural-looking strokes (0: a clean shape)"));
+        noiseScale.setTooltip(new javafx.scene.control.Tooltip("How big the noise's bumps are, in blocks"));
+        noise.valueProperty().addListener((o, a, b) -> {
+            if (syncing) return;
+            settings.brushNoise = (int) Math.round(b.doubleValue() / 10) * 10;
+            update();
+        });
+        noiseScale.valueProperty().addListener((o, a, b) -> {
+            if (syncing) return;
+            settings.brushNoiseScale = (int) Math.round(b.doubleValue());
+            update();
+        });
+        javafx.scene.control.Button reroll = new javafx.scene.control.Button(null, new org.kordamp.ikonli.javafx.FontIcon(org.kordamp.ikonli.feather.Feather.REFRESH_CW));
+        reroll.getStyleClass().addAll("flat", "small");
+        reroll.setFocusTraversable(false);
+        reroll.setTooltip(new javafx.scene.control.Tooltip("A new noise pattern"));
+        reroll.setOnAction(e -> {
+            settings.brushNoiseSeed = new java.util.Random().nextLong();
+            update();
+        });
+
         hint.getStyleClass().add("layer-meta");
         hint.setWrapText(true);
 
         VBox box = new VBox(8, title, grid,
                 row("Size", size, sizeValue, sizeKeys),
                 row("Strength", strength, strengthValue, strengthKeys),
-                row("Shape", new HBox(4, sphere, cube), new Label(), new Label()),
+                row("Shape", shapeChips, new Label(), new Label()),
+                row("Noise", noise, noiseValue, new Label()),
+                row("Bumps", new HBox(4, noiseScale, reroll), noiseScaleValue, new Label()),
                 hint);
         box.getStyleClass().add("menu-panel");
         box.setPrefWidth(340);
@@ -144,7 +181,7 @@ final class BrushPopup extends Popup {
         modeKeys.forEach((m, l) -> l.setText(keyText.apply(modeAction(m))));
         sizeKeys.setText(pair(Keybinds.Action.BRUSH_SMALLER, Keybinds.Action.BRUSH_BIGGER));
         strengthKeys.setText(pair(Keybinds.Action.BRUSH_WEAKER, Keybinds.Action.BRUSH_STRONGER));
-        String first = keyText.apply(Keybinds.Action.BRUSH_MODE_1), last = keyText.apply(Keybinds.Action.BRUSH_MODE_10);
+        String first = keyText.apply(Keybinds.Action.BRUSH_MODE_1), last = keyText.apply(Keybinds.Action.BRUSH_MODE_11);
         String modes = first.isEmpty() ? "The letter" : first + "…" + last + " (or the letter while this is open)";
         hint.setText(modes + " picks a mode · " + sizeKeys.getText() + " size · " + strengthKeys.getText() + " strength\n"
                 + "Right-drag smooths · Shift smooths, Ctrl inverts while painting (not while flying)");
@@ -227,9 +264,32 @@ final class BrushPopup extends Popup {
         int d = settings.brushSize * 2 - 1;
         sizeValue.setText(settings.brushSize == 1 ? "1" : d + "³");
         strengthValue.setText(String.valueOf(settings.brushStrength));
-        sphere.setSelected(!settings.brushCube);
-        cube.setSelected(settings.brushCube);
+        settings.brushNoise = Math.clamp(settings.brushNoise, 0, 100);
+        settings.brushNoiseScale = Math.clamp(settings.brushNoiseScale, 2, 32);
+        noise.setValue(settings.brushNoise);
+        noiseScale.setValue(settings.brushNoiseScale);
+        noiseValue.setText(settings.brushNoise == 0 ? "Off" : settings.brushNoise + "%");
+        noiseScaleValue.setText(settings.brushNoiseScale + " bl");
+        noiseScale.setDisable(settings.brushNoise == 0 && shape(settings) != Sculpt.Shape.SPLATTER);
+        Sculpt.Shape current = shape(settings);
+        shapes.forEach((sh, t) -> t.setSelected(sh == current));
         syncing = false;
+    }
+
+    /** The brush shape, from settings that may predate shapes (then the old sphere / cube choice). */
+    static Sculpt.Shape shape(Settings s) {
+        if (s.brushShape != null) {
+            try {
+                return Sculpt.Shape.valueOf(s.brushShape);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        return s.brushCube ? Sculpt.Shape.CUBE : Sculpt.Shape.SPHERE;
+    }
+
+    static void setShape(Settings s, Sculpt.Shape shape) {
+        s.brushShape = shape.name();
+        s.brushCube = shape == Sculpt.Shape.CUBE;
     }
 
     static Sculpt.Mode mode(Settings s) {

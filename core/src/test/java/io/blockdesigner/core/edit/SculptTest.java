@@ -48,6 +48,59 @@ class SculptTest {
     }
 
     @Test
+    void replacePaintsOverBlocksAndLeavesAirAlone() {
+        floor();
+        int before = blocks.size();
+        var changed = run(Mode.REPLACE, 3, 1, BlockPos.ORIGIN);
+        assertThat(changed).isNotEmpty().allSatisfy(p -> assertThat(blocks.get(p)).isEqualTo(GRASS));
+        assertThat(blocks).hasSize(before);
+        // Only the floor (y = 0) was touched: the air above stays air.
+        assertThat(changed).allSatisfy(p -> assertThat(p.y()).isZero());
+    }
+
+    @Test
+    void shapesHaveTheirOwnCells() {
+        BlockPos c = BlockPos.ORIGIN;
+        int sphere = Sculpt.shape(new Brush(4, Sculpt.Shape.SPHERE, 1), c).size();
+        int cube = Sculpt.shape(new Brush(4, Sculpt.Shape.CUBE, 1), c).size();
+        assertThat(cube).isEqualTo(7 * 7 * 7);
+        assertThat(Sculpt.shape(new Brush(4, Sculpt.Shape.CYLINDER, 1), c).size()).isBetween(sphere, cube);
+        assertThat(Sculpt.shape(new Brush(4, Sculpt.Shape.DOME, 1), c)).allSatisfy(p -> assertThat(p.y()).isNotNegative());
+        assertThat(Sculpt.shape(new Brush(4, Sculpt.Shape.DISC, 1), c)).allSatisfy(p -> assertThat(p.y()).isZero());
+        // An octahedron of radius 3: 1 + 6 + 18 + 38 cells.
+        assertThat(Sculpt.shape(new Brush(4, Sculpt.Shape.DIAMOND, 1), c)).hasSize(63);
+        var splatter = Sculpt.shape(new Brush(4, Sculpt.Shape.SPLATTER, 1), c);
+        assertThat(splatter.size()).isLessThan(sphere).isGreaterThan(sphere / 4);
+        assertThat(splatter).contains(c);
+        // The same place always splatters the same way.
+        assertThat(Sculpt.shape(new Brush(4, Sculpt.Shape.SPLATTER, 1), c)).isEqualTo(splatter);
+    }
+
+    @Test
+    void noiseRoughensTheEdgeSmoothlyAndStaysPut() {
+        BlockPos c = new BlockPos(5, 5, 5);
+        var clean = new java.util.HashSet<>(Sculpt.shape(new Brush(8, Sculpt.Shape.SPHERE, 1), c));
+        var rough = Sculpt.shape(new Brush(8, Sculpt.Shape.SPHERE, 1, 1, 6, 42), c);
+        // The edge moves both ways: some cells go, some come in from outside the clean sphere.
+        assertThat(clean).isNotEqualTo(new java.util.HashSet<>(rough));
+        assertThat(rough).anyMatch(p -> !clean.contains(p));
+        assertThat(clean).anyMatch(p -> !rough.contains(p));
+        assertThat(rough).contains(c);
+        // Same seed, same pattern; another seed, another.
+        assertThat(Sculpt.shape(new Brush(8, Sculpt.Shape.SPHERE, 1, 1, 6, 42), c)).isEqualTo(rough);
+        assertThat(Sculpt.shape(new Brush(8, Sculpt.Shape.SPHERE, 1, 1, 6, 7), c)).isNotEqualTo(rough);
+    }
+
+    @Test
+    void softNoiseIsSmooth() {
+        SoftNoise n = new SoftNoise(3);
+        double maxStep = 0;
+        for (int x = 0; x < 200; x++) maxStep = Math.max(maxStep, Math.abs(n.at(x + 1, 4, 9, 8) - n.at(x, 4, 9, 8)));
+        // Neighbouring blocks differ only a little at an 8-block scale: no speckle.
+        assertThat(maxStep).isLessThan(0.5);
+    }
+
+    @Test
     void raiseMakesAHillThatSlopesAway() {
         floor();
         run(Mode.RAISE, 5, 4, new BlockPos(0, 0, 0));

@@ -158,7 +158,7 @@ public final class BlockIcons {
             if (bytes.isEmpty()) return null;
             BufferedImage img;
             try {
-                img = ImageIO.read(new ByteArrayInputStream(bytes.get()));
+                img = io.blockdesigner.assets.ImagePixels.read(bytes.get());
             } catch (Exception e) {
                 return null;
             }

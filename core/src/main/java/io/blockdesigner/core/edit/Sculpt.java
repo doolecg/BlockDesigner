@@ -12,8 +12,8 @@ import java.util.function.IntPredicate;
 import java.util.function.Supplier;
 
 /**
- * Voxel sculpting brushes: draw, erase, smooth, erode, fill, pinch, and the terrain brushes raise, lower, flatten and
- * slope. Each {@link #apply} is one dab of the brush around a centre block; it reads and writes through a {@link World}
+ * Voxel sculpting brushes: draw, erase, smooth, erode, fill, pinch, replace, and the terrain brushes raise, lower,
+ * flatten and slope. Each {@link #apply} is one dab of the brush around a centre block; it reads and writes through a {@link World}
  * and returns the cells it changed.
  */
 public final class Sculpt {
@@ -30,7 +30,8 @@ public final class Sculpt {
         RAISE("Raise", 'U', "Raise the ground into a hill that slopes away"),
         LOWER("Lower", 'L', "Sink the ground with the same falloff"),
         FLATTEN("Flatten", 'T', "Level the ground to the height you click"),
-        SLOPE("Slope", 'O', "Ramp up from where the stroke started (Ctrl: cut down)");
+        SLOPE("Slope", 'O', "Ramp up from where the stroke started (Ctrl: cut down)"),
+        REPLACE("Replace", 'X', "Paint over blocks with the held block");
 
         public final String label;
         public final char key;
@@ -67,14 +68,71 @@ public final class Sculpt {
         void set(BlockPos p, BlockState s);
     }
 
+    /** The brush's shape. Terrain brushes use its footprint: square for the cube, round for the rest. */
+    public enum Shape {
+        SPHERE("Sphere", "A ball"),
+        CUBE("Cube", "A box"),
+        CYLINDER("Cylinder", "An upright round column"),
+        DOME("Dome", "The top half of a ball: sits on the surface you paint"),
+        DIAMOND("Diamond", "Points up, down and to the sides (an octahedron)"),
+        DISC("Disc", "A flat, one-block-thick circle"),
+        SPLATTER("Splatter", "A ragged ball that thins out towards its edge");
+
+        public final String label;
+        public final String description;
+
+        Shape(String label, String description) {
+            this.label = label;
+            this.description = description;
+        }
+
+        /**
+         * How far the cell at offset (x, y, z) is towards the edge of the shape of radius r: up to 1 is inside, more is
+         * outside; infinity where the shape never reaches (below a dome, off a disc's layer).
+         */
+        public double distance(int x, int y, int z, int r) {
+            double e = r + 0.5;
+            return switch (this) {
+                case SPHERE, SPLATTER -> Math.sqrt(x * x + y * y + z * z) / e;
+                case CUBE -> Math.max(Math.abs(x), Math.max(Math.abs(y), Math.abs(z))) / e;
+                case CYLINDER -> Math.max(Math.sqrt(x * x + z * z) / e, Math.abs(y) / e);
+                case DOME -> y < 0 ? Double.POSITIVE_INFINITY : Math.sqrt(x * x + y * y + z * z) / e;
+                case DIAMOND -> (Math.abs(x) + Math.abs(y) + Math.abs(z)) / (r + 0.99);
+                case DISC -> y != 0 ? Double.POSITIVE_INFINITY : Math.sqrt(x * x + z * z) / e;
+            };
+        }
+    }
+
     /**
      * @param size     1 = one block; n = a shape (2n-1) blocks across
-     * @param cube     cube instead of sphere
+     * @param shape    the brush's shape
      * @param strength 1–5: iterations for smooth / erode / fill / pinch, height for raise / lower, grade for slope
+     * @param noise    0–1: how far soft noise pushes the shape's edge in and out (0: a clean shape)
+     * @param noiseScale the size of the noise's bumps, in blocks
+     * @param noiseSeed which noise pattern
      */
-    public record Brush(int size, boolean cube, int strength) {
+    public record Brush(int size, Shape shape, int strength, double noise, double noiseScale, long noiseSeed) {
+        /** A brush without noise. */
+        public Brush(int size, Shape shape, int strength) {
+            this(size, shape, strength, 0, 8, 1);
+        }
+
+        /** A sphere or cube brush. */
+        public Brush(int size, boolean cube, int strength) {
+            this(size, cube ? Shape.CUBE : Shape.SPHERE, strength);
+        }
+
+        public Brush {
+            if (shape == null) shape = Shape.SPHERE;
+        }
+
         public int radius() {
             return Math.max(0, size - 1);
+        }
+
+        /** A square footprint (the cube) rather than a round one. */
+        public boolean cube() {
+            return shape == Shape.CUBE;
         }
     }
 
@@ -123,6 +181,13 @@ public final class Sculpt {
             case RAISE, LOWER -> heights(b, center, e, material, mode == Mode.RAISE);
             case FLATTEN -> flatten(b, center, e, material);
             case SLOPE -> slope(b, center, e, material, slopeStart != null ? slopeStart : center, invert);
+            case REPLACE -> {
+                for (BlockPos p : shape(b, center)) {
+                    if (w.get(p).isAir()) continue;
+                    BlockState m = material != null ? material.get() : null;
+                    if (m != null && !m.isAir()) e.set(p, m);
+                }
+            }
         }
         return e.changed();
     }
@@ -131,10 +196,23 @@ public final class Sculpt {
     public static List<BlockPos> shape(Brush b, BlockPos c) {
         int r = b.radius();
         List<BlockPos> out = new ArrayList<>();
-        for (int x = -r; x <= r; x++)
-            for (int y = -r; y <= r; y++)
-                for (int z = -r; z <= r; z++)
-                    if (b.cube() || x * x + y * y + z * z <= (r + 0.5) * (r + 0.5)) out.add(c.add(x, y, z));
+        double noise = Math.clamp(b.noise(), 0, 1);
+        boolean splatter = b.shape() == Shape.SPLATTER;
+        SoftNoise n = noise > 0 || splatter ? SoftNoise.of(b.noiseSeed()) : null;
+        // Noise can push the edge out by up to half the radius.
+        int reach = noise > 0 ? (int) Math.ceil((r + 0.5) * (1 + noise / 2)) : r;
+        for (int x = -reach; x <= reach; x++)
+            for (int y = -reach; y <= reach; y++)
+                for (int z = -reach; z <= reach; z++) {
+                    double d = b.shape().distance(x, y, z, r);
+                    if (Double.isInfinite(d)) continue;
+                    int wx = c.x() + x, wy = c.y() + y, wz = c.z() + z;
+                    if (noise > 0) d -= noise * 0.5 * n.at(wx, wy, wz, b.noiseScale());
+                    if (d > 1) continue;
+                    // Splatter: soft patches, solid in the middle and breaking up towards the edge.
+                    if (splatter && d > 0.4 && (n.at(wx + 311, wy - 97, wz + 53, Math.max(3, r * 0.7)) * 0.5 + 0.5) < (d - 0.4) * 1.4) continue;
+                    out.add(c.add(x, y, z));
+                }
         return out;
     }
 
@@ -277,9 +355,20 @@ public final class Sculpt {
     private static Map<BlockPos, Double> columns(Brush b, BlockPos c) {
         int r = b.radius();
         Map<BlockPos, Double> out = new LinkedHashMap<>();
-        for (int x = -r; x <= r; x++)
-            for (int z = -r; z <= r; z++) {
+        double noise = Math.clamp(b.noise(), 0, 1);
+        SoftNoise n = noise > 0 ? SoftNoise.of(b.noiseSeed()) : null;
+        int reach = noise > 0 ? (int) Math.ceil((r + 0.5) * (1 + noise / 2)) : r;
+        for (int x = -reach; x <= reach; x++)
+            for (int z = -reach; z <= reach; z++) {
                 double d = Math.sqrt(x * x + z * z) / (r + 0.5);
+                // Noise makes the footprint's edge wander (a cube keeps its square unless noise is on).
+                if (noise > 0) {
+                    d = (b.cube() ? Math.max(Math.abs(x), Math.abs(z)) / (r + 0.5) : d) - noise * 0.5 * n.at(c.x() + x, c.y(), c.z() + z, b.noiseScale());
+                    if (d > 1) continue;
+                    double f = Math.cos(Math.max(0, Math.min(1, d)) * Math.PI / 2);
+                    out.put(new BlockPos(c.x() + x, 0, c.z() + z), b.cube() ? 1 : f * f);
+                    continue;
+                }
                 if (d > 1 && !b.cube()) continue;
                 double f = b.cube() ? 1 : Math.cos(Math.min(1, d) * Math.PI / 2);
                 out.put(new BlockPos(c.x() + x, 0, c.z() + z), f * f);

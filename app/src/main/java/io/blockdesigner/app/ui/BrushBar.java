@@ -36,7 +36,9 @@ final class BrushBar extends HBox {
     private final Node modeGroup;
     private final Slider size = new Slider(1, MAX_SIZE, 1), strength = new Slider(1, 5, 2);
     private final Label sizeValue = new Label(), strengthValue = new Label();
-    private final ToggleButton sphere = new ToggleButton("Sphere"), cube = new ToggleButton("Cube");
+    private final Slider noise = new Slider(0, 100, 0);
+    private final Label noiseValue = new Label();
+    private final MenuButton shape = new MenuButton();
     private Consumer<Sculpt.Mode> pickMode = m -> {
     };
     private boolean eraser, syncing;
@@ -116,18 +118,32 @@ final class BrushBar extends HBox {
         strengthValue.setMinWidth(USE_PREF_SIZE);
         Node strengthGroup = group("Strength", new HBox(6, strength, strengthValue));
 
-        // Shape: two segments.
-        ToggleGroup shapes = new ToggleGroup();
-        sphere.getStyleClass().add("left-pill");
-        cube.getStyleClass().add("right-pill");
-        for (ToggleButton t : new ToggleButton[]{sphere, cube}) {
-            t.getStyleClass().add("small");
-            t.setToggleGroup(shapes);
-            t.setFocusTraversable(false);
+        // Shape: a menu of every brush shape.
+        shape.getStyleClass().addAll("small", "brush-mode-button");
+        shape.setFocusTraversable(false);
+        for (Sculpt.Shape sh : Sculpt.Shape.values()) {
+            MenuItem item = new MenuItem(sh.label);
+            item.setOnAction(e -> setShape(sh));
+            shape.getItems().add(item);
         }
-        sphere.setOnAction(e -> setShape(false));
-        cube.setOnAction(e -> setShape(true));
-        Node shapeGroup = group("Shape", new HBox(0, sphere, cube));
+        shape.setTooltip(Keybinds.tooltip("Brush shape", "Sphere, cube, cylinder, dome, diamond, disc or splatter"));
+        shape.setMinWidth(USE_PREF_SIZE);
+        Node shapeGroup = group("Shape", shape);
+
+        // Noise 0–100 % in steps of 10 (its bump size and pattern are in the full settings).
+        slider(noise, 70);
+        noise.setMajorTickUnit(10);
+        noise.setTooltip(Keybinds.tooltip("Noise", "Roughens the brush's edge with soft noise, for natural-looking strokes; bump size in the full settings"));
+        noise.valueProperty().addListener((o, a, b) -> {
+            int v = (int) Math.round(b.doubleValue() / 10) * 10;
+            if (syncing || v == settings.brushNoise) return;
+            settings.brushNoise = v;
+            refresh();
+            changed.run();
+        });
+        noiseValue.getStyleClass().add("brush-value");
+        noiseValue.setMinWidth(USE_PREF_SIZE);
+        Node noiseGroup = group("Noise", new HBox(6, noise, noiseValue));
 
         Button more = new Button(null, new FontIcon(Feather.SLIDERS));
         more.getStyleClass().addAll("flat", "small");
@@ -135,7 +151,7 @@ final class BrushBar extends HBox {
         more.setTooltip(Keybinds.tooltip("All brush settings", "Every mode with its letter key (also Shift+right-click in the viewport)"));
         more.setOnAction(e -> openPopup.run());
 
-        getChildren().addAll(title, modeGroup, divider(), sizeGroup, strengthGroup, divider(), shapeGroup, more);
+        getChildren().addAll(title, modeGroup, divider(), sizeGroup, strengthGroup, divider(), shapeGroup, noiseGroup, more);
         // Clicks stay on the bar instead of painting the viewport underneath.
         addEventHandler(MouseEvent.ANY, MouseEvent::consume);
         refresh();
@@ -200,8 +216,8 @@ final class BrushBar extends HBox {
         changed.run();
     }
 
-    private void setShape(boolean isCube) {
-        settings.brushCube = isCube;
+    private void setShape(Sculpt.Shape sh) {
+        BrushPopup.setShape(settings, sh);
         refresh();
         changed.run();
     }
@@ -212,8 +228,10 @@ final class BrushBar extends HBox {
         settings.brushStrength = Math.clamp(settings.brushStrength, 1, 5);
         size.setValue(settings.brushSize);
         strength.setValue(settings.brushStrength);
-        sphere.setSelected(!settings.brushCube);
-        cube.setSelected(settings.brushCube);
+        shape.setText(BrushPopup.shape(settings).label);
+        settings.brushNoise = Math.clamp(settings.brushNoise, 0, 100);
+        noise.setValue(settings.brushNoise);
+        noiseValue.setText(settings.brushNoise == 0 ? "Off" : settings.brushNoise + "%");
         int d = settings.brushSize * 2 - 1;
         sizeValue.setText(settings.brushSize == 1 ? "1 block" : d + "×" + d + "×" + d);
         strengthValue.setText(Integer.toString(settings.brushStrength));

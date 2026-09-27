@@ -16,10 +16,33 @@ import java.util.List;
  * @param gridCenter grid centre (x, z)
  * @param fogDistance distance where fog starts; {@link Float#POSITIVE_INFINITY} for none
  * @param images  textured quads (plugin scene objects such as reference images)
+ * @param gridPlane which plane the grid lies in: the ground, or a wall behind the scene for side-on orthographic views
  */
 public record FrameRequest(int width, int height, float[] viewProj, float[] eye, List<LayerDraw> layers, List<Line> lines,
                            Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence, float fogDistance,
-                           List<ImageQuad> images) {
+                           List<ImageQuad> images, GridPlane gridPlane) {
+
+    /** A frame with the ground grid. */
+    public FrameRequest(int width, int height, float[] viewProj, float[] eye, List<LayerDraw> layers, List<Line> lines,
+                        Theme theme, boolean showGrid, float gridY, float[] gridCenter, long sequence, float fogDistance,
+                        List<ImageQuad> images) {
+        this(width, height, viewProj, eye, layers, lines, theme, showGrid, gridY, gridCenter, sequence, fogDistance, images, GridPlane.GROUND);
+    }
+
+    /**
+     * The plane the grid is drawn in.
+     *
+     * @param normal 1: the ground at {@code gridY}; 0: a wall facing X at x = {@code at}; 2: a wall facing Z at z = {@code at}
+     * @param at     the wall's position along its normal (unused for the ground)
+     * @param centerY the wall's vertical centre
+     */
+    public record GridPlane(int normal, float at, float centerY) {
+        public static final GridPlane GROUND = new GridPlane(1, 0, 0);
+
+        public boolean ground() {
+            return normal == 1;
+        }
+    }
 
     /** A frame without images. */
     public FrameRequest(int width, int height, float[] viewProj, float[] eye, List<LayerDraw> layers, List<Line> lines,

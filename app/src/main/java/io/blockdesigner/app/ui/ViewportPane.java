@@ -676,7 +676,26 @@ public final class ViewportPane extends StackPane {
         return new FrameRequest(w, h, vp, new float[]{eye.x, eye.y, eye.z}, draws, lines,
                 AppTheme.byId(ws.themeProperty().get()).viewport(ws.darkProperty().get()),
                 ws.settings().showGrid, gridY, gc, ++sequence,
-                ws.settings().fog && !camera.orthoActive() ? (float) ws.settings().fogDistance : Float.POSITIVE_INFINITY, images);
+                ws.settings().fog && !camera.orthoActive() ? (float) ws.settings().fogDistance : Float.POSITIVE_INFINITY, images,
+                gridPlane(sb.orElse(null), gridY));
+    }
+
+    /**
+     * Side-on orthographic views (front, back, left, right) see the ground grid edge-on, so they get a grid on the wall
+     * behind the scene instead, facing the camera. Every other view keeps the ground grid.
+     */
+    private FrameRequest.GridPlane gridPlane(Box bounds, float gridY) {
+        if (!camera.orthoActive()) return FrameRequest.GridPlane.GROUND;
+        Vector3f f = camera.forward();
+        float ax = Math.abs(f.x), az = Math.abs(f.z);
+        if (Math.abs(f.y) > 0.2f || Math.max(ax, az) < 0.98f) return FrameRequest.GridPlane.GROUND;
+        boolean facesX = ax > az;
+        float dir = facesX ? f.x : f.z;
+        // Just past the far faces, so blocks against the wall don't flicker with it.
+        float at = bounds == null ? 0 : facesX ? (dir > 0 ? bounds.maxX() + 1.02f : bounds.minX() - 0.02f)
+                : (dir > 0 ? bounds.maxZ() + 1.02f : bounds.minZ() - 0.02f);
+        float centerY = bounds == null ? gridY : (bounds.minY() + bounds.maxY() + 1) / 2f;
+        return new FrameRequest.GridPlane(facesX ? 0 : 2, at, centerY);
     }
 
     /** Renders the current scene from the given camera, without overlays (screenshots). */
@@ -689,7 +708,7 @@ public final class ViewportPane extends StackPane {
         copyCamera(saved, camera);
         // Drop overlays for clean captures.
         FrameRequest clean = new FrameRequest(req.width(), req.height(), req.viewProj(), req.eye(), req.layers(), List.of(), req.theme(),
-                req.showGrid(), req.gridY(), req.gridCenter(), req.sequence(), req.fogDistance(), req.images());
+                req.showGrid(), req.gridY(), req.gridCenter(), req.sequence(), req.fogDistance(), req.images(), req.gridPlane());
         return gpu.capture(clean);
     }
 
@@ -938,7 +957,10 @@ public final class ViewportPane extends StackPane {
         }
     }
 
-    /** Alt+1…Alt+0: brush modes in order (Draw, Erase, Smooth, Erode, Fill, Pinch, Raise, Lower, Flatten, Slope). */
+    /**
+     * Alt+1…Alt+0: brush modes in order (Draw, Erase, Smooth, Erode, Fill, Pinch, Raise, Lower, Flatten, Slope); Replace
+     * is the eleventh (Shift+X with the brush).
+     */
     public void setBrushMode(int index) {
         var modes = io.blockdesigner.core.edit.Sculpt.Mode.values();
         if (index < 0 || index >= modes.length) return;
@@ -948,6 +970,27 @@ public final class ViewportPane extends StackPane {
         updateModeBadge();
         brushPopup.sync();
         showToast("Brush: " + modes[index].label + " · " + modes[index].description);
+        requestRedraw();
+    }
+
+    /** The brush's mode before Replace was switched on, to go back to. */
+    private String brushModeBeforeReplace = "DRAW";
+
+    /** Shift+X (Replace mode) with the paint brush: the brush paints over blocks with the held one, or goes back. */
+    public void toggleBrushReplace() {
+        var s = ws.settings();
+        var replace = io.blockdesigner.core.edit.Sculpt.Mode.REPLACE;
+        if (BrushPopup.mode(s) == replace) {
+            s.brushMode = brushModeBeforeReplace == null || brushModeBeforeReplace.equals(replace.name()) ? "DRAW" : brushModeBeforeReplace;
+            showToast("Brush: " + BrushPopup.mode(s).label + keyNote(Keybinds.Action.REPLACE_MODE, "replaces again"));
+        } else {
+            brushModeBeforeReplace = s.brushMode;
+            s.brushMode = replace.name();
+            showToast("Brush: Replace · paints over blocks with the held block" + keyNote(Keybinds.Action.REPLACE_MODE, "goes back"));
+        }
+        brushBar.sync();
+        brushPopup.sync();
+        updateModeBadge();
         requestRedraw();
     }
 
@@ -1421,7 +1464,7 @@ public final class ViewportPane extends StackPane {
     /** The keys the viewport itself handles, when it has focus (the rest are the main window's). */
     private static final Keybinds.Action[] VIEWPORT_KEYS = {Keybinds.Action.FLY, Keybinds.Action.NUDGE_LEFT, Keybinds.Action.NUDGE_RIGHT,
             Keybinds.Action.NUDGE_FORWARD, Keybinds.Action.NUDGE_BACK, Keybinds.Action.SLICE_UP, Keybinds.Action.SLICE_DOWN,
-            Keybinds.Action.SLICE_SINGLE, Keybinds.Action.SYMMETRY, Keybinds.Action.SYMMETRY_CENTRE, Keybinds.Action.CANCEL,
+            Keybinds.Action.SLICE_SINGLE, Keybinds.Action.SYMMETRY, Keybinds.Action.SYMMETRY_SETTINGS, Keybinds.Action.SYMMETRY_CENTRE, Keybinds.Action.CANCEL,
             Keybinds.Action.DELETE, Keybinds.Action.ROTATE_PLACEMENT, Keybinds.Action.PLACE, Keybinds.Action.FRAME_ALL};
 
     private void onKey(KeyEvent e) {
@@ -1472,7 +1515,8 @@ public final class ViewportPane extends StackPane {
             case SLICE_UP -> stepSlice(1);
             case SLICE_DOWN -> stepSlice(-1);
             case SLICE_SINGLE -> toggleSingleSlice();
-            case SYMMETRY -> {
+            case SYMMETRY -> toggleSymmetry();
+            case SYMMETRY_SETTINGS -> {
                 if (fly) showSymmetry(-1, -1);
                 else {
                     javafx.geometry.Point2D p = localToScreen(lastMouseX, lastMouseY);
@@ -3392,7 +3436,9 @@ public final class ViewportPane extends StackPane {
     }
 
     private io.blockdesigner.core.edit.Sculpt.Brush brush() {
-        return new io.blockdesigner.core.edit.Sculpt.Brush(ws.settings().brushSize, ws.settings().brushCube, ws.settings().brushStrength);
+        var s = ws.settings();
+        return new io.blockdesigner.core.edit.Sculpt.Brush(s.brushSize, BrushPopup.shape(s), s.brushStrength,
+                Math.clamp(s.brushNoise, 0, 100) / 100.0, Math.clamp(s.brushNoiseScale, 2, 32), s.brushNoiseSeed);
     }
 
     /** The cells of the brush shape around {@code c}, within the slice view. */
@@ -3411,7 +3457,7 @@ public final class ViewportPane extends StackPane {
         var base = ws.toolProperty().get() == ToolKind.ERASER ? io.blockdesigner.core.edit.Sculpt.Mode.ERASE : BrushPopup.mode(ws.settings());
         boolean invert = !fly && ctrl && forced == null;
         var mode = forced != null ? forced : !fly && shift ? io.blockdesigner.core.edit.Sculpt.Mode.SMOOTH : invert ? base.inverse() : base;
-        if (mode == io.blockdesigner.core.edit.Sculpt.Mode.DRAW && ws.blockToPlace() == null) {
+        if ((mode == io.blockdesigner.core.edit.Sculpt.Mode.DRAW || mode == io.blockdesigner.core.edit.Sculpt.Mode.REPLACE) && ws.blockToPlace() == null) {
             showToast("Empty hand · pick a block (middle-click), choose a hotbar slot or click one in the palette");
             return;
         }
@@ -3602,6 +3648,7 @@ public final class ViewportPane extends StackPane {
         int color = switch (mode) {
             case DRAW, FILL, RAISE -> 0xFF46C46E;
             case ERASE, ERODE, LOWER -> 0xFFE5484D;
+            case REPLACE -> 0xFFFFC85A;
             default -> 0xFF3E9BFF;
         };
         int r = ws.settings().brushSize - 1;
@@ -3617,17 +3664,70 @@ public final class ViewportPane extends StackPane {
             Overlays.block(lines, c.x(), c.y(), c.z(), color);
             return;
         }
-        if (ws.settings().brushCube || r == 0) {
+        brushOutline(lines, BrushPopup.shape(ws.settings()), r, cx, cy, cz, h, color);
+    }
+
+    /** The outline of a brush shape of radius {@code r} (half-size {@code h}) around the centre of a block. */
+    private static void brushOutline(List<FrameRequest.Line> lines, io.blockdesigner.core.edit.Sculpt.Shape shape, int r,
+                                     float cx, float cy, float cz, float h, int color) {
+        if (r == 0 || shape == io.blockdesigner.core.edit.Sculpt.Shape.CUBE) {
             Overlays.box(lines, cx - h, cy - h, cz - h, cx + h, cy + h, cz + h, color);
             return;
         }
         int seg = 48;
+        switch (shape) {
+            case CYLINDER -> {
+                ring(lines, cx, cy - h, cz, h, seg, color);
+                ring(lines, cx, cy + h, cz, h, seg, color);
+                for (int i = 0; i < 4; i++) {
+                    float dx = (float) Math.cos(i * Math.PI / 2) * h, dz = (float) Math.sin(i * Math.PI / 2) * h;
+                    lines.add(new FrameRequest.Line(cx + dx, cy - h, cz + dz, cx + dx, cy + h, cz + dz, color));
+                }
+            }
+            case DISC -> {
+                ring(lines, cx, cy - 0.5f, cz, h, seg, color);
+                ring(lines, cx, cy + 0.5f, cz, h, seg, color);
+            }
+            case DOME -> {
+                float base = cy - 0.5f;
+                ring(lines, cx, base, cz, h, seg, color);
+                // Two upright half circles over the base.
+                for (int i = 0; i < seg / 2; i++) {
+                    double a0 = Math.PI * i / (seg / 2.0), a1 = Math.PI * (i + 1) / (seg / 2.0);
+                    float c0 = (float) Math.cos(a0) * h, s0 = (float) Math.sin(a0) * h, c1 = (float) Math.cos(a1) * h, s1 = (float) Math.sin(a1) * h;
+                    lines.add(new FrameRequest.Line(cx + c0, base + s0, cz, cx + c1, base + s1, cz, color));
+                    lines.add(new FrameRequest.Line(cx, base + s0, cz + c0, cx, base + s1, cz + c1, color));
+                }
+            }
+            case DIAMOND -> {
+                float[][] tips = {{h, 0, 0}, {0, 0, h}, {-h, 0, 0}, {0, 0, -h}};
+                for (int i = 0; i < 4; i++) {
+                    float[] a = tips[i], b = tips[(i + 1) % 4];
+                    lines.add(new FrameRequest.Line(cx + a[0], cy, cz + a[2], cx + b[0], cy, cz + b[2], color));
+                    lines.add(new FrameRequest.Line(cx + a[0], cy, cz + a[2], cx, cy + h, cz, color));
+                    lines.add(new FrameRequest.Line(cx + a[0], cy, cz + a[2], cx, cy - h, cz, color));
+                }
+            }
+            default -> {
+                // Sphere and splatter: three rings (the splatter's is dashed, as its edge is ragged).
+                boolean dashed = shape == io.blockdesigner.core.edit.Sculpt.Shape.SPLATTER;
+                for (int i = 0; i < seg; i++) {
+                    if (dashed && i % 2 == 1) continue;
+                    double a0 = 2 * Math.PI * i / seg, a1 = 2 * Math.PI * (i + 1) / seg;
+                    float c0 = (float) Math.cos(a0) * h, s0 = (float) Math.sin(a0) * h, c1 = (float) Math.cos(a1) * h, s1 = (float) Math.sin(a1) * h;
+                    lines.add(new FrameRequest.Line(cx + c0, cy, cz + s0, cx + c1, cy, cz + s1, color));
+                    lines.add(new FrameRequest.Line(cx + c0, cy + s0, cz, cx + c1, cy + s1, cz, color));
+                    lines.add(new FrameRequest.Line(cx, cy + c0, cz + s0, cx, cy + c1, cz + s1, color));
+                }
+            }
+        }
+    }
+
+    private static void ring(List<FrameRequest.Line> lines, float cx, float y, float cz, float h, int seg, int color) {
         for (int i = 0; i < seg; i++) {
             double a0 = 2 * Math.PI * i / seg, a1 = 2 * Math.PI * (i + 1) / seg;
-            float c0 = (float) Math.cos(a0) * h, s0 = (float) Math.sin(a0) * h, c1 = (float) Math.cos(a1) * h, s1 = (float) Math.sin(a1) * h;
-            lines.add(new FrameRequest.Line(cx + c0, cy, cz + s0, cx + c1, cy, cz + s1, color));
-            lines.add(new FrameRequest.Line(cx + c0, cy + s0, cz, cx + c1, cy + s1, cz, color));
-            lines.add(new FrameRequest.Line(cx, cy + c0, cz + s0, cx, cy + c1, cz + s1, color));
+            lines.add(new FrameRequest.Line(cx + (float) Math.cos(a0) * h, y, cz + (float) Math.sin(a0) * h,
+                    cx + (float) Math.cos(a1) * h, y, cz + (float) Math.sin(a1) * h, color));
         }
     }
 
@@ -4718,6 +4818,33 @@ public final class ViewportPane extends StackPane {
         symmetryPopup.show(getScene().getWindow(), screenX, screenY);
     }
 
+    /** M: symmetry on or off. Switching it on for the first time centres it on the aimed block, like opening the settings does. */
+    private void toggleSymmetry() {
+        var s = ws.settings();
+        boolean on = !s.symOn;
+        if (on) {
+            BlockPos aimed = hover != null ? hover.world() : hoverGround;
+            if (aimed != null && !symmetryCentred) {
+                boolean blockCentre = s.symCenter == null || Math.floorMod(s.symCenter[0], 2) == 1;
+                int off = blockCentre ? 1 : 0;
+                s.symCenter = new int[]{2 * aimed.x() + off, 2 * aimed.y() + off, 2 * aimed.z() + off};
+            }
+            if (!s.symX && !s.symY && !s.symZ && s.symRadial <= 1) s.symX = true;
+            symmetryCentred = true;
+        }
+        s.symOn = on;
+        symmetryPopup.sync();
+        updateSymmetryButton();
+        String planes = (s.symX ? "X " : "") + (s.symY ? "Y " : "") + (s.symZ ? "Z " : "") + (s.symRadial > 1 ? s.symRadial + "× radial " : "");
+        showToast(on ? "Symmetry on · " + planes.strip() + (ws.toolProperty().get() == ToolKind.BUILD ? "" : " · works in Build mode")
+                + keyNote(Keybinds.Action.SYMMETRY_SETTINGS, "for settings")
+                : "Symmetry off" + keyNote(Keybinds.Action.SYMMETRY, "turns it back on"));
+        requestRedraw();
+    }
+
+    /** The symmetry centre was placed this session (by M, Shift+M or the settings), so M no longer moves it. */
+    private boolean symmetryCentred;
+
     /** Shift+M: the symmetry centre moves to the aimed block (keeping block-centre or block-edge), and switches on. */
     private void centreSymmetryHere() {
         BlockPos p = hover != null ? hover.world() : hoverGround;
@@ -4730,6 +4857,7 @@ public final class ViewportPane extends StackPane {
         int off = blockCentre ? 1 : 0;
         s.symCenter = new int[]{2 * p.x() + off, 2 * p.y() + off, 2 * p.z() + off};
         s.symOn = true;
+        symmetryCentred = true;
         if (!s.symX && !s.symY && !s.symZ && s.symRadial <= 1) s.symX = true;
         symmetryPopup.sync();
         updateSymmetryButton();

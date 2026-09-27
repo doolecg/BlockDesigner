@@ -57,6 +57,12 @@ public final class Settings {
     /** Paint brush / eraser size (1 = one block, n = a (2n-1)-block wide shape) and shape (cube, else sphere). */
     public int brushSize = 2;
     public boolean brushCube;
+    /** Brush shape (a Sculpt.Shape name); null in settings from before shapes, where brushCube decides. */
+    public String brushShape;
+    /** Brush noise: how much it roughens the shape's edge (0–100 %), the size of its bumps in blocks, and which pattern. */
+    public int brushNoise;
+    public int brushNoiseScale = 8;
+    public long brushNoiseSeed = 1;
     /** Brush mode (a Sculpt.Mode name) and strength 1–5. */
     public String brushMode = "DRAW";
     public int brushStrength = 2;
@@ -179,6 +185,8 @@ public final class Settings {
         if (Files.isRegularFile(f)) {
             try {
                 Settings s = JSON.readValue(f.toFile(), Settings.class);
+                // Symmetry always starts off (M switches it on); its planes and centre are remembered.
+                s.symOn = false;
                 String now = io.blockdesigner.app.update.Updater.currentVersion();
                 if (!now.equals(s.lastVersion)) {
                     backupBeforeUpgrade(f, s.lastVersion == null ? "older" : s.lastVersion);
