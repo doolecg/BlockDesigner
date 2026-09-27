@@ -28,8 +28,11 @@ public final class PluginApi {
      * ({@link PluginContext#updateSettings}, {@link PluginContext#openSettings}), page status dots and navigation
      * ({@link PluginContext#setPanelStatus}, {@link PluginContext#showPanel}). Tool and action keys can be changed in
      * Settings › Keybinds.
+     * <br>7: plugins can open a file as the project ({@link PluginContext#openFile}: a project, or a schematic as a
+     * new project, asking to save changes first) and bring the main window forward
+     * ({@link io.blockdesigner.plugin.ui.PluginUi#toFront}).
      */
-    public static final int VERSION = 6;
+    public static final int VERSION = 7;
 
     /** Name of the descriptor file at the root of a plugin jar. */
     public static final String DESCRIPTOR = "blockdesigner-plugin.json";

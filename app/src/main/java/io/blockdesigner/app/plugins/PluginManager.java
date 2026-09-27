@@ -956,6 +956,22 @@ public final class PluginManager {
             host.pluginSettingsChanged(p);
         }
 
+        @Override
+        public void openFile(java.nio.file.Path file, java.util.function.Consumer<io.blockdesigner.plugin.OpenResult> done) {
+            java.util.Objects.requireNonNull(file, "file");
+            java.util.Objects.requireNonNull(done, "done");
+            boolean[] called = {false};
+            host.openFile(p, file, r -> {
+                if (called[0]) return;
+                called[0] = true;
+                try {
+                    done.accept(r);
+                } catch (Throwable t) {
+                    report(p, "Opening " + file.getFileName(), t);
+                }
+            });
+        }
+
         private Tool tool(String id) {
             for (PluginTool t : p.tools) if (t.id().equals(id)) return new Tool(p, t);
             throw new IllegalArgumentException(p.info.name() + " has no tool '" + id + "'");

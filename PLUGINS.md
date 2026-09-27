@@ -12,6 +12,7 @@ This guide covers setting up a plugin project, the manifest, installing and test
 - [API 3 extension points](#api-3-extension-points): [scene objects](#scene-objects)
 - [API 4 extension points](#api-4-extension-points): [settings](#settings-in-the-settings-window) · [API 5](#api-5-extension-points): [selection tools](#tools-that-work-on-the-selection) · [conditional options](#options-that-show-only-for-some-choices) · [hotbar and icons](#hotbar-icons-and-your-own-tools)
 - [API 6 extension points](#api-6-extension-points): [resource packs](#resource-packs) · [the UI kit](#building-panels-with-the-ui-kit) · [options: groups, help, units](#options-groups-help-units-and-enabledwhen) · [settings](#settings-updatesettings-and-opensettings) · [keys](#keys) · [page status and navigation](#page-status-and-navigation) · [dialogs](#dialogs) · [remembered forms](#remembered-forms) · [theming](#theming)
+- [API 7 extension points](#api-7-extension-points): [opening a file as the project](#opening-a-file-as-the-project)
 - [Rules of the road](#rules-of-the-road) · [Limits and what's not supported yet](#limits-and-whats-not-supported-yet)
 
 ## What a plugin can add
@@ -128,7 +129,7 @@ Put `blockdesigner-plugin.json` at the root of the jar (in Gradle, `src/main/res
 | `version`, `author`, `description` | no | Shown in the Plugins window and the install prompt. |
 | `api` | no | The plugin API version the plugin needs (defaults to `1`). |
 
-**API versions.** The current API is **6** (`PluginApi.VERSION`, BlockDesigner 0.4.24).
+**API versions.** The current API is **7** (`PluginApi.VERSION`, BlockDesigner 0.4.26).
 
 - `"api": 1`: commands, menu actions, exporters, schematic formats and scene edits (`editWorld`, `editor()`, `addLayer`).
 - `"api": 2`: everything in API 1 plus options, scene events, the block catalog, asset access, transforms, panels, tools, importers, and options / summary / progress for exporters.
@@ -136,6 +137,7 @@ Put `blockdesigner-plugin.json` at the root of the jar (in Gradle, `src/main/res
 - `"api": 4`: plugin settings (`registerSettings`, `ctx.settings()`).
 - `"api": 5`: tools that work on the selection, options shown for some choices (`showWhen`), the hotbar and block icons.
 - `"api": 6`: resource packs, and the UI kit (`io.blockdesigner.plugin.ui`, `ctx.ui()`), option groups, help and units, page status and navigation, settings in the Settings window.
+- `"api": 7`: opening a file as the project (`ctx.openFile`) and bringing the window forward (`ctx.ui().toFront()`).
 
 Declare the lowest version whose features you use. BlockDesigner refuses plugins that ask for a newer API than it has (they show as *needs a newer BlockDesigner* in the Plugins window) and keeps loading older ones, so older plugins run unchanged on a newer BlockDesigner.
 
@@ -871,6 +873,27 @@ nodes. Use the kit's style classes rather than inline styles. These are stable: 
 
 The kit's icons are from [Feather](https://feathericons.com) by Cole Bemis (MIT licence, included in the API jar as
 `io/blockdesigner/plugin/ui/FEATHER-LICENSE.txt`).
+
+## API 7 extension points
+
+Plugins that use these declare `"api": 7` (BlockDesigner 0.4.26 and later).
+
+### Opening a file as the project
+
+`ctx.openFile(path, done)` opens a file the way File › Open does: a `.bdproj` is opened, and a schematic BlockDesigner
+reads (`.schem`, `.litematic`, `.nbt`…) becomes a new, unsaved project named after the file. When the open project has
+changes, the user is asked first ("Save changes to Castle?": Save, Don't save, Cancel). `done` is called once, on the
+JavaFX thread, with an `OpenResult`: `OPENED` (after `SceneEvent.ProjectOpened`), `CANCELLED`, or `FAILED` with a short
+`message()` ("Could not read Castle.litematic: …"). `ctx.ui().toFront()` brings the window forward, for a request that
+came from outside BlockDesigner (Resource Tracker does both when a BlockCompanion game sends a build to edit):
+
+```java
+ctx.ui().toFront();
+ctx.openFile(file, r -> {
+    if (r.isOpened()) ctx.status("Opened " + file.getFileName());
+    else if (r.status() == OpenResult.Status.FAILED) ctx.toast(r.message());
+});
+```
 
 ## Rules of the road
 

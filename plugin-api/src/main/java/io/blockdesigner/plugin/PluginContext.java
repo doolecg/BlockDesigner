@@ -212,4 +212,15 @@ public interface PluginContext {
      * picker, say), or to move settings the plugin used to keep itself. Since API 6.
      */
     void updateSettings(java.util.function.UnaryOperator<OptionValues> change);
+
+    // ---- opening files (API 7) -------------------------------------------------------------------------------
+
+    /**
+     * Opens a file as the project, as File › Open does: a {@code .bdproj} is opened; a schematic BlockDesigner reads
+     * ({@code .schem}, {@code .litematic}, {@code .nbt}…) becomes a new, unsaved project named after the file, its
+     * blocks where the file has them. When the open project has changes, the user is first asked whether to save
+     * them (Save, Don't save, Cancel). Reading happens in the background; {@code done} is called once, on the JavaFX
+     * thread, with how it went ({@link SceneEvent.ProjectOpened} is sent before it on success). Since API 7.
+     */
+    void openFile(Path file, Consumer<OpenResult> done);
 }

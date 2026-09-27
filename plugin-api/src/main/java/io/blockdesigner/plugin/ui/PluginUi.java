@@ -65,4 +65,11 @@ public interface PluginUi {
 
     /** Opens a file with its app, or a folder in Explorer; never blocks the UI. */
     void open(Path fileOrFolder);
+
+    /**
+     * Brings the main window forward (restoring it when minimized), for something the user asked for elsewhere, such
+     * as a game sending a build to edit. Where the system doesn't let a background app take the focus, the window's
+     * taskbar button flashes instead. Since API 7.
+     */
+    void toFront();
 }

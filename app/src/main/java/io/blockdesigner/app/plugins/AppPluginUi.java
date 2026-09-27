@@ -96,6 +96,11 @@ final class AppPluginUi implements PluginUi {
     }
 
     @Override
+    public void toFront() {
+        host().toFront();
+    }
+
+    @Override
     public <D extends Dialog<?>> D style(D dialog) {
         Objects.requireNonNull(dialog, "dialog");
         host().styleDialog(dialog);

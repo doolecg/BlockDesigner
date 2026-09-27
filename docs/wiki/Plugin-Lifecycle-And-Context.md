@@ -49,6 +49,7 @@ grouped by purpose:
 | Listen | `on(eventType, listener)` returns a `Subscription` (API 2) |
 | Read the project | `scene()`, `activeLayer()`, `selectedLayers()`, `targetVersion()`; `selection()` (API 2) |
 | Edit the project | `editWorld(label, edit)`, `editor()`, `addLayer(name, blocks)` |
+| Open a project | `openFile(file, done)`: a project or a schematic as the open project, asking to save changes first; `ui().toFront()` (API 7) |
 | Blocks and assets | `blocks()`, `assets()` (API 2) |
 | Scene objects | `objects()` (API 3) |
 | Settings | `settings()` (API 4); `updateSettings(change)`, `openSettings()` (API 6) |

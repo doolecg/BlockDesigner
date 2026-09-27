@@ -502,6 +502,17 @@ public final class MainWindow {
             public void pluginSettingsChanged(io.blockdesigner.app.plugins.PluginManager.Plugin plugin) {
                 if (openSettingsDialog != null) openSettingsDialog.pluginSettingsChanged(plugin);
             }
+
+            @Override
+            public void openFile(io.blockdesigner.app.plugins.PluginManager.Plugin plugin, Path file,
+                                 java.util.function.Consumer<io.blockdesigner.plugin.OpenResult> done) {
+                openFileForPlugin(file, done);
+            }
+
+            @Override
+            public void toFront() {
+                bringToFront();
+            }
         };
     }
 
@@ -934,23 +945,42 @@ public final class MainWindow {
 
     /** Offers to save the project before BlockDesigner closes to update; false if the user cancels. */
     private boolean readyToQuitForUpdate() {
+        return offerToSave("Save before updating?", "BlockDesigner will close to install the update.");
+    }
+
+    /**
+     * When the project has changes, asks "Save changes to …?" (Save, Don't save, Cancel) under {@code title}, with
+     * {@code what} saying what happens next, and saves on Save. False if the user cancels (also the save's file
+     * chooser); true when there was nothing to save.
+     */
+    private boolean offerToSave(String title, String what) {
         if (!ws.editor().undoStack().canUndo()) return true;
         ButtonType saveFirst = new ButtonType("Save", ButtonBar.ButtonData.YES);
         ButtonType dontSave = new ButtonType("Don't save", ButtonBar.ButtonData.NO);
-        Alert a = new Alert(Alert.AlertType.CONFIRMATION, "BlockDesigner will close to install the update.",
-                saveFirst, dontSave, ButtonType.CANCEL);
+        Alert a = new Alert(Alert.AlertType.CONFIRMATION, what, saveFirst, dontSave, ButtonType.CANCEL);
         a.initOwner(stage);
-        a.setTitle("Save before updating?");
+        a.setTitle(title);
         a.setHeaderText("Save changes to " + ws.projectNameProperty().get() + "?");
         var choice = a.showAndWait().orElse(ButtonType.CANCEL);
         if (choice == ButtonType.CANCEL) return false;
         if (choice == saveFirst) {
             Path before = ws.projectFileProperty().get();
             save(false);
-            // Cancelled the file chooser for an unsaved project: don't quit.
+            // Cancelled the file chooser for an unsaved project: don't go on.
             if (before == null && ws.projectFileProperty().get() == null) return false;
         }
         return true;
+    }
+
+    /** Brings the window forward (a plugin asked, for something the user did in another app). */
+    private void bringToFront() {
+        if (stage.isIconified()) stage.setIconified(false);
+        if (!stage.isShowing()) return;
+        // Windows only lets the foreground app take the focus; flipping always-on-top raises the window anyway.
+        stage.setAlwaysOnTop(true);
+        stage.toFront();
+        stage.requestFocus();
+        stage.setAlwaysOnTop(false);
     }
 
     /** Opens web links (the start screen's download sites); the app passes in its host services. */
@@ -1354,17 +1384,7 @@ public final class MainWindow {
             }
         }).thenAcceptAsync(read -> {
             SchematicFile sf = read.file();
-            List<Layer> layers = new ArrayList<>();
-            for (SchematicFile.Region r : sf.regions()) {
-                String name = sf.regions().size() == 1 ? sf.name() : sf.name() + " · " + r.name();
-                Structure s = r.structure();
-                s.metadata().name = name;
-                s.metadata().author = sf.author();
-                Layer l = new Layer(name, s);
-                l.setOffset(r.position());
-                l.setSource(read.format().id());
-                layers.add(l);
-            }
+            List<Layer> layers = layersOf(sf, read.format().id());
             ws.settings().addRecent(file);
             ws.statusProperty().set(String.format("Imported %s — %,d blocks (DataVersion %d)", file.getFileName(), sf.totalBlocks(), sf.dataVersion()));
             if (ws.projectNameProperty().get().equals("Untitled") && ws.scene().layers().isEmpty()) ws.projectNameProperty().set(sf.name());
@@ -1527,11 +1547,99 @@ public final class MainWindow {
     }
 
     public void openProject(Path file) {
+        openProject(file, null);
+    }
+
+    /**
+     * Opens a file for a plugin ({@code PluginContext.openFile}): a project, or a schematic as a new, unsaved project
+     * named after the file, after offering to save the open one's changes. {@code done} hears how it went, once, on
+     * the UI thread; errors go to it and the status bar instead of a dialog.
+     */
+    private void openFileForPlugin(Path file, java.util.function.Consumer<io.blockdesigner.plugin.OpenResult> done) {
+        String name = file.getFileName().toString();
+        boolean project = name.toLowerCase(java.util.Locale.ROOT).endsWith("." + ProjectFile.EXTENSION);
+        if (!project && !Schematics.isSupported(file)) {
+            done.accept(io.blockdesigner.plugin.OpenResult.failed("BlockDesigner can't open " + name));
+            return;
+        }
+        if (!Files.isRegularFile(file)) {
+            done.accept(io.blockdesigner.plugin.OpenResult.failed("There is no file " + name));
+            return;
+        }
+        if (!offerToSave("Save before opening?", "BlockDesigner will open " + name + ".")) {
+            done.accept(io.blockdesigner.plugin.OpenResult.cancelled());
+            return;
+        }
+        if (project) openProject(file, done);
+        else openSchematicAsProject(file, done);
+    }
+
+    /** Reads a schematic and makes it the project: its layers where the file has them, named after the file, unsaved. */
+    private void openSchematicAsProject(Path file, java.util.function.Consumer<io.blockdesigner.plugin.OpenResult> done) {
+        ws.statusProperty().set("Reading " + file.getFileName() + "…");
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return Schematics.readDetailed(file);
+            } catch (Exception e) {
+                throw new RuntimeException("Could not read " + file.getFileName() + ": " + e.getMessage(), e);
+            }
+        }).thenAcceptAsync(read -> {
+            List<Layer> layers = layersOf(read.file(), read.format().id());
+            for (Layer l : List.copyOf(ws.scene().layers())) ws.scene().remove(l);
+            ws.editor().undoStack().clear();
+            for (Layer l : layers) ws.scene().add(l);
+            if (!layers.isEmpty()) ws.scene().setActive(layers.getFirst());
+            String fileName = file.getFileName().toString();
+            int dot = fileName.lastIndexOf('.');
+            ws.projectNameProperty().set(dot > 0 ? fileName.substring(0, dot) : fileName);
+            ws.projectFileProperty().set(null);
+            projectExtrasLoaded(Map.of());
+            plugins.projectOpened(java.util.Optional.empty());
+            closeStartScreen();
+            viewport.frameAll();
+            ws.statusProperty().set(String.format("Opened %s — %,d blocks", file.getFileName(), read.file().totalBlocks()));
+            // After the queued scene events, so plugins hear ProjectOpened first.
+            Platform.runLater(() -> done.accept(io.blockdesigner.plugin.OpenResult.opened()));
+        }, Platform::runLater).exceptionally(t -> failed(t, done));
+    }
+
+    /** A plugin's open failed: says so in the status bar and tells the plugin why. */
+    private Void failed(Throwable t, java.util.function.Consumer<io.blockdesigner.plugin.OpenResult> done) {
+        Platform.runLater(() -> {
+            Throwable cause = t;
+            while (cause.getCause() != null && (cause instanceof java.util.concurrent.CompletionException || cause.getMessage() == null)) {
+                cause = cause.getCause();
+            }
+            String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+            ws.statusProperty().set(message);
+            done.accept(io.blockdesigner.plugin.OpenResult.failed(message));
+        });
+        return null;
+    }
+
+    /** The layers of a schematic as Import makes them: one per region, at the region's position. */
+    private static List<Layer> layersOf(SchematicFile sf, String formatId) {
+        List<Layer> layers = new ArrayList<>();
+        for (SchematicFile.Region r : sf.regions()) {
+            String name = sf.regions().size() == 1 ? sf.name() : sf.name() + " · " + r.name();
+            Structure s = r.structure();
+            s.metadata().name = name;
+            s.metadata().author = sf.author();
+            Layer l = new Layer(name, s);
+            l.setOffset(r.position());
+            l.setSource(formatId);
+            layers.add(l);
+        }
+        return layers;
+    }
+
+    /** Opens a project; {@code done} (null: errors show in a dialog) hears how it went. */
+    private void openProject(Path file, java.util.function.Consumer<io.blockdesigner.plugin.OpenResult> done) {
         CompletableFuture.supplyAsync(() -> {
             try {
                 return ProjectFile.load(file);
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException("Could not read " + file.getFileName() + ": " + e.getMessage(), e);
             }
         }).thenAcceptAsync(c -> {
             for (Layer l : List.copyOf(ws.scene().layers())) ws.scene().remove(l);
@@ -1546,7 +1654,12 @@ public final class MainWindow {
             plugins.projectOpened(java.util.Optional.of(file));
             viewport.frameAll();
             ws.statusProperty().set("Opened " + file.getFileName());
-        }, Platform::runLater).exceptionally(this::fail);
+            if (done != null) {
+                closeStartScreen();
+                // After the queued scene events, so plugins hear ProjectOpened first.
+                Platform.runLater(() -> done.accept(io.blockdesigner.plugin.OpenResult.opened()));
+            }
+        }, Platform::runLater).exceptionally(t -> done == null ? fail(t) : failed(t, done));
     }
 
     /** Hook for other modules to store their own data in the project file. */

@@ -146,4 +146,18 @@ public interface PluginHost {
     /** A plugin changed its own settings: an open Settings page should redraw them. */
     default void pluginSettingsChanged(PluginManager.Plugin plugin) {
     }
+
+    // ---- API 7 ------------------------------------------------------------------------------------------------
+
+    /**
+     * Opens a project, or a schematic as a new project, after asking to save changes; calls {@code done} once on the
+     * UI thread. Without a window it fails.
+     */
+    default void openFile(PluginManager.Plugin plugin, java.nio.file.Path file, Consumer<io.blockdesigner.plugin.OpenResult> done) {
+        done.accept(io.blockdesigner.plugin.OpenResult.failed("BlockDesigner has no window to open " + file.getFileName() + " in"));
+    }
+
+    /** Brings the main window forward. */
+    default void toFront() {
+    }
 }

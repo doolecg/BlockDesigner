@@ -2,7 +2,7 @@
 
 The plugin API has a single version number, `PluginApi.VERSION` in
 [`plugin-api/src/main/java/io/blockdesigner/plugin/PluginApi.java`](https://github.com/doolecg/BlockDesigner/blob/main/plugin-api/src/main/java/io/blockdesigner/plugin/PluginApi.java).
-It is **5** in BlockDesigner 0.4.22. A plugin declares the level it needs as `"api"` in its
+It is **7** in BlockDesigner 0.4.26. A plugin declares the level it needs as `"api"` in its
 [manifest](The-Manifest.md).
 
 ## The rule
@@ -30,9 +30,10 @@ Nothing checks that you declared the right level. If you use an API 5 method but
 | **4** | 0.4.14 | Settings in the plugin's own tab: `registerSettings(options, onChange)` and `settings()`. Every plugin gets the tab whatever its level; only registering settings needs 4. |
 | **5** | 0.4.17 | Tools that work on the selection (`PluginTool.selects()`, `ToolContext.selection()`, `previewTransform`, `applyTransform`), `ToolHandler.optionsChanged()`, options shown only for some choices (`Options.Builder.showWhen`), the hotbar (`hotbar()`, `setHotbar`), block icons (`blockIcon`), `pickTool` and `setToolOptions`. |
 | **6** | 0.4.24 | Resource packs: `resourcePacks()` and `useResourcePacks(packs)`. The UI kit (`io.blockdesigner.plugin.ui`: `PanelScaffold`, `Section`, `Form`, `ActionBar`, `StatusBadge`, `Banner`, `EmptyState`, `ItemList`/`ItemRow`, `Segmented`, `Controls`, `Icon`, `Theme`, `Tone`) and `ui()` (`PluginUi`: the app's options form, remembered forms, dialogs, owner window, dark mode). `Options` groups, advanced groups, `help`, `unit`, `enabledWhen` and `option(...)`. `showPanel`, `setPanelStatus`, `openSettings`, `updateSettings`. Plugin settings move to the Settings window, and tool and action keys to Settings › Keybinds (app changes, for every level). |
+| **7** | 0.4.26 | Opening a file as the project: `openFile(file, done)` with `OpenResult` (a `.bdproj`, or a schematic as a new, unsaved project; asks to save changes first). `ui().toFront()` brings the main window forward. |
 
 The "Added" column follows the Javadoc of `PluginApi.VERSION`. The "First BlockDesigner" column comes from the main
-repository's `RELEASE_NOTES.md` (0.3.0 introduced plugins; 0.4.4, 0.4.12, 0.4.14, 0.4.17 and 0.4.24 name API 2, 3, 4, 5 and 6).
+repository's `RELEASE_NOTES.md` (0.3.0 introduced plugins; 0.4.4, 0.4.12, 0.4.14, 0.4.17, 0.4.24 and 0.4.26 name API 2, 3, 4, 5, 6 and 7).
 
 Two app-side changes that are not API levels but matter to plugins:
 

@@ -158,6 +158,17 @@ class PluginManagerTest {
         public void pluginSettingsChanged(PluginManager.Plugin plugin) {
             uiCalls.add("settingsChanged " + plugin.info().id());
         }
+
+        public void openFile(PluginManager.Plugin plugin, Path file, Consumer<io.blockdesigner.plugin.OpenResult> done) {
+            uiCalls.add("openFile " + plugin.info().id() + " " + file.getFileName());
+            done.accept(file.getFileName().toString().startsWith("bad") ? io.blockdesigner.plugin.OpenResult.failed("Could not read " + file.getFileName())
+                    : io.blockdesigner.plugin.OpenResult.opened());
+            done.accept(io.blockdesigner.plugin.OpenResult.cancelled());   // a second answer must not reach the plugin
+        }
+
+        public void toFront() {
+            uiCalls.add("toFront");
+        }
     };
 
     private WorldEdit.World worldView() {
@@ -491,6 +502,36 @@ class PluginManagerTest {
         ctx.showPanel("palette");
         ctx.openSettings();
         assertThat(uiCalls).containsExactly("showPanel palette-tools palette", "openSettings palette-tools");
+    }
+
+    // ---- API 7: opening files -------------------------------------------------------------------------------------
+
+    @Test
+    void openFileReachesTheHostAndAnswersOnce() {
+        var ctx = palette().context();
+        List<io.blockdesigner.plugin.OpenResult> results = new ArrayList<>();
+        ctx.openFile(dir.resolve("Castle.litematic"), results::add);
+        ctx.openFile(dir.resolve("bad.schem"), results::add);
+        assertThat(uiCalls).containsExactly("openFile palette-tools Castle.litematic", "openFile palette-tools bad.schem");
+        assertThat(results).extracting(io.blockdesigner.plugin.OpenResult::status)
+                .containsExactly(io.blockdesigner.plugin.OpenResult.Status.OPENED, io.blockdesigner.plugin.OpenResult.Status.FAILED);
+        assertThat(results.get(0).isOpened()).isTrue();
+        assertThat(results.get(1).message()).isEqualTo("Could not read bad.schem");
+    }
+
+    @Test
+    void aThrowingOpenFileCallbackIsLoggedNotThrown() {
+        var ctx = palette().context();
+        ctx.openFile(dir.resolve("Castle.bdproj"), r -> {
+            throw new IllegalStateException("boom");
+        });
+        assertThat(palette().log()).anyMatch(l -> l.contains("Opening Castle.bdproj failed") && l.contains("boom"));
+    }
+
+    @Test
+    void toFrontReachesTheHost() {
+        palette().context().ui().toFront();
+        assertThat(uiCalls).containsExactly("toFront");
     }
 
     @Test

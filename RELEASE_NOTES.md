@@ -1,3 +1,28 @@
+# BlockDesigner 0.4.26
+
+Edit a schematic from your game: in BlockCompanion, pick **Edit in BlockDesigner** on a loaded schematic and it opens here as your project (with Resource Tracker), ready to change.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.26.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.26.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.26-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Plugins can open a file as your project,** such as a schematic a BlockCompanion game sends to edit. If your project has unsaved changes you're asked first (Save, Don't save, Cancel), as when BlockDesigner closes to update. A schematic opens as a new, unsaved project named after the file.
+- **The window comes forward** when a plugin opens something you asked for in another app.
+
+## For plugin makers
+- **Plugin API 7:** `PluginContext.openFile(file, done)` opens a `.bdproj`, or a `.schem`, `.litematic` or `.nbt` as a new project, and answers with an `OpenResult` (opened, cancelled or failed with a reason). `ctx.ui().toFront()` brings the main window forward. PLUGINS.md, the API reference and the wiki describe both.
+
+---
+
 # BlockDesigner 0.4.25
 
 Copy, cut and paste blocks, and duplicate as you drag: hold Ctrl when you grab the Move, Rotate or Scale gizmo and you move a copy, leaving the original where it was.

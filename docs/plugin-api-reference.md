@@ -50,7 +50,7 @@ Every public type in `io.blockdesigner.plugin` and `io.blockdesigner.plugin.ui` 
 
 | Member | Description |
 |---|---|
-| `static final int VERSION = 5` | The API version this BlockDesigner provides. Plugins declaring a newer `api` are not loaded. |
+| `static final int VERSION = 7` | The API version this BlockDesigner provides. Plugins declaring a newer `api` are not loaded. |
 | `static final String DESCRIPTOR = "blockdesigner-plugin.json"` | Name of the manifest at the root of a plugin jar. |
 
 ### BlockDesignerPlugin
@@ -113,6 +113,11 @@ Every public type in `io.blockdesigner.plugin` and `io.blockdesigner.plugin.ui` 
 | `void setPanelStatus(String panelId, Tone tone, String text)` | 6 | A status dot on a page's button, `text` as its tooltip; a null tone removes it. Works before the page is built. |
 | `void openSettings()` | 6 | Opens the Settings window at the plugin's page (the tab's Overview when it has no settings). |
 | `void updateSettings(UnaryOperator<OptionValues> change)` | 6 | Changes the settings as if the user had: saved, `onChange` called, an open Settings page redrawn. |
+| `void openFile(Path file, Consumer<OpenResult> done)` | 7 | Opens a file as the project, as File › Open does: a `.bdproj`, or a schematic (`.schem`, `.litematic`, `.nbt`…) as a new, unsaved project named after the file. Asks to save the open project's changes first. `done` runs once on the JavaFX thread. |
+
+### OpenResult
+
+`public record OpenResult(Status status, String message)` (API 7) — how `openFile` went. `Status` is `OPENED`, `CANCELLED` (the user cancelled at the save-changes question) or `FAILED` (`message` says why, e.g. "Could not read Castle.litematic: …"). `isOpened()`; factories `opened()`, `cancelled()`, `failed(message)`.
 
 ## API 1 extension points
 
@@ -513,7 +518,7 @@ the guide and examples.
 | `Icon` | enum | Feather icons: `node()` (16 px), `node(size)`, `path()`. |
 | `Theme` | class | `STYLESHEET`, spacing `XS SM MD LG XL`, `LABEL_MIN/PREF/MAX`, `NARROW`, `ROW`; `attach(node)`, `root(node)`. |
 | `Tone` | enum | `NEUTRAL`, `ACCENT`, `SUCCESS`, `WARNING`, `DANGER`; `pseudoClass()`, `apply(node, tone)`. |
-| `PluginUi` | interface | From `ctx.ui()`: `optionsForm(options, rememberAs, onChange)`, `darkProperty()`, `isDark()`, `owner()`, `style(dialog)`, `confirm`, `askText`, `choose`, `copyText`, `open`. |
+| `PluginUi` | interface | From `ctx.ui()`: `optionsForm(options, rememberAs, onChange)`, `darkProperty()`, `isDark()`, `owner()`, `style(dialog)`, `confirm`, `askText`, `choose`, `copyText`, `open`; API 7: `toFront()` brings the main window forward. |
 | `OptionsForm` | interface | The app's form: `node()`, `values()`, `setValues(values)`, `reset()`. |
 
 Stable style classes: `bd-root`, `bd-scaffold`, `bd-top`, `bd-content`, `bd-footer`, `bd-section`, `bd-section-header`,
