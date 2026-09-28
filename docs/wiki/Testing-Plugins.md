@@ -20,7 +20,7 @@ class TallyTest {
 }
 ```
 
-That is what the official plugins do (`ItemsTest`, `TallyTest` in Resource Tracker; the generator tests in Terrain
+That is what the official plugins do (`ItemsTest`, `TallyTest` in the BlockCompanion Plugin; the generator tests in Terrain
 Generator). Design for it: keep logic in plain classes that take `Structure`, `OptionValues` or your own types, and
 keep the `PluginContext` and JavaFX parts thin.
 

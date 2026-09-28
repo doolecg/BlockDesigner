@@ -22,7 +22,7 @@ class ConsoleQuipsTest {
         assertNull(ConsoleQuips.classify(entry(ConsoleLog.Level.INFO, "command", "/set stone")));
         assertEquals(ConsoleQuips.Event.COMMAND, ConsoleQuips.classify(entry(ConsoleLog.Level.INFO, "command", "Changed 12 blocks")));
         assertEquals(ConsoleQuips.Event.BIG_COMMAND, ConsoleQuips.classify(entry(ConsoleLog.Level.INFO, "command", "Changed 250,000 blocks")));
-        assertEquals(ConsoleQuips.Event.PLUGIN, ConsoleQuips.classify(entry(ConsoleLog.Level.INFO, "Resource Tracker", "Enabled · 1 panel")));
+        assertEquals(ConsoleQuips.Event.PLUGIN, ConsoleQuips.classify(entry(ConsoleLog.Level.INFO, "BlockCompanion Plugin", "Enabled · 1 panel")));
         // Its own lines never set it off again.
         assertNull(ConsoleQuips.classify(entry(ConsoleLog.Level.DEBUG, "jvm", "we're cooked")));
     }

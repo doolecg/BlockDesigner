@@ -18,7 +18,7 @@ can't be created, "Can't create data folder: …" is logged and the path is stil
 plugin; write whatever you need there. Only `*.jar` files directly in the plugins folder are scanned, so your
 subfolder is never mistaken for a plugin.
 
-Per-project data without scene objects: Resource Tracker keeps what the user has gathered for each project in
+Per-project data without scene objects: the BlockCompanion Plugin keeps what the user has gathered for each project in
 `dataFolder()/projects/<key of the project's absolute path>.json` and follows the open project with
 `SceneEvent.ProjectOpened` (see `Gathered.java` in its repository). The trade-off is that the data stays on this PC
 and doesn't travel with the project file.

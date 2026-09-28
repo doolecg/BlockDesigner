@@ -2,7 +2,7 @@
 
 A plugin is an ordinary Gradle (or any other) Java project that produces one jar with a
 [`blockdesigner-plugin.json`](The-Manifest.md) at its root. This page describes the layout every official plugin
-uses; copying one of them (Resource Tracker is the smallest) is the quickest start.
+uses; copying one of them (the BlockCompanion Plugin, formerly Resource Tracker, is the smallest) is the quickest start.
 
 ## What you need
 
@@ -37,7 +37,7 @@ BlockDesigner-<Name>/
 
 ## `build.gradle.kts`
 
-This is the official plugins' build file (Resource Tracker's, with the names made generic):
+This is the official plugins' build file (the BlockCompanion Plugin's, with the names made generic):
 
 ```kotlin
 plugins {

@@ -812,6 +812,7 @@ public final class MainWindow {
         startAssetLoading(false);
         if (ws.settings().checkForUpdates) checkForUpdates(false);
         if (ws.settings().autoUpdatePlugins) updatePlugins(false, null);
+        installDefaultPlugins();
         // 0.4.7 moved the install to Program Files: remove the old per-user copy in AppData (settings are kept).
         Thread.ofVirtual().name("tidy-old-install").start(() -> {
             var old = Updater.leftoverPerUserInstalls();
@@ -880,6 +881,56 @@ public final class MainWindow {
         });
         d.showAndWait();
         if (settingsFor[0] != null) openPluginSettings(settingsFor[0]);
+    }
+
+    /**
+     * Installs the default plugins (the BlockCompanion Plugin) that BlockDesigner hasn't installed before, switched on,
+     * from their latest release, in the background. Offline or on any failure it stays quiet and tries again at the
+     * next start. Each is installed once: afterwards it is remembered in {@code defaultPluginsHandled}, so a plugin the
+     * user uninstalls or switches off is left that way (see {@link io.blockdesigner.app.plugins.DefaultPlugins#toInstall}).
+     */
+    private void installDefaultPlugins() {
+        var defaults = io.blockdesigner.app.plugins.DefaultPlugins.ALL;
+        var settings = ws.settings();
+        List<String> installed = plugins.plugins().stream().map(p -> p.info().id()).toList();
+        var known = io.blockdesigner.app.plugins.DefaultPlugins.alreadyInstalled(defaults, installed, settings.defaultPluginsHandled);
+        if (!known.isEmpty()) {
+            settings.defaultPluginsHandled.addAll(known);
+            settings.save();
+        }
+        var todo = io.blockdesigner.app.plugins.DefaultPlugins.toInstall(defaults, installed, settings.defaultPluginsHandled, disabledPlugins,
+                io.blockdesigner.app.plugins.DefaultPlugins.dataFolderIn(plugins.folder()));
+        if (todo.isEmpty()) return;
+        Thread.ofVirtual().name("default-plugins").start(() -> {
+            for (var d : todo) {
+                try {
+                    var found = pluginUpdater.check(d.releaseQuery());
+                    if (found == null) continue;
+                    java.nio.file.Path jar = pluginUpdater.download(found);
+                    var got = io.blockdesigner.app.plugins.PluginManager.readDescriptor(jar);
+                    if (!got.id().equals(d.id()) || got.api() > io.blockdesigner.plugin.PluginApi.VERSION) continue;
+                    Platform.runLater(() -> {
+                        // The user may have installed it by hand while it downloaded.
+                        if (plugins.find(d.id()).isPresent() || settings.defaultPluginsHandled.contains(d.id())) return;
+                        try {
+                            var p = plugins.install(jar);
+                            settings.defaultPluginsHandled.add(d.id());
+                            settings.save();
+                            plugins.log(p, "Installed by BlockDesigner (" + found.page() + ")");
+                            if (p.state() == io.blockdesigner.app.plugins.PluginManager.State.ENABLED) {
+                                viewport.showToast("Installed " + p.info().name() + " " + p.info().version());
+                                ws.statusProperty().set("Installed " + p.info().name() + " " + p.info().version()
+                                        + " · manage it in Plugins > Manage plugins");
+                            }
+                        } catch (Exception e) {
+                            // Quiet: tried again at the next start.
+                        }
+                    });
+                } catch (Exception e) {
+                    // Offline, GitHub unreachable or rate-limited: quiet, tried again at the next start.
+                }
+            }
+        });
     }
 
     /**

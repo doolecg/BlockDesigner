@@ -9,12 +9,12 @@ A complete manifest, as the official plugins write it:
 ```json
 {
   "id": "resource-tracker",
-  "name": "Resource Tracker",
+  "name": "BlockCompanion Plugin",
   "version": "@VERSION@",
   "author": "BlockDesigner",
   "description": "The materials a build needs, as the items you'd gather in survival ...",
   "updates": "https://github.com/doolecg/BlockDesigner-ResourceTracker",
-  "main": "io.blockdesigner.resources.ResourceTrackerPlugin",
+  "main": "io.blockdesigner.blockcompanion.BlockCompanionPlugin",
   "api": 5
 }
 ```
