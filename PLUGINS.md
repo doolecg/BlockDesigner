@@ -52,7 +52,7 @@ The repository has two complete plugins. Read them alongside this guide:
 
 - [`examples/hello-plugin`](examples/hello-plugin) (API 1): a `/pillar` command, an "Add test platform" action, a CSV bill-of-materials exporter and a plain-text schematic format.
 - [`examples/palette-tools`](examples/palette-tools) (API 2): Weathering, Palette swap and Gradient transforms, a Palette panel, a GIMP colour-palette exporter with options, a pixel-art importer and a Wall tool.
-- [`plugins/reference-planes`](plugins/reference-planes) (API 3): Blender-style reference images as scene objects. This one is a real plugin, released on its own.
+- [`app/src/main/java/io/blockdesigner/app/refplanes`](app/src/main/java/io/blockdesigner/app/refplanes): Blender-style reference images as scene objects. This was the Reference Planes plugin and is built into BlockDesigner now, but it still implements the same `SceneObjectType` and `SceneObject` interfaces a plugin does, so it reads as a full scene object example. BlockDesigner no longer loads a plugin with the id `reference-planes`.
 
 Build them from the repository root:
 
@@ -632,7 +632,7 @@ Families and variants are worked out from block ids and checked against the regi
 
 ## API 3 extension points
 
-Everything in this section needs `"api": 3` in the manifest. The examples come from [`plugins/reference-planes`](plugins/reference-planes/src/main/java/io/blockdesigner/refplanes).
+Everything in this section needs `"api": 3` in the manifest. The examples come from BlockDesigner's built-in reference images ([`app/src/main/java/io/blockdesigner/app/refplanes`](app/src/main/java/io/blockdesigner/app/refplanes)), once the Reference Planes plugin, which use the same interfaces.
 
 ### Scene objects
 

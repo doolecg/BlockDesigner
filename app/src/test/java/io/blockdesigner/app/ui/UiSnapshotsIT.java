@@ -79,6 +79,8 @@ class UiSnapshotsIT {
                                     .filter(f -> f instanceof javafx.scene.control.TextField tf && tf.getPromptText() != null && tf.getPromptText().startsWith("Search actions"))
                                     .findFirst().ifPresent(f -> ((javafx.scene.control.TextField) f).setText("fly"));
                             snapshotDialog(sd, dir.resolve("settings-keybinds-fly" + (dark ? "-dark" : "-light") + ".png"));
+                            navTo(sd, "Reference images");
+                            snapshotDialog(sd, dir.resolve("settings-reference-images" + (dark ? "-dark" : "-light") + ".png"));
                         }
                         navTo(sd, "Appearance");
                         snapshotDialog(sd, dir.resolve("settings-" + n + ".png"));
@@ -146,6 +148,37 @@ class UiSnapshotsIT {
                 new io.blockdesigner.worldgen.LootTables.Item("minecraft:emerald", 5, 1, 2, false),
                 new io.blockdesigner.worldgen.LootTables.Item("minecraft:diamond_sword", 1, 1, 1, true)));
         snapshotDialog(new LootTableEditor(null, ws, table, List.of()), dir.resolve("loot-editor" + suffix + ".png"));
+
+        // The Layers panel with a reference image (built in) above the layers, and its button in the header.
+        new io.blockdesigner.app.refplanes.ReferencePlanes(ws.objects(), settings, new io.blockdesigner.app.refplanes.ReferencePlanes.Ui() {
+            public javafx.stage.Window owner() {
+                return null;
+            }
+
+            public void toast(String message) {
+            }
+
+            public void style(Dialog<?> dialog) {
+            }
+        });
+        Path picture = Files.createTempDirectory("bd-ref").resolve("Harbour sketch.png");
+        java.awt.image.BufferedImage sketch = new java.awt.image.BufferedImage(64, 40, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        ImageIO.write(sketch, "png", picture.toFile());
+        ws.objects().typesFor(picture).getFirst().type().open(picture, ws.objects().view());
+        LayersPanel layersPanel = new LayersPanel(ws, new LayersPanel.Actions(() -> {
+        }, l -> {
+        }, l -> {
+        }, l -> {
+        }));
+        javafx.scene.layout.StackPane lbox = new javafx.scene.layout.StackPane(layersPanel);
+        lbox.getStyleClass().addAll("app-root", dark ? "dark" : "light");
+        lbox.getStylesheets().addAll(UiSnapshotsIT.class.getResource("/io/blockdesigner/app/app.css").toExternalForm(),
+                io.blockdesigner.plugin.ui.Theme.STYLESHEET);
+        lbox.setPrefSize(330, 300);
+        new javafx.scene.Scene(lbox);
+        lbox.applyCss();
+        lbox.layout();
+        save(lbox.snapshot(null, null), dir.resolve("layers-reference" + suffix + ".png"));
 
         // Plugins window with the example plugin installed.
         Path pluginDir = Files.createTempDirectory("bd-plugins");

@@ -56,7 +56,9 @@ public final class LayersPanel extends VBox {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         Button add = iconButton(Feather.PLUS, Keybinds.tooltip("New empty layer", "Added above the active layer", Keybinds.Action.NEW_LAYER), this::newLayer);
         Button imp = iconButton(Feather.DOWNLOAD, Keybinds.tooltip("Import schematic…", "Place a .nbt, .litematic or .schem as a new layer (or drop the file here)", Keybinds.Action.IMPORT), actions.importSchematic());
-        HBox header = new HBox(6, title, spacer, imp, add);
+        Button reference = iconButton(Feather.IMAGE, Keybinds.tooltip("Add reference image…",
+                "A picture to build from, facing the view (or drop a picture on the window)", Keybinds.Action.ADD_REFERENCE_IMAGE), () -> addReference.run());
+        HBox header = new HBox(6, title, spacer, reference, imp, add);
         header.setAlignment(Pos.CENTER_LEFT);
         header.getStyleClass().add("panel-header");
 
@@ -99,9 +101,17 @@ public final class LayersPanel extends VBox {
         getChildren().addAll(header, objectRows, list);
     }
 
-    // ---- plugin scene objects ----------------------------------------------------------------------------------
+    // ---- scene objects -----------------------------------------------------------------------------------------
 
-    /** Rows for the plugins' scene objects (reference images…), above the layers, each tagged with its type's badge. */
+    /** The header's Add reference image… button (the main window's reference images). */
+    private Runnable addReference = () -> {
+    };
+
+    public void setAddReference(Runnable add) {
+        this.addReference = add;
+    }
+
+    /** Rows for the scene objects (reference images, plugins' objects), above the layers, each tagged with its type's badge. */
     private final VBox objectRows = new VBox(2);
     private Consumer<io.blockdesigner.app.plugins.SceneObjectStore.Entry> focusObject = o -> {
     };
@@ -165,7 +175,7 @@ public final class LayersPanel extends VBox {
         if (o.selected()) row.getStyleClass().add("selected-object");
         row.setOpacity(o.visible() ? 1 : 0.55);
         Tooltip.install(row, new Tooltip(o.name() + " · " + o.badge().toLowerCase(java.util.Locale.ROOT)
-                + " from a plugin · click to select (then G / R) · right-click for its options"));
+                + " · click to select (then G / R) · right-click for its options"));
         row.setOnMouseClicked(e -> {
             if (e.getButton() != MouseButton.PRIMARY) return;
             if (e.getClickCount() == 2) ObjectMenus.rename(o);

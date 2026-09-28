@@ -38,6 +38,8 @@ public final class Keybinds {
         SAVE_AS(Group.FILE, "Save as", "Shortcut+Shift+S"),
         OPEN(Group.FILE, "Open", "Shortcut+O"),
         IMPORT(Group.FILE, "Import", "Shortcut+I"),
+        // No key by default (it was a plugin action before it was built in); give it one in Settings › Keybinds.
+        ADD_REFERENCE_IMAGE(Group.FILE, "Add a reference image"),
         EXPORT(Group.FILE, "Export schematic", "Shortcut+E"),
         EXPORT_DATAPACK(Group.FILE, "Export worldgen data pack", "Shortcut+Shift+E"),
         NEW_PROJECT(Group.FILE, "New project", "Shortcut+N"),

@@ -588,4 +588,39 @@ class PluginManagerTest {
         assertThat(pm.brokenJars()).containsKey("junk.jar");
         assertThat(pm.find("hello").orElseThrow().state()).isEqualTo(PluginManager.State.ENABLED);
     }
+
+    /** A plugin jar with only a descriptor (its main class is never loaded in these tests). */
+    private static Path descriptorOnly(Path jar, String id) throws IOException {
+        try (var z = new java.util.zip.ZipOutputStream(Files.newOutputStream(jar))) {
+            z.putNextEntry(new java.util.zip.ZipEntry("blockdesigner-plugin.json"));
+            z.write(("{\"id\":\"" + id + "\",\"name\":\"Reference Planes\",\"version\":\"1.2.0\",\"main\":\"x.Y\",\"api\":6}")
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return jar;
+    }
+
+    @Test
+    void builtInPluginsAreSetAsideOnceNotLoaded() throws IOException {
+        Path jar = descriptorOnly(pm.folder().resolve("reference-planes-1.2.0.jar"), "reference-planes");
+        pm.loadAll();
+        assertThat(pm.find("reference-planes")).as("never loaded next to the built-in feature").isEmpty();
+        assertThat(pm.retired()).extracting(io.blockdesigner.plugin.PluginInfo::id).containsExactly("reference-planes");
+        assertThat(jar).doesNotExist();
+        assertThat(pm.folder().resolve("reference-planes-1.2.0.jar.retired")).exists();
+        assertThat(pm.brokenJars()).isEmpty();
+        assertThat(pm.find("hello").orElseThrow().state()).isEqualTo(PluginManager.State.ENABLED);
+        // The next start finds nothing to tell.
+        pm.loadAll();
+        assertThat(pm.retired()).isEmpty();
+        assertThat(pm.find("reference-planes")).isEmpty();
+    }
+
+    @Test
+    void builtInPluginsAreNotInstalled() throws IOException {
+        Path jar = descriptorOnly(dir.resolve("reference-planes-1.2.0.jar"), "reference-planes");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> pm.install(jar)).isInstanceOf(IOException.class)
+                .hasMessageContaining("built into BlockDesigner");
+        assertThat(pm.find("reference-planes")).isEmpty();
+        assertThat(pm.folder().resolve("reference-planes-1.2.0.jar")).doesNotExist();
+    }
 }

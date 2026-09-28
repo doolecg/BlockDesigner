@@ -104,6 +104,8 @@ public final class Settings {
     public java.util.Map<String, String> pluginPages = new java.util.LinkedHashMap<>();
     /** Advanced option groups the user opened ("<options key>#<group title>"); the rest start collapsed. */
     public List<String> expandedOptionGroups = new ArrayList<>();
+    /** How new reference images start out (Settings › Reference images), as text; see refplanes.NewPictures. */
+    public java.util.Map<String, String> newReferenceImages = new java.util.LinkedHashMap<>();
 
     // ---- Export window (remembered between exports) ----
     /** Card chosen last: a format id, "datapack", or "plugin:<plugin>/<exporter>". */
@@ -283,6 +285,7 @@ public final class Settings {
         keybinds.clear();
         hotbar.clear();
         pluginOptions.clear();
+        newReferenceImages.clear();
         pluginToolKeys.clear();
         pluginActionKeys.clear();
         pluginPages.clear();
