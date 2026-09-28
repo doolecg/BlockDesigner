@@ -748,7 +748,7 @@ Plugins that use these declare `"api": 6` (BlockDesigner 0.4.24 and later).
 `ctx.resourcePacks()` lists the resource packs layered on the Minecraft assets, lowest priority first (zip files or
 folders). `ctx.useResourcePacks(packs)` reloads the assets with other packs on top of the same game jar and mods, and
 keeps them as the user's choice (as if picked in Settings). Loading runs in the background; the view shows the new
-textures when it is done, and missing files are skipped. Resource Tracker uses it to show blocks with the textures a
+textures when it is done, and missing files are skipped. The BlockCompanion Plugin uses it to show blocks with the textures a
 game uses:
 
 ```java
@@ -885,7 +885,7 @@ reads (`.schem`, `.litematic`, `.nbt`…) becomes a new, unsaved project named a
 changes, the user is asked first ("Save changes to Castle?": Save, Don't save, Cancel). `done` is called once, on the
 JavaFX thread, with an `OpenResult`: `OPENED` (after `SceneEvent.ProjectOpened`), `CANCELLED`, or `FAILED` with a short
 `message()` ("Could not read Castle.litematic: …"). `ctx.ui().toFront()` brings the window forward, for a request that
-came from outside BlockDesigner (Resource Tracker does both when a BlockCompanion game sends a build to edit):
+came from outside BlockDesigner (the BlockCompanion Plugin does both when a BlockCompanion game sends a build to edit):
 
 ```java
 ctx.ui().toFront();

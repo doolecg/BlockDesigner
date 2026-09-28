@@ -92,6 +92,11 @@ public final class Settings {
     public boolean symShowPlanes = true;
     /** Ids of plugins the user switched off in the Plugins window. */
     public List<String> disabledPlugins = new ArrayList<>();
+    /**
+     * Ids of default plugins (DefaultPlugins) BlockDesigner installed by itself or found installed: it never installs
+     * them again, so one the user uninstalls stays gone. Kept when settings are reset.
+     */
+    public List<String> defaultPluginsHandled = new ArrayList<>();
     /** Last values of plugin options, per feature ("plugin/kind/id"), as text; see OptionStore. */
     public java.util.Map<String, java.util.Map<String, String>> pluginOptions = new java.util.LinkedHashMap<>();
     /** Plugin panels ("plugin/panel") the user closed; every other plugin panel opens with its plugin. */
@@ -279,6 +284,7 @@ public final class Settings {
         d.extraMods = new ArrayList<>(extraMods);
         d.resourcePacks = new ArrayList<>(resourcePacks);
         d.recentFiles = new ArrayList<>(recentFiles);
+        d.defaultPluginsHandled = new ArrayList<>(defaultPluginsHandled);
         // Maps and lists are replaced rather than merged when copying, so clear them first.
         keybinds.clear();
         hotbar.clear();

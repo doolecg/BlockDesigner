@@ -20,7 +20,7 @@ class PluginKeysTest {
     private static final PluginKeys.Target REGION = new PluginKeys.Target(PluginKeys.Kind.TOOL, "terrain/region",
             "Terrain Generator", "Tool: Terrain region", null);
     private static final PluginKeys.Target COPY = new PluginKeys.Target(PluginKeys.Kind.ACTION, "resource-tracker/Copy materials list",
-            "Resource Tracker", "Copy materials list", null);
+            "BlockCompanion Plugin", "Copy materials list", null);
 
     /** A key one of the app's own actions uses by default. */
     private static KeyCombination appKey() {

@@ -42,7 +42,7 @@ Each lives in its own repository and is a good reference for the features it use
 
 | Plugin | API | Shows how to |
 |---|---|---|
-| [Resource Tracker](https://github.com/doolecg/BlockDesigner-ResourceTracker) | 5 | a panel, a menu action, scene events, data kept per project in the data folder |
+| [BlockCompanion Plugin](https://github.com/doolecg/BlockDesigner-ResourceTracker) (formerly Resource Tracker) | 5 | a panel, a menu action, scene events, data kept per project in the data folder |
 | [Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools) | 5 | a tool on the selection, transforms, an exporter, an importer, a panel |
 | [Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes) | 4 | scene objects saved in the project, settings in the plugin's tab |
 | [Terrain Generator](https://github.com/doolecg/BlockDesigner-TerrainGenerator) | 3 | a panel, a command, a tool, a scene object that holds its state in the project, a two-module build |
