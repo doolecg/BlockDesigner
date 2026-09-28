@@ -10,34 +10,5 @@ local.properties
 dist/
 tools/
 
-# AI assistants and coding agents: local config, memory, rules and caches
-.claude/
-CLAUDE.md
-CLAUDE.local.md
-.mcp.json
-.cursor/
-.cursorrules
-.cursorignore
-.windsurf/
-.windsurfrules
-.codeium/
-.aider*
-.continue/
-.copilot/
-.github/copilot-instructions.md
-.gemini/
-GEMINI.md
-.codex/
-AGENTS.md
-.kiro/
-.roo/
-.roomodes
-.cline/
-.clinerules
-.junie/
-.tabnine/
-.specstory/
-.augment/
-
 # Python caches (packaging scripts)
 __pycache__/
