@@ -130,7 +130,7 @@ The class needs a public no-argument constructor. See [Plugin lifecycle and cont
 ./gradlew jar test          # build/libs/<id>-<version>.jar
 ```
 
-Install it with **Plugins (puzzle icon) › Manage plugins… › Install…**, or copy it into the plugins folder and press
+Install it by dropping the jar on the drop box in **Plugins (puzzle icon) › Manage plugins…** (or click the box to pick it), or copy it into the plugins folder and press
 **Reload** there. Check the jar: `blockdesigner-plugin.json` must be at its root, and it must not contain
 `io/blockdesigner/core/` or `io/blockdesigner/plugin/` classes.
 

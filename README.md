@@ -302,7 +302,7 @@ Each plugin lives in its own repository and is released there, separately from B
 | **[BlockCompanion Plugin](https://github.com/doolecg/BlockDesigner-ResourceTracker)** (formerly Resource Tracker; installed with BlockDesigner) | Links BlockDesigner to the BlockCompanion Minecraft mod: send projects into the game and edit builds from it. Also the materials a build needs as items (stacks and shulker boxes), what you have gathered and what is left, saved with each project | 0.4.24 |
 | **[Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools)** | Weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool | 0.4.24 |
 
-Download a plugin's `.jar` from its releases page, then install it with **Plugins › Manage plugins… › Install…**.
+Install one from **Plugins › Manage plugins…**: pick it under **Suggested to install**, or download its `.jar` from its releases page and drop it on the drop box there.
 
 **Reference Planes** is no longer a plugin: it is built in as [reference images](#reference-images). If you have its
 plugin, BlockDesigner no longer loads it (it renames the jar to end in `.retired` and tells you once), and keeps its

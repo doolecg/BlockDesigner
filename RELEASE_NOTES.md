@@ -1,3 +1,31 @@
+# BlockDesigner 0.4.28
+
+Reference images are built in, the Plugins window is redone with suggested plugins you can install in one click, and the BlockCompanion Plugin (formerly Resource Tracker) comes with BlockDesigner.
+
+## Downloads
+
+| File | Use it if… |
+|---|---|
+| **BlockDesigner-0.4.28.msi** | You want a normal install. It installs for all users into `C:\Program Files\BlockDesigner` (Windows asks for admin). Installing over an earlier version upgrades it in place. |
+| **BlockDesigner-0.4.28.exe** | Only for updating from 0.4.6 or earlier: their updater installs it for you. For new installs, use the `.msi`. |
+| **BlockDesigner-0.4.28-portable.zip** | You don't want to install anything. Unzip it anywhere and run `BlockDesigner.exe`. |
+
+0.4.2 and later update to this by themselves. 0.4.0 and 0.4.1 need a one-time install by hand: download the `.msi` above.
+
+**Windows Smart App Control:** this build still isn't code-signed. On PCs with Smart App Control switched on, Windows may block BlockDesigner from starting after an install or update.
+
+## New
+- **Reference images, built in:** put pictures in the scene and build from them, like Blender's reference images. Add one with the picture button at the top of **Layers**, by dropping a PNG, JPEG, GIF or BMP on the window, or with **Import**. Move, turn and scale them with **G** / **R** / **S**, and right-click one for **Properties…**, opacity, which views it shows in, and whether it draws behind or in front of blocks. How new pictures start out is on the new **Reference images** page of **Settings**. Pictures are saved inside the project.
+- **Suggested plugins:** **Plugins › Manage plugins…** lists the BlockDesigner team's plugins you don't have yet under **Suggested to install**, each with an **Install** button that downloads its newest release.
+- **BlockCompanion Plugin installed for you:** BlockDesigner installs it, switched on, the first time it starts. If you uninstall or switch it off, it stays that way.
+
+## Changed
+- **Plugins window:** each plugin is a card with its status, a settings button, **Turn on** / **Turn off**, uninstall and its log. **Check for updates** updates every plugin now. Install a plugin jar by dropping it on the drop box (or clicking it to pick the file).
+- **Reference Planes is no longer a plugin.** If you have it, BlockDesigner stops loading it (the jar is renamed to end in `.retired` and you're told once) and keeps its settings, its key and the pictures in your projects.
+- **Resource Tracker is now the BlockCompanion Plugin** everywhere in BlockDesigner.
+
+---
+
 # BlockDesigner 0.4.27
 
 You can now install or update mods in the game BlockDesigner takes its textures from while BlockDesigner is open.

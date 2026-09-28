@@ -67,7 +67,7 @@ the pattern. (The official plugin repositories don't do this; they rely on level
 ## 3. In the app
 
 1. `./gradlew jar`.
-2. **Plugins › Manage plugins… › Install…** the jar, or copy it into the plugins folder and press **Reload**.
+2. Drop the jar on the drop box in **Plugins › Manage plugins…**, or copy it into the plugins folder and press **Reload**.
 3. Watch the plugin's row (on / failed to start / needs a newer BlockDesigner), its log in the Plugins window, and
    the Console at the bottom left, where your `ctx.log` lines appear under your plugin's name.
 4. After a rebuild, Install… again or copy and Reload; there is no need to restart BlockDesigner.
