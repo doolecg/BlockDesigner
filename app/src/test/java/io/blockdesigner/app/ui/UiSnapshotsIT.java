@@ -147,11 +147,15 @@ class UiSnapshotsIT {
                 new io.blockdesigner.worldgen.LootTables.Item("minecraft:diamond_sword", 1, 1, 1, true)));
         snapshotDialog(new LootTableEditor(null, ws, table, List.of()), dir.resolve("loot-editor" + suffix + ".png"));
 
-        // Plugins window with the example plugin installed.
+        // Plugins window with the example plugins installed (Palette Tools then leaves the suggestions), and with none.
         Path pluginDir = Files.createTempDirectory("bd-plugins");
         Path libs = Path.of(System.getProperty("blockdesigner.examplePluginDir", "../examples/hello-plugin/build/libs"));
         try (var ds = Files.newDirectoryStream(libs, "hello-plugin*.jar")) {
             for (Path jar : ds) Files.copy(jar, pluginDir.resolve("hello.jar"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        Path paletteLibs = Path.of(System.getProperty("blockdesigner.paletteToolsDir", "../examples/palette-tools/build/libs"));
+        try (var ds = Files.newDirectoryStream(paletteLibs, "palette-tools*.jar")) {
+            for (Path jar : ds) Files.copy(jar, pluginDir.resolve("palette-tools.jar"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         }
         var host = new io.blockdesigner.app.plugins.PluginHost() {
             public io.blockdesigner.core.model.Scene scene() {
@@ -196,7 +200,7 @@ class UiSnapshotsIT {
         };
         var pm = new io.blockdesigner.app.plugins.PluginManager(pluginDir, host, new java.util.HashSet<>());
         pm.loadAll();
-        snapshotDialog(new PluginsDialog(null, pm, dark, new PluginsDialog.Updates() {
+        PluginsDialog.Updates updates = new PluginsDialog.Updates() {
             @Override
             public boolean auto() {
                 return true;
@@ -209,7 +213,25 @@ class UiSnapshotsIT {
             @Override
             public void checkNow(java.util.function.Consumer<String> done) {
             }
-        }), dir.resolve("plugins" + suffix + ".png"));
+        };
+        PluginsDialog pd = new PluginsDialog(null, pm, dark, updates);
+        pd.onSettings(p -> {
+        });
+        snapshotDialog(pd, dir.resolve("plugins" + suffix + ".png"));
+        var none = new io.blockdesigner.app.plugins.PluginManager(Files.createTempDirectory("bd-no-plugins"), host, new java.util.HashSet<>());
+        none.loadAll();
+        snapshotDialog(new PluginsDialog(null, none, dark, updates), dir.resolve("plugins-empty" + suffix + ".png"));
+        // The whole list, with a plugin turned off and a jar that isn't a plugin.
+        Files.write(pluginDir.resolve("not-a-plugin.jar"), new byte[]{1, 2, 3});
+        pm.setEnabled(pm.find("hello").orElseThrow(), false);
+        pm.loadAll();
+        PluginsDialog states = new PluginsDialog(null, pm, dark, updates);
+        states.show();
+        var list = ((javafx.scene.control.ScrollPane) states.getDialogPane().lookup(".export-cards-scroll")).getContent();
+        list.applyCss();
+        save(list.snapshot(null, null), dir.resolve("plugins-list" + suffix + ".png"));
+        states.setResult(null);
+        states.close();
         snapshotDialog(new ExportDialog(null, ws, null, pm.exporters(), null, "plugin:hello/bom"), dir.resolve("export-plugin" + suffix + ".png"));
         pm.shutdown();
 

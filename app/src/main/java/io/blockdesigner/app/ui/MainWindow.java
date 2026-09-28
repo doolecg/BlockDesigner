@@ -853,9 +853,9 @@ public final class MainWindow {
 
     private final io.blockdesigner.app.plugins.PluginUpdater pluginUpdater = new io.blockdesigner.app.plugins.PluginUpdater();
 
-    /** The Plugins window, with automatic updates and "Check for updates". */
+    /** The Plugins window, with automatic updates, "Check for updates" and a way to each plugin's settings. */
     private void showPluginsDialog() {
-        new PluginsDialog(stage, plugins, ws.darkProperty().get(), new PluginsDialog.Updates() {
+        PluginsDialog d = new PluginsDialog(stage, plugins, ws.darkProperty().get(), new PluginsDialog.Updates() {
             @Override
             public boolean auto() {
                 return ws.settings().autoUpdatePlugins;
@@ -871,7 +871,15 @@ public final class MainWindow {
             public void checkNow(java.util.function.Consumer<String> done) {
                 updatePlugins(true, done);
             }
-        }).showAndWait();
+        });
+        // A plugin's settings open once this window closes; not when the Settings window opened this one (it's open).
+        io.blockdesigner.app.plugins.PluginManager.Plugin[] settingsFor = {null};
+        if (openSettingsDialog == null) d.onSettings(p -> {
+            settingsFor[0] = p;
+            d.close();
+        });
+        d.showAndWait();
+        if (settingsFor[0] != null) openPluginSettings(settingsFor[0]);
     }
 
     /**

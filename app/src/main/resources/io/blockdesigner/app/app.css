@@ -559,6 +559,44 @@
     -fx-icon-color: -bd-accent;
 }
 
+.plugins-drop {
+    -fx-padding: 14;
+    -fx-border-color: -color-border-default;
+    -fx-border-width: 1.5;
+    -fx-border-style: segments(6, 5);
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+.plugins-drop:hover {
+    -fx-border-color: -color-accent-fg;
+}
+
+.plugins-drop:drop-target {
+    -fx-border-color: -color-accent-fg;
+    -fx-border-width: 2;
+    -fx-background-color: -color-accent-subtle;
+}
+
+.plugins-drop .bd-icon-path {
+    -fx-stroke: -color-fg-subtle;
+}
+
+.plugins-drop:hover .bd-icon-path, .plugins-drop:drop-target .bd-icon-path {
+    -fx-stroke: -color-accent-fg;
+}
+
+.plugins-drop-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
+}
+
+.plugins-drop-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-muted;
+}
+
 .hotbar-slot:drop-target {
     -fx-border-color: -bd-accent;
 }
@@ -903,14 +941,20 @@
 /* ---------- plugins window ---------- */
 
 .plugin-row {
-    -fx-padding: 8 10 8 10;
-    -fx-background-color: -color-bg-subtle;
-    -fx-background-radius: 10;
+    -fx-padding: 10 12 10 10;
+    -fx-background-color: -color-border-muted, -color-bg-subtle;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 10, 9;
 }
 
 .plugin-name {
     -fx-font-weight: bold;
     -fx-font-size: 13.5px;
+}
+
+.plugin-description {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -color-fg-default;
 }
 
 .plugin-meta {

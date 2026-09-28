@@ -3,13 +3,17 @@ package io.blockdesigner.app.plugins;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.blockdesigner.app.update.Updater;
+import io.blockdesigner.plugin.PluginApi;
 import io.blockdesigner.plugin.PluginInfo;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Locale;
@@ -27,6 +31,10 @@ public final class PluginUpdater {
 
     /** A newer release of a plugin: its version, the jar to download and the release page. */
     public record Found(String pluginId, String version, Updater.Asset jar, URI page) {
+    }
+
+    /** A release downloaded and checked by {@link #fetch}: the release, the jar and the manifest inside it. */
+    public record Fetched(Found release, Path jar, PluginInfo info) {
     }
 
     private final Updater downloads = new Updater();
@@ -93,6 +101,35 @@ public final class PluginUpdater {
         Updater.Asset jar = new Updater.Asset(pick.path("name").asText(), URI.create(pick.path("browser_download_url").asText()),
                 pick.path("size").asLong(-1), digest.startsWith("sha256:") ? digest.substring(7) : null);
         return new Found(info.id(), version, jar, URI.create(release.path("html_url").asText("https://github.com")));
+    }
+
+    /**
+     * The plugin's newest release, downloaded and checked: it is the same plugin and fits this BlockDesigner. Null when
+     * the installed version is the newest. For a plugin not installed yet, give its info with no version.
+     */
+    public Fetched fetch(PluginInfo info) throws IOException, InterruptedException {
+        Found found = check(info);
+        if (found == null) return null;
+        Path jar = download(found);
+        PluginInfo got = PluginManager.readDescriptor(jar);
+        if (!got.id().equals(info.id())) throw new IOException("the download is a different plugin (" + got.id() + ")");
+        if (got.api() > PluginApi.VERSION) throw new IOException("its " + found.version() + " release needs a newer BlockDesigner");
+        return new Fetched(found, jar, got);
+    }
+
+    /**
+     * What went wrong fetching a release, for after "Couldn't install X: " in the Plugins window; no connection reads as
+     * "GitHub can't be reached…".
+     */
+    public static String explain(Throwable t) {
+        for (Throwable c = t; c != null; c = c.getCause()) {
+            if (c instanceof UnknownHostException || c instanceof ConnectException || c instanceof HttpTimeoutException
+                    || c instanceof java.nio.channels.UnresolvedAddressException) {
+                return "GitHub can't be reached. Check your internet connection and try again.";
+            }
+        }
+        String m = t.getMessage() == null || t.getMessage().isBlank() ? t.toString() : t.getMessage().strip();
+        return m.endsWith(".") ? m : m + ".";
     }
 
     /** Downloads the update's jar (size and checksum checked against the release) into a temporary folder. */

@@ -50,4 +50,23 @@ class PluginUpdaterTest {
         assertThatThrownBy(() -> PluginUpdater.newer(info("1.0.0", "x"), release("2.0.0", "a.jar", "b.jar"))).hasMessageContaining("several jars");
         assertThatThrownBy(() -> PluginUpdater.newer(info("1.0.0", "x"), release("2.0.0"))).hasMessageContaining("no .jar");
     }
+    @Test
+    void aPluginNotInstalledYetTakesAnyRelease() throws Exception {
+        PluginInfo fresh = PluginCatalog.SUGGESTED.getFirst().info();
+        var found = PluginUpdater.newer(fresh, release("0.1.0", "palette-tools-0.1.0.jar"));
+        assertThat(found).isNotNull();
+        assertThat(found.version()).isEqualTo("0.1.0");
+        assertThat(found.jar().name()).isEqualTo("palette-tools-0.1.0.jar");
+    }
+
+    @Test
+    void explainsFailures() {
+        assertThat(PluginUpdater.explain(new java.net.ConnectException())).contains("internet connection");
+        assertThat(PluginUpdater.explain(new java.io.IOException("x", new java.net.UnknownHostException("api.github.com"))))
+                .contains("internet connection");
+        assertThat(PluginUpdater.explain(new java.net.http.HttpConnectTimeoutException("timed out"))).contains("internet connection");
+        assertThat(PluginUpdater.explain(new java.io.IOException("github.com/o/r has no releases"))).isEqualTo("github.com/o/r has no releases.");
+        assertThat(PluginUpdater.explain(new java.io.IOException("its 2.0 release needs a newer BlockDesigner.")))
+                .isEqualTo("its 2.0 release needs a newer BlockDesigner.");
+    }
 }
