@@ -44,9 +44,13 @@ Each lives in its own repository and is a good reference for the features it use
 |---|---|---|
 | [BlockCompanion Plugin](https://github.com/doolecg/BlockDesigner-ResourceTracker) (formerly Resource Tracker) | 5 | a panel, a menu action, scene events, data kept per project in the data folder |
 | [Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools) | 5 | a tool on the selection, transforms, an exporter, an importer, a panel |
-| [Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes) | 4 | scene objects saved in the project, settings in the plugin's tab |
 | [Terrain Generator](https://github.com/doolecg/BlockDesigner-TerrainGenerator) | 3 | a panel, a command, a tool, a scene object that holds its state in the project, a two-module build |
 | [Pixel Art Generator](https://github.com/doolecg/BlockDesigner-PixelArtGenerator) | 5 | a large panel, a placing tool, an importer |
+
+Reference Planes, once a plugin here too, is built into BlockDesigner now as its reference images; its code
+([`app/.../refplanes`](https://github.com/doolecg/BlockDesigner/tree/main/app/src/main/java/io/blockdesigner/app/refplanes))
+still uses the scene object interfaces, so it remains a scene object example. BlockDesigner no longer loads a plugin with
+the id `reference-planes`.
 
 The two example plugins in the main repository, [`examples/hello-plugin`](https://github.com/doolecg/BlockDesigner/tree/main/examples/hello-plugin)
 (API 1) and [`examples/palette-tools`](https://github.com/doolecg/BlockDesigner/tree/main/examples/palette-tools)

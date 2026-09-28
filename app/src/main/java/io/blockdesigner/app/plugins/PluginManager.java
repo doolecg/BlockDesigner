@@ -62,6 +62,20 @@ public final class PluginManager {
 
     public enum State { ENABLED, DISABLED, FAILED, INCOMPATIBLE }
 
+    /**
+     * Plugins that are part of BlockDesigner now, by id, with what to tell the user. Their jars are never loaded (the
+     * built-in feature and the plugin would both run): {@link #loadAll} renames a jar it finds to {@code .jar.retired}
+     * so it is left alone from then on (and can be put back for an older BlockDesigner), and {@link #install} refuses
+     * them. Their objects in projects are kept under the plugin's id, so the built-in feature shows them.
+     */
+    public static final Map<String, String> BUILT_IN = Map.of(
+            "reference-planes", "Reference Planes is built into BlockDesigner now: add pictures with the picture button at the"
+                    + " top of the Layers panel, or drop one on the window. Its settings are on the Reference images page of"
+                    + " Settings, and the pictures in your projects are kept.");
+
+    /** What a set-aside built-in plugin's jar is renamed to (plugins are only read from {@code *.jar}). */
+    static final String RETIRED = ".retired";
+
     /** An exporter together with the plugin that added it. */
     public record Export(Plugin plugin, PluginExporter exporter) {
     }
@@ -224,6 +238,10 @@ public final class PluginManager {
     private final Map<String, Plugin> plugins = new LinkedHashMap<>();
     /** Jars that couldn't even be read (no descriptor, broken zip), by file name. */
     private final Map<String, String> broken = new LinkedHashMap<>();
+    /** Built-in plugins whose jars the last {@link #loadAll} set aside (see {@link #BUILT_IN}). */
+    private final List<PluginInfo> retired = new ArrayList<>();
+    /** The last failure of a built-in feature's scene object that was logged (a failing draw repeats every frame). */
+    private String lastBuiltInError;
 
     private final SceneEventBus events;
     private final BlockCatalog catalog;
@@ -256,7 +274,13 @@ public final class PluginManager {
         SceneObjectStore s = host.objects();
         this.objects = s != null ? s : new SceneObjectStore(host.editor() == null ? null : host.editor().undoStack());
         objects.setErrors((owner, t) -> {
-            if (!(owner instanceof Plugin p)) return;
+            if (!(owner instanceof Plugin p)) {
+                // A built-in feature's objects (reference images): to the console, once per message.
+                String msg = owner + ": " + t;
+                if (owner != null && !msg.equals(lastBuiltInError)) io.blockdesigner.app.ConsoleLog.error(owner.toString(), "Scene object failed", t);
+                lastBuiltInError = msg;
+                return;
+            }
             p.log("Scene object failed: " + t);
             String msg = t.getMessage() == null ? t.toString() : t.getMessage();
             if (!msg.equals(p.lastObjectError)) host.toast("✖ " + p.info().name() + ": " + msg);
@@ -274,6 +298,11 @@ public final class PluginManager {
 
     public Map<String, String> brokenJars() {
         return Map.copyOf(broken);
+    }
+
+    /** Built-in plugins whose jars the last {@link #loadAll} found and set aside, to tell the user once. */
+    public List<PluginInfo> retired() {
+        return List.copyOf(retired);
     }
 
     public Optional<Plugin> find(String id) {
@@ -425,6 +454,7 @@ public final class PluginManager {
         for (Plugin p : List.copyOf(plugins.values())) unload(p);
         plugins.clear();
         broken.clear();
+        retired.clear();
         try {
             Files.createDirectories(folder);
         } catch (IOException e) {
@@ -455,6 +485,10 @@ public final class PluginManager {
             broken.put(jar.getFileName().toString(), e.getMessage());
             return null;
         }
+        if (BUILT_IN.containsKey(info.id())) {
+            retire(jar, info);
+            return null;
+        }
         if (plugins.containsKey(info.id())) {
             broken.put(jar.getFileName().toString(), "Another jar already provides the plugin id '" + info.id() + "'");
             return null;
@@ -466,6 +500,19 @@ public final class PluginManager {
         }
         plugins.put(info.id(), p);
         return p;
+    }
+
+    /**
+     * A built-in plugin's jar: renamed so it isn't found again, or, if it can't be (in use, read-only), listed with the
+     * jars that don't load, saying why.
+     */
+    private void retire(Path jar, PluginInfo info) {
+        try {
+            Files.move(jar, jar.resolveSibling(jar.getFileName() + RETIRED), StandardCopyOption.REPLACE_EXISTING);
+            retired.add(info);
+        } catch (IOException | RuntimeException e) {
+            broken.put(jar.getFileName().toString(), BUILT_IN.get(info.id()) + " This jar isn't loaded; you can delete it.");
+        }
     }
 
     /** Reads and checks {@code blockdesigner-plugin.json} from a jar. */
@@ -489,6 +536,7 @@ public final class PluginManager {
     /** Copies a jar into the plugins folder (replacing an older copy of the same plugin) and enables it. */
     public Plugin install(Path jar) throws IOException {
         PluginInfo info = readDescriptor(jar);
+        if (BUILT_IN.containsKey(info.id())) throw new IOException(BUILT_IN.get(info.id()) + " There's no need to install it.");
         Plugin existing = plugins.get(info.id());
         if (existing != null) {
             unload(existing);

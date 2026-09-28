@@ -95,6 +95,8 @@ public final class MainWindow {
     private final BorderPane centerColumn = new BorderPane();
     private final java.util.Set<String> disabledPlugins;
     private final io.blockdesigner.app.plugins.PluginManager plugins;
+    /** Reference images (built in; the Reference Planes plugin before). */
+    private final io.blockdesigner.app.refplanes.ReferencePlanes referencePlanes;
     private final Updater updater = new Updater();
     private ToolDock toolDock;
     private ConsolePanel console;
@@ -111,6 +113,12 @@ public final class MainWindow {
         this.plugins = new io.blockdesigner.app.plugins.PluginManager(io.blockdesigner.app.Settings.dir().resolve("plugins"), pluginHost(), disabledPlugins,
                 ws.settings().pluginOptions);
         viewport.onSelectionChanged(plugins::selectionChanged);
+        referencePlanes = new io.blockdesigner.app.refplanes.ReferencePlanes(ws.objects(), ws.settings(), referenceUi());
+        // The Reference Planes plugin's settings and key, from before it was built in.
+        if (io.blockdesigner.app.refplanes.ReferencePlanes.importPluginSettings(ws.settings(), k -> {
+            KeyCombination c = Keybinds.parse(k);
+            return c != null && !keys.usersOf(c, null).isEmpty();
+        })) ws.settings().save();
         viewport.setTransformItems(this::transformItems);
 
         resolveDark();
@@ -127,6 +135,7 @@ public final class MainWindow {
         layers = new LayersPanel(ws, new LayersPanel.Actions(this::importDialog, l -> exportDialog(null, List.of(l)), viewport::frameLayer,
                 viewport::fixLayerShapes));
         layers.setObjectFocus(viewport::frameObject);
+        layers.setAddReference(referencePlanes::chooseAndAdd);
         palette = new BlockPalette(ws);
         SplitPane left = new SplitPane(layers, palette);
         left.setOrientation(javafx.geometry.Orientation.VERTICAL);
@@ -516,6 +525,27 @@ public final class MainWindow {
         };
     }
 
+    /** What the built-in reference images need from the window: file choosers, toasts, the dialogs' look. */
+    private io.blockdesigner.app.refplanes.ReferencePlanes.Ui referenceUi() {
+        return new io.blockdesigner.app.refplanes.ReferencePlanes.Ui() {
+            @Override
+            public javafx.stage.Window owner() {
+                return stage;
+            }
+
+            @Override
+            public void toast(String message) {
+                viewport.showToast(message);
+            }
+
+            @Override
+            public void style(javafx.scene.control.Dialog<?> dialog) {
+                if (dialog.getOwner() == null && !dialog.isShowing()) dialog.initOwner(stage);
+                Dialogs.style(dialog.getDialogPane(), ws.darkProperty().get());
+            }
+        };
+    }
+
     /** Settings at the plugin's page; a plugin without settings shows its tab's Overview instead. */
     private void openPluginSettings(io.blockdesigner.app.plugins.PluginManager.Plugin plugin) {
         var o = plugin.settingsOptions();
@@ -806,6 +836,7 @@ public final class MainWindow {
         stage.show();
         javafx.application.Platform.runLater(this::restorePanels);
         plugins.loadAll();
+        pluginsBuiltInNow();
         long failed = plugins.plugins().stream().filter(p -> p.state() == io.blockdesigner.app.plugins.PluginManager.State.FAILED).count();
         if (failed > 0) ws.statusProperty().set(failed + " plugin" + (failed == 1 ? "" : "s") + " failed to load · see Plugins > Manage plugins");
         if (ws.settings().showStartScreen) startScreen.open();
@@ -821,6 +852,16 @@ public final class MainWindow {
             if (n > 0) javafx.application.Platform.runLater(() ->
                     ws.statusProperty().set("Removed the old copy of BlockDesigner from AppData · your settings are kept"));
         });
+    }
+
+    /** Tells the user once about a plugin that is part of BlockDesigner now, whose jar loadAll just set aside. */
+    private void pluginsBuiltInNow() {
+        for (var info : plugins.retired()) {
+            String what = io.blockdesigner.app.plugins.PluginManager.BUILT_IN.get(info.id());
+            io.blockdesigner.app.ConsoleLog.info("Plugins", what);
+            Platform.runLater(() -> info(info.name() + " is built in now", what + "\n\nThe plugin isn't needed any more, so BlockDesigner"
+                    + " no longer loads it (its jar in " + plugins.folder() + " was renamed to end in .retired)."));
+        }
     }
 
     // ---- updates ------------------------------------------------------------------------------------------------
@@ -1476,7 +1517,7 @@ public final class MainWindow {
             add.accept(imp, new String[]{imp.importer().displayName(), "Blocks, placed like a schematic · " + imp.plugin().info().name()});
         }
         for (var t : types) {
-            String from = t.owner() instanceof io.blockdesigner.app.plugins.PluginManager.Plugin p ? " · " + p.info().name() : "";
+            String from = t.owner() instanceof io.blockdesigner.app.plugins.PluginManager.Plugin p ? " · " + p.info().name() : " · built in";
             add.accept(t, new String[]{t.type().name(), "A scene object in the project" + from});
         }
         javafx.scene.control.Dialog<ButtonType> d = new javafx.scene.control.Dialog<>();
@@ -1507,6 +1548,7 @@ public final class MainWindow {
             error("Could not open " + file.getFileName(), e.getMessage());
         } catch (Throwable t) {
             if (r.owner() instanceof io.blockdesigner.app.plugins.PluginManager.Plugin p) plugins.report(p, r.type().name(), t);
+            else error("Could not open " + file.getFileName(), String.valueOf(t.getMessage()));
         }
     }
 
@@ -1858,6 +1900,7 @@ public final class MainWindow {
         run.put(Keybinds.Action.SAVE_AS, () -> save(true));
         run.put(Keybinds.Action.OPEN, this::openDialog);
         run.put(Keybinds.Action.IMPORT, this::importDialog);
+        run.put(Keybinds.Action.ADD_REFERENCE_IMAGE, referencePlanes::chooseAndAdd);
         run.put(Keybinds.Action.EXPORT, () -> exportDialog(null, null));
         run.put(Keybinds.Action.EXPORT_DATAPACK, this::exportDatapack);
         run.put(Keybinds.Action.NEW_PROJECT, this::newProject);

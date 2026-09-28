@@ -73,6 +73,26 @@ Both include their own Java runtime, so there is nothing else to install.
 - Move layers with the wheel, the arrow keys or the Move gizmo, and turn them in quarter turns.
 - The slice view steps through Y levels.
 
+### Reference images
+
+Put pictures in the scene and build from them, like Blender's reference images. This was the Reference Planes plugin; it
+is built in now.
+
+- **Add one** with the picture button at the top of the **Layers** panel, by dropping a PNG, JPEG, GIF or BMP on the
+  window, or with **Import**. **Add a reference image** can be given a key in **Settings › Keybinds**. It goes at the
+  point the camera orbits around, facing you. Added in an orthographic axis view (numpad 1 / 3 / 7, or a view cube face),
+  it faces that view straight on and shows only there.
+- **How new pictures start out** is on the **Reference images** page of **Settings**: height in blocks, opacity, how
+  blocks cover them, and whether one added in an axis view shows only in that view.
+- They are listed above the layers with a **REFERENCE** tag: click to select, double-click to rename, eye and lock to
+  hide or lock. Select one and use **G** / **R** / **S** to move, turn and scale it (Ctrl snaps); **Delete** removes it.
+  Every change can be undone.
+- **Right-click** one (in the view or in Layers) for **Properties…** (position, rotation, scale, UV offset and scale,
+  opacity, with resets), **Opacity**, **Show in** (all views, orthographic views, or one of the six), **Draw** (behind
+  blocks, in the scene, in front of blocks), flips, aligning it to the view and **Replace picture…**.
+- Pictures are saved inside the `.bdproj`, at full size, so a project opens with its references on another PC. Projects
+  made with the Reference Planes plugin open with their pictures.
+
 ### Import and export
 
 - Import and export **Create / structure-block `.nbt`**, **Litematica `.litematic`** (multi-region) and **WorldEdit `.schem`** (Sponge v2 / v3). Directional blocks stay correct through rotation and mirroring.
@@ -279,11 +299,14 @@ Each plugin lives in its own repository and is released there, separately from B
 
 | Plugin | What it does | Needs |
 |---|---|---|
-| **[Reference Planes](https://github.com/doolecg/BlockDesigner-ReferencePlanes)** | Reference images in the scene, like Blender's: move, rotate and scale them, pick the views they show in, set opacity and UV. Listed in Layers as REFERENCE | 0.4.24 |
 | **[BlockCompanion Plugin](https://github.com/doolecg/BlockDesigner-ResourceTracker)** (formerly Resource Tracker; installed with BlockDesigner) | Links BlockDesigner to the BlockCompanion Minecraft mod: send projects into the game and edit builds from it. Also the materials a build needs as items (stacks and shulker boxes), what you have gathered and what is left, saved with each project | 0.4.24 |
 | **[Palette Tools](https://github.com/doolecg/BlockDesigner-PaletteTools)** | Weathering, palette swap and gradient transforms, a Palette panel, a colour palette exporter, a pixel art importer and a Wall tool | 0.4.24 |
 
 Download a plugin's `.jar` from its releases page, then install it with **Plugins › Manage plugins… › Install…**.
+
+**Reference Planes** is no longer a plugin: it is built in as [reference images](#reference-images). If you have its
+plugin, BlockDesigner no longer loads it (it renames the jar to end in `.retired` and tells you once), and keeps its
+settings, its key and the pictures in your projects.
 
 To write one, see **[PLUGINS.md](PLUGINS.md)** (guide), [docs/plugin-api-reference.md](docs/plugin-api-reference.md) (every API type) and the plugin repositories above. The smallest template to copy is [`examples/hello-plugin`](examples/hello-plugin); it and [`examples/palette-tools`](examples/palette-tools) stay in this repository because BlockDesigner's own tests load them. The [plugin developer wiki](docs/wiki/Home.md) covers project setup, the manifest, loading, automatic updates, releasing and testing.
 
@@ -339,7 +362,7 @@ The integration tests in `assets` and `render` use your local Minecraft install 
 | `render` | LWJGL / OpenGL offscreen renderer (MSAA, smooth AO, sorted translucency), meshing on worker threads, picking |
 | `worldgen` | Data pack exporter: single structures and village-style jigsaw layouts |
 | `plugin-api` | The API third-party plugins compile against |
-| `app` | JavaFX UI (AtlantaFX theme), plugin manager, updater |
+| `app` | JavaFX UI (AtlantaFX theme), reference images (`refplanes`), plugin manager, updater |
 | `examples/hello-plugin` | Sample plugin for API 1, also used by the tests |
 | `examples/palette-tools` | Sample plugin for API 2 (transforms, panel, tool, importer, exporter), also used by the tests |
 | `packaging` | Icon source (`make_icon.py`) and Windows packaging resources |

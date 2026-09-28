@@ -21,8 +21,24 @@ class KeybindsTest {
     @Test
     void everyDefaultParses() {
         for (Keybinds.Action a : Keybinds.Action.values()) {
-            assertThat(a.defaults()).as(a.name()).isNotEmpty().doesNotContainNull();
+            assertThat(a.defaults()).as(a.name()).doesNotContainNull();
+            // Every action has a key, except adding a reference image: it had none as a plugin action.
+            if (a != Keybinds.Action.ADD_REFERENCE_IMAGE) assertThat(a.defaults()).as(a.name()).isNotEmpty();
         }
+    }
+
+    @Test
+    void anActionWithoutAKeyCanBeGivenOne() {
+        Settings s = new Settings();
+        Keybinds k = new Keybinds(s);
+        assertThat(k.get(Keybinds.Action.ADD_REFERENCE_IMAGE)).containsOnlyNulls();
+        // The plugin's key is carried over under this name.
+        assertThat(Keybinds.Action.valueOf(io.blockdesigner.app.refplanes.ReferencePlanes.KEYBIND)).isEqualTo(Keybinds.Action.ADD_REFERENCE_IMAGE);
+        KeyCombination f8 = new KeyCodeCombination(KeyCode.F8);
+        k.set(Keybinds.Action.ADD_REFERENCE_IMAGE, 0, f8);
+        assertThat(new Keybinds(s).get(Keybinds.Action.ADD_REFERENCE_IMAGE)[0]).isEqualTo(f8);
+        k.set(Keybinds.Action.ADD_REFERENCE_IMAGE, 0, null);
+        assertThat(k.isDefault(Keybinds.Action.ADD_REFERENCE_IMAGE)).isTrue();
     }
 
     @Test

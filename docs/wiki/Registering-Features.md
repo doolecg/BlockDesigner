@@ -173,7 +173,9 @@ ctx.objects().add("marker", "Spawn", new Pose(new Vec3(0, 64, 0), new Vec3(0, 0,
 
 `Marker.draw(view, out)` draws in the object's own space with `out.line(from, to, argb)` and
 `out.image(...)`; `save()` returns only your own state (BlockDesigner keeps name and pose). Change your state through
-`ObjectHandle.edit(label, change)` so it is undoable. Full example: Reference Planes, and PLUGINS.md,
+`ObjectHandle.edit(label, change)` so it is undoable. Full example: BlockDesigner's built-in reference images
+([`app/.../refplanes`](https://github.com/doolecg/BlockDesigner/tree/main/app/src/main/java/io/blockdesigner/app/refplanes),
+once the Reference Planes plugin), and PLUGINS.md,
 [Scene objects](https://github.com/doolecg/BlockDesigner/blob/main/PLUGINS.md#scene-objects).
 
 ## Settings (API 4)

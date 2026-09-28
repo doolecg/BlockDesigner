@@ -37,8 +37,8 @@ import java.util.List;
 
 /**
  * The Settings window: General (author, start screen, Minecraft assets, plugins, updates, where settings live),
- * Appearance (colour theme, dark / light / match Windows), Keybinds (the app's and plugins' tools and actions), and a
- * page per plugin with settings. Changes apply immediately.
+ * Appearance (colour theme, dark / light / match Windows), Keybinds (the app's and plugins' tools and actions),
+ * Reference images (how new ones start out), and a page per plugin with settings. Changes apply immediately.
  */
 final class SettingsDialog extends Dialog<Void> {
     private final Workspace ws;
@@ -99,7 +99,8 @@ final class SettingsDialog extends Dialog<Void> {
         ToggleButton appearance = navButton("Appearance", Feather.DROPLET);
         ToggleButton keybinds = navButton("Keybinds", Feather.COMMAND);
         keybindsNav = keybinds;
-        VBox side = new VBox(4, general, appearance, keybinds);
+        ToggleButton references = navButton("Reference images", Feather.IMAGE);
+        VBox side = new VBox(4, general, appearance, keybinds, references);
         // One page per running plugin that has settings, under their own heading.
         ToggleButton open = null;
         List<PluginManager.Plugin> withSettings = plugins == null ? List.of() : plugins.plugins().stream()
@@ -140,6 +141,7 @@ final class SettingsDialog extends Dialog<Void> {
         appearance.setOnAction(e -> showAppearance());
         general.setOnAction(e -> showGeneral(changeAssets, openPlugins, checkUpdates));
         keybinds.setOnAction(e -> showKeybinds());
+        references.setOnAction(e -> showReferenceImages());
         nav.selectedToggleProperty().addListener((o, a, b) -> {
             if (b == null && a != null) a.setSelected(true);
         });
@@ -417,6 +419,40 @@ final class SettingsDialog extends Dialog<Void> {
                         + Settings.dir() + " and carry over every update. The first start of each new version also "
                         + "copies them into " + Settings.backupDir() + " (the last ten are kept)."),
                 section("Files"), folder, hint(Settings.dir().toString()));
+    }
+
+    // ---- Reference images ------------------------------------------------------------------------------------
+
+    /** How new reference images start out (the next one added uses them), with Reset to defaults and where its key is. */
+    private void showReferenceImages() {
+        shownPlugin = null;
+        Settings s = ws.settings();
+        OptionsEditor editor = new OptionsEditor(io.blockdesigner.app.refplanes.ReferencePlanes.settingsValues(s),
+                plugins == null ? null : plugins.blocks(), ws::blockToPlace, v -> io.blockdesigner.app.refplanes.ReferencePlanes.saveSettings(s, v))
+                .rememberExpanded(io.blockdesigner.app.refplanes.ReferencePlanes.ID + "/settings/tab", s.expandedOptionGroups);
+        Button reset = new Button("Reset to defaults", new FontIcon(Feather.ROTATE_CCW));
+        reset.getStyleClass().add("flat");
+        reset.setTooltip(new Tooltip("Every reference image setting back to its default"));
+        reset.setOnAction(e -> editor.reset());
+        Region grow = new Region();
+        HBox.setHgrow(grow, Priority.ALWAYS);
+        HBox top = new HBox(8, title("Reference images"), grow, reset);
+        top.setAlignment(Pos.CENTER_LEFT);
+        javafx.scene.control.Hyperlink keysLink = new javafx.scene.control.Hyperlink("Keybinds page");
+        keysLink.getStyleClass().add("bd-link");
+        keysLink.setOnAction(e -> {
+            keybindsNav.setSelected(true);
+            showKeybinds();
+        });
+        Label caption = new Label("A key for Add a reference image goes on the");
+        caption.getStyleClass().add("bd-caption");
+        HBox keysLine = new HBox(4, caption, keysLink);
+        keysLine.setAlignment(Pos.CENTER_LEFT);
+        page.getChildren().setAll(top,
+                hint("Pictures in the scene to build from, like Blender's reference images. Add one with the picture button at the top of "
+                        + "the Layers panel, Import, or by dropping a picture on the window. These settings are how new pictures start out; "
+                        + "change each one afterwards from its right-click menu."),
+                editor, keysLine);
     }
 
     // ---- Keybinds --------------------------------------------------------------------------------------------
