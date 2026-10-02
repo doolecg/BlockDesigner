@@ -42,10 +42,10 @@ and `MainWindow.updatePlugins`, so you can make releases it accepts.
 6. **The jar's manifest `version` must equal the tag.** BlockDesigner doesn't check this, but if the jar says an
    older version than the tag, the installed version stays older than the latest release, and the plugin is
    downloaded and reinstalled at every start. Fill the version from the build (`"version": "@VERSION@"`, see
-   [Setting up a plugin project](Setting-Up-A-Plugin-Project.md)) and tag with the same number.
+   [Setting up a plugin project](Setting-Up-A-Plugin-Project)) and tag with the same number.
 
 In short: **manifest `updates` = your public GitHub repo; release tag = `x.y.z` = manifest version; exactly one asset,
-`<id>-x.y.z.jar`; not a draft or pre-release.** The [release checklist](Releasing-On-GitHub.md) produces exactly that.
+`<id>-x.y.z.jar`; not a draft or pre-release.** The [release checklist](Releasing-On-GitHub) produces exactly that.
 
 ## What happens during an update
 
@@ -62,7 +62,7 @@ thread, one after another:
    (<release page>)".
 
 Your plugin's `disable()` runs on the old version, and `enable()` on the new one, in the same session: no restart.
-Data in the [data folder](Storing-Data-And-Settings.md) and saved settings are kept.
+Data in the [data folder](Storing-Data-And-Settings) and saved settings are kept.
 
 ## When it checks
 

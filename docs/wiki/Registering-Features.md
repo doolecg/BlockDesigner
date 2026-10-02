@@ -3,7 +3,7 @@
 Register everything from `enable(PluginContext ctx)`. Each section below has a short example; the worked examples
 with every option are in [PLUGINS.md](https://github.com/doolecg/BlockDesigner/blob/main/PLUGINS.md), and every member
 is listed in the [API reference](https://github.com/doolecg/BlockDesigner/blob/main/docs/plugin-api-reference.md).
-Commands have [their own page](BlockEdit-Commands.md).
+Commands have [their own page](BlockEdit-Commands).
 
 **Ids.** Format ids must be unique across all plugins (they share `Schematics`' list). Exporter, importer,
 transform, panel and tool ids only need to be unique within your plugin; BlockDesigner keys them as
@@ -193,7 +193,7 @@ ctx.registerSettings(Options.builder()
         .build(), v -> tracker.configure(v.toggle("mobs"), v.choice("sort")));
 ```
 
-More on where the values live: [Storing data and settings](Storing-Data-And-Settings.md).
+More on where the values live: [Storing data and settings](Storing-Data-And-Settings).
 
 ## Pages built with the UI kit (API 6)
 

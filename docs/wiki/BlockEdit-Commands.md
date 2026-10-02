@@ -55,7 +55,7 @@ ctx.registerCommand(new PluginCommand("pillar", "/pillar <height> [block]", "Bui
 
 ## `/transform`
 
-While any plugin has a [transform](Registering-Features.md#transforms-api-2), BlockDesigner adds a `/transform <id>`
+While any plugin has a [transform](Registering-Features#transforms-api-2), BlockDesigner adds a `/transform <id>`
 command (`/transform` alone lists them) that opens the transform's dialog. If a plugin already registered its own
 `/transform`, BlockDesigner leaves it alone and the transforms stay reachable from the menus.
 

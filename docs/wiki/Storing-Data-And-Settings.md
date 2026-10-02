@@ -67,7 +67,7 @@ options, so a page and the Import window share one set of values (Pixel Art Gene
 ## State saved in the project (API 3)
 
 When state belongs to the build (a reference image, a generator's settings for this terrain), put it in a
-[scene object](Registering-Features.md#scene-objects-api-3):
+[scene object](Registering-Features#scene-objects-api-3):
 
 - `SceneObject.save()` returns your state as bytes; `load(bytes)` puts it back when the project opens and on undo /
   redo. BlockDesigner keeps the object's name, pose, visibility and lock itself.

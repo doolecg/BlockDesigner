@@ -19,13 +19,13 @@ The folder is created if it doesn't exist. **Plugins › Manage plugins… › O
 When the main window is shown, `loadAll()` runs on the JavaFX thread:
 
 1. Every `*.jar` directly in the folder (not in subfolders) is listed and sorted by file name.
-2. For each jar the [manifest](The-Manifest.md) is read. A jar with no manifest, a broken zip or JSON, a bad `id` or
+2. For each jar the [manifest](The-Manifest) is read. A jar with no manifest, a broken zip or JSON, a bad `id` or
    no `main` goes to the **broken jars** list with the reason. A second jar with an id already seen is broken too.
 3. A plugin whose `api` is higher than `PluginApi.VERSION` is marked **INCOMPATIBLE** and never loaded.
 4. Every other plugin is **enabled**, unless the user switched it off before (its id is in `disabledPlugins` in
    `settings.json`), in which case it is **DISABLED** and none of its classes are loaded.
 5. If any plugin failed, the status bar says "N plugin(s) failed to load · see Plugins > Manage plugins".
-6. If automatic plugin updates are on, the [update check](Automatic-Updates.md) starts in the background.
+6. If automatic plugin updates are on, the [update check](Automatic-Updates) starts in the background.
 
 ## Enabling: class loading
 
@@ -73,7 +73,7 @@ is logged, and everything it registered before the failure is removed again.
   run with full access), unloads an installed plugin with the same id, deletes its jar if the file name differs,
   copies the new jar into the folder and enables it (even if the old one was off; the automatic updater keeps it off
   instead). "Installed, but it failed to start" shows the error.
-- **Uninstall**: unloads the plugin and deletes its jar. Its [data folder](Storing-Data-And-Settings.md) and saved
+- **Uninstall**: unloads the plugin and deletes its jar. Its [data folder](Storing-Data-And-Settings) and saved
   options are **not** deleted. PLUGINS.md notes that if Windows still has the jar locked, it can be deleted after a
   restart.
 - **App shutdown**: every plugin is unloaded (so `disable()` runs).

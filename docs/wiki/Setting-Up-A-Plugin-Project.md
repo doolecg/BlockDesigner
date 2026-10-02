@@ -1,7 +1,7 @@
 # Setting up a plugin project
 
 A plugin is an ordinary Gradle (or any other) Java project that produces one jar with a
-[`blockdesigner-plugin.json`](The-Manifest.md) at its root. This page describes the layout every official plugin
+[`blockdesigner-plugin.json`](The-Manifest) at its root. This page describes the layout every official plugin
 uses; copying one of them (the BlockCompanion Plugin, formerly Resource Tracker, is the smallest) is the quickest start.
 
 ## What you need
@@ -93,13 +93,13 @@ Why it looks like this:
 
 - **`compileOnly`, never `implementation`, for everything BlockDesigner already has**: the API jars, JavaFX and
   Jackson. The app puts them on the class path the plugin's class loader delegates to (see
-  [How plugins are loaded](How-Plugins-Are-Loaded.md)). A bundled copy would never be used (the parent loader wins),
+  [How plugins are loaded](How-Plugins-Are-Loaded)). A bundled copy would never be used (the parent loader wins),
   but it makes the jar bigger and can confuse you while debugging. Tests need them at runtime, hence the matching
   `testImplementation`.
 - **Your own libraries can be bundled** into the jar (for example with a fat-jar or shadow setup). Pick versions
   that don't clash with what BlockDesigner ships, because BlockDesigner's copy is found first when both exist.
 - **`@VERSION@`** in the manifest is replaced by the Gradle version, so the tag, the jar name and the manifest version
-  can't drift apart. That matters for [automatic updates](Automatic-Updates.md).
+  can't drift apart. That matters for [automatic updates](Automatic-Updates).
 - **`rootProject.name` = the plugin id** in `settings.gradle.kts`, so the jar is `<id>-<version>.jar`, the name the
   updater looks for first.
 - **`gradle.properties`** points `org.gradle.java.home` at a JDK 26. The official repos commit the maintainer's own
@@ -122,7 +122,7 @@ public final class ExamplePlugin implements BlockDesignerPlugin {
 }
 ```
 
-The class needs a public no-argument constructor. See [Plugin lifecycle and context](Plugin-Lifecycle-And-Context.md).
+The class needs a public no-argument constructor. See [Plugin lifecycle and context](Plugin-Lifecycle-And-Context).
 
 ## Build and try it
 
@@ -147,4 +147,4 @@ copies the plugin jar into the root `build/libs/`, where release tooling looks f
 
 Replace the two jars in `libs/` with the ones from the newer BlockDesigner, update their file names in
 `build.gradle.kts`, rebuild and test. Only raise `"api"` in the manifest if you start using something from a newer
-level ([API levels](API-Levels.md)).
+level ([API levels](API-Levels)).

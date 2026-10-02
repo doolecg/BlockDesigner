@@ -21,7 +21,7 @@ The error under it is the exception from loading or `enable`:
   in your jar. Bundle it (BlockDesigner provides only its own API, `core`, JavaFX, Jackson and its other
   dependencies).
 - `IllegalArgumentException: The command /x already exists` - pick another command name (see
-  [BlockEdit commands](BlockEdit-Commands.md)).
+  [BlockEdit commands](BlockEdit-Commands)).
 - `IllegalArgumentException: … registered twice` or "… ids use a-z …" - fix the id.
 - Anything else - your `enable` threw. The plugin's log and the Console have the line "Failed to enable: …".
 
@@ -41,7 +41,7 @@ exposes (the app's own classes, AtlantaFX internals, app.css classes) can change
 
 ## It doesn't update itself
 
-Go through [Automatic updates](Automatic-Updates.md). The usual causes:
+Go through [Automatic updates](Automatic-Updates). The usual causes:
 
 - no `updates` in the manifest, or not an `https://github.com/owner/repo` link (the Plugins window row says "Updates
   by hand");
@@ -91,7 +91,7 @@ plugin-to-plugin service mechanism; they can only both react to the same scene e
 
 ## Why is the command class called `WorldEdit` when the app says BlockEdit?
 
-The class predates the rename and is part of the API; see [BlockEdit commands](BlockEdit-Commands.md).
+The class predates the rename and is part of the API; see [BlockEdit commands](BlockEdit-Commands).
 
 ## Does my plugin have to live in its own repository?
 

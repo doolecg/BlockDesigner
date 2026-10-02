@@ -1,3 +1,27 @@
+# BlockDesigner user guide
+
+BlockDesigner is a Windows editor for Minecraft builds. These pages show how to use it.
+
+**Start here**
+- [Getting started](Getting-Started): install, first launch, settings and updates.
+- [Building like in Minecraft](Building-Like-In-Minecraft): movement, hotbar, place, break and pick, shapes, symmetry.
+- [Controls and keybinds](Controls-And-Keybinds): every default key.
+
+**Editing**
+- [Brushes, selections and BlockEdit](Brushes-Selections-And-BlockEdit)
+- [Layers](Layers)
+- [Reference images](Reference-Images)
+
+**Files and look**
+- [Import and export](Import-And-Export): Litematica, WorldEdit, Create and worldgen data packs.
+- [Camera, look and feel](Camera-Look-And-Feel)
+
+**Plugins and help**
+- [Using plugins](Using-Plugins)
+- [User FAQ](User-FAQ)
+
+---
+
 # BlockDesigner plugin developer wiki
 
 BlockDesigner is a Windows editor for Minecraft builds. A **plugin** is a `.jar` that BlockDesigner loads at startup
@@ -11,30 +35,29 @@ It sits beside the existing plugin documents in the repository and links to them
 - [docs/plugin-api-v2.md](https://github.com/doolecg/BlockDesigner/blob/main/docs/plugin-api-v2.md): the design record for API 2.
 
 Where those and this wiki disagree, the code wins: `plugin-api/src/main/java/io/blockdesigner/plugin` (the API) and
-`app/src/main/java/io/blockdesigner/app/plugins` (the loader and updater). The pages here were checked against the
-code of BlockDesigner 0.4.22 (plugin API 5).
+`app/src/main/java/io/blockdesigner/app/plugins` (the loader and updater).
 
 ## Pages
 
 **Start here**
-- [What plugins can do](What-Plugins-Can-Do.md): the extension points and where each shows up in the app.
-- [API levels](API-Levels.md): API 1 to 5, what each added and the first BlockDesigner version with it.
-- [Setting up a plugin project](Setting-Up-A-Plugin-Project.md): the template, JDK 26, the vendored API jars, `compileOnly`.
-- [The manifest](The-Manifest.md): `blockdesigner-plugin.json`, field by field.
+- [What plugins can do](What-Plugins-Can-Do): the extension points and where each shows up in the app.
+- [API levels](API-Levels): API 1 to 5, what each added and the first BlockDesigner version with it.
+- [Setting up a plugin project](Setting-Up-A-Plugin-Project): the template, JDK 26, the vendored API jars, `compileOnly`.
+- [The manifest](The-Manifest): `blockdesigner-plugin.json`, field by field.
 
 **How it works**
-- [How plugins are loaded](How-Plugins-Are-Loaded.md): the plugins folder, class loading, on and off, errors, logs and the Console.
-- [Plugin lifecycle and context](Plugin-Lifecycle-And-Context.md): `enable`, `disable`, `PluginContext`, threads.
-- [Registering features](Registering-Features.md): formats, exporters, importers, actions, tools, transforms, panels, scene objects, settings.
-- [BlockEdit commands](BlockEdit-Commands.md): `/commands`, and why the Java class is still called `WorldEdit`.
-- [Storing data and settings](Storing-Data-And-Settings.md): the data folder, settings in the plugin's tab, remembered options, data saved in the project.
-- [Project file format](Project-File-Format.md): the `.bdproj` project file, the format shared with the game.
+- [How plugins are loaded](How-Plugins-Are-Loaded): the plugins folder, class loading, on and off, errors, logs and the Console.
+- [Plugin lifecycle and context](Plugin-Lifecycle-And-Context): `enable`, `disable`, `PluginContext`, threads.
+- [Registering features](Registering-Features): formats, exporters, importers, actions, tools, transforms, panels, scene objects, settings.
+- [BlockEdit commands](BlockEdit-Commands): `/commands`, and why the Java class is still called `WorldEdit`.
+- [Storing data and settings](Storing-Data-And-Settings): the data folder, settings in the plugin's tab, remembered options, data saved in the project.
+- [Project file format](Project-File-Format): the `.bdproj` project file, the format shared with the game.
 
 **Shipping**
-- [Automatic updates](Automatic-Updates.md): exactly what a release needs for BlockDesigner to update the plugin by itself.
-- [Releasing on GitHub](Releasing-On-GitHub.md): version, notes, tag, release and jar.
-- [Testing plugins](Testing-Plugins.md): unit tests against the API jars, and loading through `PluginManager`.
-- [Troubleshooting and FAQ](Troubleshooting-And-FAQ.md)
+- [Automatic updates](Automatic-Updates): exactly what a release needs for BlockDesigner to update the plugin by itself.
+- [Releasing on GitHub](Releasing-On-GitHub): version, notes, tag, release and jar.
+- [Testing plugins](Testing-Plugins): unit tests against the API jars, and loading through `PluginManager`.
+- [Troubleshooting and FAQ](Troubleshooting-And-FAQ)
 
 ## Official plugins
 
@@ -55,4 +78,4 @@ the id `reference-planes`.
 The two example plugins in the main repository, [`examples/hello-plugin`](https://github.com/doolecg/BlockDesigner/tree/main/examples/hello-plugin)
 (API 1) and [`examples/palette-tools`](https://github.com/doolecg/BlockDesigner/tree/main/examples/palette-tools)
 (API 2), are built inside BlockDesigner's own build because its tests load them. Start a real plugin from the
-template on [Setting up a plugin project](Setting-Up-A-Plugin-Project.md) instead.
+template on [Setting up a plugin project](Setting-Up-A-Plugin-Project) instead.

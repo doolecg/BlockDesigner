@@ -20,20 +20,20 @@ A complete manifest, as the official plugins write it:
 ```
 
 `@VERSION@` is replaced with the Gradle project version when the jar is built (see
-[Setting up a plugin project](Setting-Up-A-Plugin-Project.md)); in the jar it reads `"version": "1.0.1"`.
+[Setting up a plugin project](Setting-Up-A-Plugin-Project)); in the jar it reads `"version": "1.0.1"`.
 
 ## Fields
 
 | Field | Required | Read as | Meaning |
 |---|---|---|---|
-| `id` | **yes** | text | The plugin's identity. Must match `[a-z0-9_.-]+`, or the jar is rejected ("Plugin id '…' must use a-z, 0-9, _ . -"). Two jars with the same id can't both load: the second (in file-name order) is listed as broken, "Another jar already provides the plugin id '…'". The id also names the plugin's [data folder](Storing-Data-And-Settings.md), keys its saved options, tool keys and scene objects, identifies it for updates, and is what the updater expects the release jar to start with (`<id>-<version>.jar`). **Never change it** after the first release. |
+| `id` | **yes** | text | The plugin's identity. Must match `[a-z0-9_.-]+`, or the jar is rejected ("Plugin id '…' must use a-z, 0-9, _ . -"). Two jars with the same id can't both load: the second (in file-name order) is listed as broken, "Another jar already provides the plugin id '…'". The id also names the plugin's [data folder](Storing-Data-And-Settings), keys its saved options, tool keys and scene objects, identifies it for updates, and is what the updater expects the release jar to start with (`<id>-<version>.jar`). **Never change it** after the first release. |
 | `main` | **yes** | text | Fully qualified name of the class implementing `BlockDesignerPlugin`. It needs a public no-argument constructor. Missing or blank: "The descriptor has no \"main\" class". A class that doesn't implement the interface fails when enabling. |
 | `name` | no | text | Display name. Defaults to the id. |
-| `version` | no | text | Shown in the Plugins window and the plugin's tab, and compared with release tags by the [updater](Automatic-Updates.md). Defaults to `""`, which the updater treats as `0` (so any release looks newer). Use `x.y.z`. |
+| `version` | no | text | Shown in the Plugins window and the plugin's tab, and compared with release tags by the [updater](Automatic-Updates). Defaults to `""`, which the updater treats as `0` (so any release looks newer). Use `x.y.z`. |
 | `author` | no | text | Shown in the Plugins window. Defaults to `""`. |
 | `description` | no | text | Shown in the Plugins window, the install prompt and the plugin's tab. Defaults to `""`. |
-| `api` | no | integer | The [API level](API-Levels.md) the plugin needs. Defaults to `1`. Higher than the app's `PluginApi.VERSION`: not loaded, shown as *needs a newer BlockDesigner*. |
-| `updates` | no | text | Where releases are published, for [automatic updates](Automatic-Updates.md): a GitHub repository link `https://github.com/<owner>/<repo>` (a trailing `.git` or `/anything` is accepted). Missing, blank or not a GitHub link: the plugin is updated by hand, and the Plugins window says so. Read by BlockDesigner 0.4.16 and later; older versions ignore it. |
+| `api` | no | integer | The [API level](API-Levels) the plugin needs. Defaults to `1`. Higher than the app's `PluginApi.VERSION`: not loaded, shown as *needs a newer BlockDesigner*. |
+| `updates` | no | text | Where releases are published, for [automatic updates](Automatic-Updates): a GitHub repository link `https://github.com/<owner>/<repo>` (a trailing `.git` or `/anything` is accepted). Missing, blank or not a GitHub link: the plugin is updated by hand, and the Plugins window says so. Read by BlockDesigner 0.4.16 and later; older versions ignore it. |
 
 Other fields are ignored (the file is read as a JSON tree and only these keys are looked up), so adding your own
 does no harm, but nothing reads them.

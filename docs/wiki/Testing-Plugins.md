@@ -73,7 +73,7 @@ the pattern. (The official plugin repositories don't do this; they rely on level
 4. After a rebuild, Install… again or copy and Reload; there is no need to restart BlockDesigner.
 
 Test with the oldest BlockDesigner your "needs" line promises if you can: a method from a newer API level than you
-declared only fails there (see [API levels](API-Levels.md)).
+declared only fails there (see [API levels](API-Levels)).
 
-To test [automatic updates](Automatic-Updates.md), install the previous version, publish the new release, and use
+To test [automatic updates](Automatic-Updates), install the previous version, publish the new release, and use
 **Check for updates** in the Plugins window.

@@ -31,8 +31,8 @@ Every plugin also gets **its own tab** on the right, whatever API it declares. I
 name, version, status (Running or Failed), description, how it updates, its settings (API 4) and everything it
 registered, each with a button to use it, plus a Turn off button. The plugin's panels are further pages of that tab.
 
-Short examples of each feature are on [Registering features](Registering-Features.md) and
-[BlockEdit commands](BlockEdit-Commands.md); the full worked examples are in
+Short examples of each feature are on [Registering features](Registering-Features) and
+[BlockEdit commands](BlockEdit-Commands); the full worked examples are in
 [PLUGINS.md](https://github.com/doolecg/BlockDesigner/blob/main/PLUGINS.md).
 
 ## What plugins can't do (yet)

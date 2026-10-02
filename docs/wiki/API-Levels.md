@@ -3,7 +3,7 @@
 The plugin API has a single version number, `PluginApi.VERSION` in
 [`plugin-api/src/main/java/io/blockdesigner/plugin/PluginApi.java`](https://github.com/doolecg/BlockDesigner/blob/main/plugin-api/src/main/java/io/blockdesigner/plugin/PluginApi.java).
 It is **7** in BlockDesigner 0.4.26. A plugin declares the level it needs as `"api"` in its
-[manifest](The-Manifest.md).
+[manifest](The-Manifest).
 
 ## The rule
 
@@ -14,7 +14,7 @@ It is **7** in BlockDesigner 0.4.26. A plugin declares the level it needs as `"a
 - So **declare the lowest level whose features you use**. That level decides the oldest BlockDesigner that can run
   your plugin, which is the "Needs BlockDesigner X or later" line in the official plugins' READMEs and notes.
 - The automatic updater follows the same rule: a release whose jar declares a higher `api` than the running app is
-  skipped ("needs a newer BlockDesigner") until the user updates BlockDesigner. See [Automatic updates](Automatic-Updates.md).
+  skipped ("needs a newer BlockDesigner") until the user updates BlockDesigner. See [Automatic updates](Automatic-Updates).
 
 Nothing checks that you declared the right level. If you use an API 5 method but declare `"api": 3`, BlockDesigner
 0.4.12 to 0.4.16 will load the plugin and it fails at the first call it doesn't have (`NoSuchMethodError`, or
@@ -50,4 +50,4 @@ Compile against the API jars of the BlockDesigner version you test with (the off
 release), and declare the lowest `api` you need. Newer jars still contain everything older levels had, so building
 against 0.4.22's jars with `"api": 3` is normal (Terrain Generator does it). Changes to `core` classes (`BlockState`,
 `Structure`, `WorldEdit.World`…) are not versioned by the API level; see the FAQ on
-[Troubleshooting and FAQ](Troubleshooting-And-FAQ.md#my-plugin-worked-on-an-older-blockdesigner-and-breaks-on-a-newer-one).
+[Troubleshooting and FAQ](Troubleshooting-And-FAQ#my-plugin-worked-on-an-older-blockdesigner-and-breaks-on-a-newer-one).

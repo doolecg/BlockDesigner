@@ -322,7 +322,7 @@ Requires JDK 25+ (the build uses a Java 26 toolchain; `gradle.properties` points
 
 - `./gradlew :app:portable` builds `dist/BlockDesigner/BlockDesigner.exe` and `dist/BlockDesigner-<version>-portable.zip`. The Java runtime is bundled, and settings are kept in a `data` folder next to the exe.
 - `./gradlew :app:installer` builds `dist/BlockDesigner-<version>.msi`, which installs to `C:\Program Files\BlockDesigner` with Start menu and desktop shortcuts, and makes `.bdproj` saves show the BlockDesigner icon and open in the app. It needs the WiX Toolset: unzip the [WiX 3.14 binaries](https://github.com/wixtoolset/wix3/releases) into `tools/wix3`, or have WiX on PATH.
-- The version is `version` in the root `build.gradle.kts`. The icon is drawn by `packaging/make_icon.py` (needs Pillow); rerun it after changing the design.
+- The version is `version` in the root `build.gradle.kts`. The icon is described by `packaging/icon.py` and the official plugins' logos by `packaging/plugin_logos.py`; the `voxel-icons` skill draws them (`python <skill>/scripts/draw.py packaging/icon.py`, needs Pillow). Rerun it after changing a design.
 
 ### Code signing
 
@@ -365,7 +365,7 @@ The integration tests in `assets` and `render` use your local Minecraft install 
 | `app` | JavaFX UI (AtlantaFX theme), reference images (`refplanes`), plugin manager, updater |
 | `examples/hello-plugin` | Sample plugin for API 1, also used by the tests |
 | `examples/palette-tools` | Sample plugin for API 2 (transforms, panel, tool, importer, exporter), also used by the tests |
-| `packaging` | Icon source (`make_icon.py`) and Windows packaging resources |
+| `packaging` | Icon and plugin logo designs (`icon.py`, `plugin_logos.py`) and Windows packaging resources |
 
 ## License
 

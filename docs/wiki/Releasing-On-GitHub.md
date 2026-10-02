@@ -1,13 +1,13 @@
 # Releasing on GitHub
 
-A release is what users download and what the [automatic updater](Automatic-Updates.md) installs. The official
+A release is what users download and what the [automatic updater](Automatic-Updates) installs. The official
 plugins all release the same way; the steps below work for any plugin.
 
 ## Checklist
 
 1. **Version.** Raise `version` in `build.gradle.kts` (the manifest takes it from there through `@VERSION@`). Patch
    for fixes or a rebuild against newer API jars, minor for new features.
-2. **API level.** If you now use something from a newer [API level](API-Levels.md), raise `"api"` in the manifest and
+2. **API level.** If you now use something from a newer [API level](API-Levels), raise `"api"` in the manifest and
    the "needs BlockDesigner X or later" line in your README and notes. Rebuilding against newer jars alone doesn't
    change the minimum.
 3. **Release notes.** Add a section at the top of `RELEASE_NOTES.md` (see below).
