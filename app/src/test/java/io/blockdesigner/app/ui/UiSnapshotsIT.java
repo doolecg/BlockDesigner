@@ -491,6 +491,7 @@ class UiSnapshotsIT {
                     java.net.URI.create("https://github.com/doolecg/BlockDesigner/releases"), null, null);
             UpdateDialog ud = new UpdateDialog(null, dark, null, rel, () -> false, () -> {
             }, v -> {
+            }, () -> {
             }, u -> {
             });
             ud.getDialogPane().setPrefSize(760, 620);

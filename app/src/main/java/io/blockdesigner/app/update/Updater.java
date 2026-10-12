@@ -262,6 +262,22 @@ public final class Updater {
         }
     }
 
+    /**
+     * Downloads {@code asset} into a fresh attempt folder and, for a portable copy, unpacks it: the result is what
+     * {@link #launchInstaller} takes. For updates fetched in the background (the update window does the same inline).
+     */
+    public Path fetchReady(Asset asset, Mode mode) throws IOException, InterruptedException {
+        Path dir = attemptDir();
+        Path file = download(asset, dir, p -> { });
+        if (mode != Mode.PORTABLE) return file;
+        Path ready = dir.resolve("unpacked");
+        unzip(file, ready);
+        Files.deleteIfExists(file);
+        if (!Files.isRegularFile(ready.resolve("BlockDesigner/BlockDesigner.exe")))
+            throw new IOException("The portable zip doesn't hold BlockDesigner/BlockDesigner.exe.");
+        return ready;
+    }
+
     /** A sentence for an update error (a bare file-system exception message is just a path). */
     public static String describe(Exception e) {
         if (e instanceof java.nio.file.FileSystemException f) {

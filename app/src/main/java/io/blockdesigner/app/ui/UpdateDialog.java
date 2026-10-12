@@ -24,7 +24,7 @@ import java.util.function.Consumer;
 
 /**
  * Offers a newer release: its notes, then Install and restart (download, check, hand over to the installer and quit),
- * Skip this version, or Later. Copies not started from an install only get a link to the download page.
+ * Skip this version, or Later (the update then downloads in the background and installs when BlockDesigner closes). Copies not started from an install only get a link to the download page.
  */
 final class UpdateDialog extends Dialog<Void> {
     private static final ButtonType INSTALL = new ButtonType("Install and restart", ButtonBar.ButtonData.OK_DONE);
@@ -41,9 +41,10 @@ final class UpdateDialog extends Dialog<Void> {
      * @param readyToQuit asked before quitting (e.g. to save the project); false cancels the install
      * @param quit        closes BlockDesigner once the installer is waiting for it
      * @param skip        remembers that the user doesn't want this version
+     * @param later       the user chose Later: fetch the update in the background and install it on quit
      */
     UpdateDialog(Window owner, boolean dark, Updater updater, Updater.Release release, BooleanSupplier readyToQuit,
-                 Runnable quit, Consumer<String> skip, Consumer<String> browser) {
+                 Runnable quit, Consumer<String> skip, Runnable later, Consumer<String> browser) {
         initOwner(owner);
         setTitle("Update available");
         setResizable(true);
@@ -97,6 +98,7 @@ final class UpdateDialog extends Dialog<Void> {
                     + " to install from; download it from the release page.");
 
         ((Button) dp.lookupButton(SKIP)).setOnAction(e -> skip.accept(release.version()));
+        if (canInstall) ((Button) dp.lookupButton(LATER)).setOnAction(e -> later.run());
         if (!canInstall) {
             ((Button) dp.lookupButton(PAGE)).setOnAction(e -> browser.accept(release.page().toString()));
             return;

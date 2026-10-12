@@ -232,7 +232,10 @@ public final class MainWindow {
             }
         });
         ws.editor().undoStack().addListener(this::updateStatus);
-        stage.setOnCloseRequest(e -> shutdown());
+        stage.setOnCloseRequest(e -> {
+            shutdown();
+            installReadyUpdate();
+        });
     }
 
     /** Puts the window back where it was last closed, if that place is still on a screen. */
@@ -801,7 +804,7 @@ public final class MainWindow {
 
     private static List<javafx.scene.image.Image> appIcons;
 
-    /** The BlockDesigner icon at every size (drawn by packaging/make_icon.py); the same art marks .bdproj saves. */
+    /** The BlockDesigner icon at every size (drawn from packaging/icon.py); the same art marks .bdproj saves. */
     public static synchronized List<javafx.scene.image.Image> appIcons() {
         if (appIcons == null) {
             List<javafx.scene.image.Image> out = new java.util.ArrayList<>();
@@ -842,6 +845,7 @@ public final class MainWindow {
         if (ws.settings().showStartScreen) startScreen.open();
         startAssetLoading(false);
         if (ws.settings().checkForUpdates) checkForUpdates(false);
+        scheduleUpdateChecks();
         if (ws.settings().autoUpdatePlugins) updatePlugins(false, null);
         installDefaultPlugins();
         // 0.4.7 moved the install to Program Files: remove the old per-user copy in AppData (settings are kept).
@@ -876,6 +880,7 @@ public final class MainWindow {
         Thread.ofVirtual().name("update-check").start(() -> {
             try {
                 var release = updater.latest();
+                if (!manual && release.version().equals(offeredUpdate)) return;
                 // Only when there's a newer version. A per-user AppData copy then updates with the .msi, which is
                 // also its move to Program Files (the update window says so).
                 boolean newer = Updater.compareVersions(release.version(), Updater.currentVersion()) > 0;
@@ -1030,7 +1035,58 @@ public final class MainWindow {
         });
     }
 
+    private static final long UPDATE_CHECK_HOURS = 4;
+
+    /** The version already offered this run (its window shown, or downloaded for install on quit); not offered again. */
+    private volatile String offeredUpdate;
+    /** The downloaded update waiting for the app to close, and the mode it was fetched for; null if none. */
+    private volatile java.nio.file.Path readyUpdate;
+    private volatile Updater.Mode readyUpdateMode;
+
+    /** Re-checks every few hours while the app runs, when Settings still has automatic update checks on. */
+    private void scheduleUpdateChecks() {
+        var timer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "update-recheck");
+            t.setDaemon(true);
+            return t;
+        });
+        timer.scheduleWithFixedDelay(() -> Platform.runLater(() -> {
+            if (ws.settings().checkForUpdates && readyUpdate == null) checkForUpdates(false);
+        }), UPDATE_CHECK_HOURS, UPDATE_CHECK_HOURS, java.util.concurrent.TimeUnit.HOURS);
+    }
+
+    /** "Later" in the update window: download in the background; the installer then runs when the app closes. */
+    private void downloadForQuit(Updater.Release release) {
+        Updater.Mode mode = Updater.mode();
+        Updater.Asset asset = release.assetFor(mode);
+        if (asset == null || mode == Updater.Mode.DEV) return;
+        Thread.ofVirtual().name("update-background-download").start(() -> {
+            try {
+                var ready = updater.fetchReady(asset, mode);
+                readyUpdateMode = mode;
+                readyUpdate = ready;
+                Platform.runLater(() -> ws.statusProperty().set("BlockDesigner " + release.version()
+                        + " is downloaded · it installs when you close BlockDesigner"));
+            } catch (Exception e) {
+                offeredUpdate = null;
+                io.blockdesigner.app.ConsoleLog.info("Update", "Background download failed: " + Updater.describe(e));
+            }
+        });
+    }
+
+    /** Hands a downloaded update to the installer; it waits for this process to exit. Run as the window closes. */
+    private void installReadyUpdate() {
+        var ready = readyUpdate;
+        if (ready == null) return;
+        try {
+            Updater.launchInstaller(readyUpdateMode, ready);
+        } catch (java.io.IOException e) {
+            io.blockdesigner.app.ConsoleLog.info("Update", "Couldn't start the installer: " + Updater.describe(e));
+        }
+    }
+
     private void showUpdate(Updater.Release release) {
+        offeredUpdate = release.version();
         new UpdateDialog(stage, ws.darkProperty().get(), updater, release, this::readyToQuitForUpdate,
                 () -> {
                     shutdown();
@@ -1040,6 +1096,7 @@ public final class MainWindow {
                     ws.settings().skippedVersion = version;
                     ws.settings().save();
                 },
+                () -> downloadForQuit(release),
                 url -> browser.accept(url)).show();
     }
 
