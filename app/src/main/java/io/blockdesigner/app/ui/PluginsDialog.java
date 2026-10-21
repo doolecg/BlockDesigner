@@ -475,7 +475,7 @@ final class PluginsDialog extends Dialog<Void> {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.initOwner(getDialogPane().getScene().getWindow());
         confirm.setHeaderText("Uninstall " + p.info().name() + "?");
-        confirm.setContentText("This disables it and deletes " + p.jar().getFileName() + ".");
+        confirm.setContentText("This disables it and deletes " + p.jar().getFileName() + ". This can't be undone.");
         if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
         try {
             plugins.uninstall(p);

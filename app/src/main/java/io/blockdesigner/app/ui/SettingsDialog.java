@@ -418,7 +418,9 @@ final class SettingsDialog extends Dialog<Void> {
                 hint("Appearance, keybinds, the hotbar, viewport options and everything else here are kept in "
                         + Settings.dir() + " and carry over every update. The first start of each new version also "
                         + "copies them into " + Settings.backupDir() + " (the last ten are kept)."),
-                section("Files"), folder, hint(Settings.dir().toString()));
+                section("Files"), folder, hint(Settings.dir().toString()),
+                section("About"), hint("Provided \"as is\", without warranty, under the MIT licence. To the extent permitted by law, "
+                        + "the authors are not liable for any loss or damage from using it. Back up your work."));
     }
 
     // ---- Reference images ------------------------------------------------------------------------------------
